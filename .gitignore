@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+.env.local
+npm-debug.log*
+.agents/
+.codex/
+.git-backups/
+backend/node_modules
+backend/dist
+backend/.tmp
+backend/uploads
+uploads

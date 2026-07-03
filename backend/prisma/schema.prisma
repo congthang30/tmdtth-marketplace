@@ -1,0 +1,1054 @@
+// schema.prisma
+// CSDL Prisma cho sàn thương mại điện tử đồ gia dụng.
+// Dựa trên file Lab 3: Users, Shops, Products, Inventory, Cart, Orders,
+// Shipping, Payments, Vouchers, Reviews, Returns, Refunds, Complaints.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              BigInt    @id @default(autoincrement()) @map("UserID")
+  code            String    @unique @default(uuid()) @map("UserCode") @db.Uuid
+  email           String    @unique @map("Email") @db.VarChar(255)
+  phoneNumber     String?   @map("PhoneNumber") @db.VarChar(20)
+  passwordHash    String?   @map("PasswordHash") @db.VarChar(500)
+  userStatus      String    @default("PendingVerification") @map("UserStatus") @db.VarChar(50)
+  emailConfirmed  Boolean   @default(false) @map("EmailConfirmed")
+  phoneConfirmed  Boolean   @default(false) @map("PhoneConfirmed")
+  lastLoginAt     DateTime? @map("LastLoginAt") @db.Timestamp(3)
+  isDeleted       Boolean   @default(false) @map("IsDeleted")
+  createdAt       DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt       DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt       DateTime? @map("DeletedAt") @db.Timestamp(3)
+
+  profile                         UserProfile?
+  addresses                       Address[]
+  carts                           Cart[]
+  orders                          Order[]
+  voucherUsages                   VoucherUsage[]
+  productReviews                  ProductReview[]
+  shopReviews                     ShopReview[]
+  shippingReviews                 ShippingReview[]
+
+  ownedShops                      Shop[]                    @relation("ShopOwner")
+  approvedShops                   Shop[]                    @relation("ShopApprover")
+  createdProducts                 Product[]                 @relation("ProductCreatedBy")
+  updatedProducts                 Product[]                 @relation("ProductUpdatedBy")
+  productModerationLogs           ProductModerationLog[]    @relation("ProductModerationModerator")
+  inventoryTransactionsCreated    InventoryTransaction[]    @relation("InventoryTransactionCreatedBy")
+  orderStatusHistoriesChanged     OrderStatusHistory[]      @relation("OrderStatusChangedBy")
+  orderNotesCreated               OrderNote[]               @relation("OrderNoteCreatedBy")
+  orderCancellationsRequested     OrderCancellation[]       @relation("OrderCancellationRequestedBy")
+  orderCancellationsApproved      OrderCancellation[]       @relation("OrderCancellationApprovedBy")
+  ownedShippingCompanies          ShippingCompany[]         @relation("ShippingCompanyOwner")
+  approvedShippingCompanies       ShippingCompany[]         @relation("ShippingCompanyApprover")
+  shipmentTrackingHistoriesEdited ShipmentTrackingHistory[] @relation("ShipmentTrackingUpdatedBy")
+  returnRequests                  ReturnRequest[]           @relation("ReturnRequestUser")
+  reviewedReturnRequests          ReturnRequest[]           @relation("ReturnRequestReviewer")
+  refundRequests                  RefundRequest[]           @relation("RefundRequestRequestedBy")
+  approvedRefundRequests          RefundRequest[]           @relation("RefundRequestApprovedBy")
+  complaints                      Complaint[]               @relation("ComplaintComplainant")
+  assignedComplaints              Complaint[]               @relation("ComplaintAssignedAdmin")
+  complaintEvidenceFilesUploaded  ComplaintEvidenceFile[]   @relation("ComplaintEvidenceUploadedBy")
+  complaintResolutionsResolved    ComplaintResolution[]     @relation("ComplaintResolutionResolvedBy")
+
+  @@map("Users")
+}
+
+model UserProfile {
+  userId      BigInt    @id @map("UserID")
+  fullName    String    @map("FullName") @db.VarChar(150)
+  gender      String?   @map("Gender") @db.VarChar(20)
+  dateOfBirth DateTime? @map("DateOfBirth") @db.Date
+  avatarUrl   String?   @map("AvatarUrl") @db.VarChar(1000)
+  createdAt   DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt   DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("UserProfiles")
+}
+
+model Address {
+  id            BigInt    @id @default(autoincrement()) @map("AddressID")
+  userId        BigInt    @map("UserID")
+  receiverName  String    @map("ReceiverName") @db.VarChar(150)
+  phoneNumber   String    @map("PhoneNumber") @db.VarChar(20)
+  province      String    @map("Province") @db.VarChar(100)
+  district      String    @map("District") @db.VarChar(100)
+  ward          String    @map("Ward") @db.VarChar(100)
+  streetAddress String    @map("StreetAddress") @db.VarChar(255)
+  fullAddress   String?   @map("FullAddress") @db.VarChar(600)
+  isDefault     Boolean   @default(false) @map("IsDefault")
+  isDeleted     Boolean   @default(false) @map("IsDeleted")
+  createdAt     DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt     DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt     DateTime? @map("DeletedAt") @db.Timestamp(3)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orders Order[]
+
+  @@index([userId])
+  @@map("Addresses")
+}
+
+model Shop {
+  id               BigInt    @id @default(autoincrement()) @map("ShopID")
+  ownerUserId      BigInt    @map("OwnerUserID")
+  code             String    @unique @default(uuid()) @map("ShopCode") @db.Uuid
+  shopName         String    @map("ShopName") @db.VarChar(150)
+  slug             String    @unique @map("Slug") @db.VarChar(180)
+  description      String?   @map("Description") @db.VarChar(1000)
+  email            String?   @map("Email") @db.VarChar(255)
+  phoneNumber      String?   @map("PhoneNumber") @db.VarChar(20)
+  province         String?   @map("Province") @db.VarChar(100)
+  district         String?   @map("District") @db.VarChar(100)
+  ward             String?   @map("Ward") @db.VarChar(100)
+  streetAddress    String?   @map("StreetAddress") @db.VarChar(255)
+  taxCode          String?   @map("TaxCode") @db.VarChar(50)
+  shopStatus       String    @default("PendingApproval") @map("ShopStatus") @db.VarChar(50)
+  approvedByUserId BigInt?   @map("ApprovedByUserID")
+  approvedAt       DateTime? @map("ApprovedAt") @db.Timestamp(3)
+  isDeleted        Boolean   @default(false) @map("IsDeleted")
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt        DateTime? @map("DeletedAt") @db.Timestamp(3)
+
+  ownerUser      User  @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser User? @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  products        Product[]
+  cartItems       CartItem[]
+  shopOrders      ShopOrder[]
+  orderItems      OrderItem[]
+  shippingQuotes  ShippingQuote[]
+  vouchers        Voucher[]
+  shopReviews     ShopReview[]
+  returnRequests  ReturnRequest[]
+  complaints      Complaint[] @relation("ComplaintAgainstShop")
+
+  @@index([ownerUserId])
+  @@map("Shops")
+}
+
+model Category {
+  id               BigInt    @id @default(autoincrement()) @map("CategoryID")
+  parentCategoryId BigInt?   @map("ParentCategoryID")
+  categoryName     String    @map("CategoryName") @db.VarChar(150)
+  slug             String    @unique @map("Slug") @db.VarChar(180)
+  description      String?   @map("Description") @db.VarChar(500)
+  sortOrder        Int       @default(0) @map("SortOrder")
+  isActive         Boolean   @default(true) @map("IsActive")
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  parentCategory Category?  @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childCategories Category[] @relation("CategoryTree")
+  products        Product[]
+  attributes      ProductAttribute[]
+
+  @@index([parentCategoryId])
+  @@map("Categories")
+}
+
+model Product {
+  id              BigInt    @id @default(autoincrement()) @map("ProductID")
+  shopId          BigInt    @map("ShopID")
+  categoryId      BigInt    @map("CategoryID")
+  code            String    @unique @default(uuid()) @map("ProductCode") @db.Uuid
+  productName     String    @map("ProductName") @db.VarChar(255)
+  slug            String    @map("Slug") @db.VarChar(280)
+  description     String?   @map("Description") @db.Text
+  brand           String?   @map("Brand") @db.VarChar(150)
+  basePrice       Decimal   @map("BasePrice") @db.Decimal(18, 2)
+  compareAtPrice  Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
+  warrantyMonths  Int       @default(0) @map("WarrantyMonths")
+  weightGram      Int       @default(0) @map("WeightGram")
+  productStatus   String    @default("Draft") @map("ProductStatus") @db.VarChar(50)
+  isViolation     Boolean   @default(false) @map("IsViolation")
+  viewCount       BigInt    @default(0) @map("ViewCount")
+  soldCount       BigInt    @default(0) @map("SoldCount")
+  isDeleted       Boolean   @default(false) @map("IsDeleted")
+  createdByUserId BigInt?   @map("CreatedByUserID")
+  updatedByUserId BigInt?   @map("UpdatedByUserID")
+  createdAt       DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt       DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt       DateTime? @map("DeletedAt") @db.Timestamp(3)
+
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category      Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdByUser User?    @relation("ProductCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  updatedByUser User?    @relation("ProductUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  variants          ProductVariant[]
+  images            ProductImage[]
+  inventoryRecords  ProductInventory[]
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+  reviews           ProductReview[]
+  attributeValues   ProductAttributeValue[]
+  moderationLogs    ProductModerationLog[]
+
+  @@unique([shopId, slug])
+  @@index([categoryId])
+  @@index([productStatus])
+  @@map("Products")
+}
+
+model ProductVariant {
+  id                BigInt    @id @default(autoincrement()) @map("ProductVariantID")
+  productId         BigInt    @map("ProductID")
+  sku               String    @map("SKU") @db.VarChar(100)
+  variantName       String    @map("VariantName") @db.VarChar(255)
+  variantOptionJson String?   @map("VariantOptionJson") @db.Text
+  price             Decimal   @map("Price") @db.Decimal(18, 2)
+  compareAtPrice    Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
+  weightGram        Int       @default(0) @map("WeightGram")
+  variantStatus     String    @default("Active") @map("VariantStatus") @db.VarChar(50)
+  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  product          Product                 @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  images           ProductImage[]
+  inventoryRecords ProductInventory[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  reviews          ProductReview[]
+  attributeValues  ProductAttributeValue[]
+
+  @@unique([productId, sku])
+  @@index([productId])
+  @@map("ProductVariants")
+}
+
+model ProductImage {
+  id               BigInt   @id @default(autoincrement()) @map("ProductImageID")
+  productId        BigInt   @map("ProductID")
+  productVariantId BigInt?  @map("ProductVariantID")
+  imageUrl         String   @map("ImageUrl") @db.VarChar(1000)
+  altText          String?  @map("AltText") @db.VarChar(255)
+  sortOrder        Int      @default(0) @map("SortOrder")
+  isThumbnail      Boolean  @default(false) @map("IsThumbnail")
+  createdAt        DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productId])
+  @@index([productVariantId])
+  @@map("ProductImages")
+}
+
+model ProductInventory {
+  id                BigInt    @id @default(autoincrement()) @map("ProductInventoryID")
+  productId         BigInt    @map("ProductID")
+  productVariantId  BigInt    @map("ProductVariantID")
+  quantityOnHand    Int       @default(0) @map("QuantityOnHand")
+  quantityReserved  Int       @default(0) @map("QuantityReserved")
+  quantityAvailable Int       @default(0) @map("QuantityAvailable")
+  lowStockThreshold Int       @default(5) @map("LowStockThreshold")
+  updatedAt         DateTime  @default(now()) @map("UpdatedAt") @db.Timestamp(3)
+
+  product        Product        @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transactions   InventoryTransaction[]
+
+  @@unique([productVariantId])
+  @@index([productId])
+  @@map("ProductInventory")
+}
+
+model InventoryTransaction {
+  id                 BigInt   @id @default(autoincrement()) @map("InventoryTransactionID")
+  productInventoryId BigInt   @map("ProductInventoryID")
+  transactionType    String   @map("TransactionType") @db.VarChar(50)
+  quantityChange     Int      @map("QuantityChange")
+  quantityAfter      Int      @map("QuantityAfter")
+  referenceType      String?  @map("ReferenceType") @db.VarChar(50)
+  referenceId        BigInt?  @map("ReferenceID")
+  note               String?  @map("Note") @db.VarChar(500)
+  createdByUserId    BigInt?  @map("CreatedByUserID")
+  createdAt          DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  productInventory ProductInventory @relation(fields: [productInventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdByUser    User?            @relation("InventoryTransactionCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productInventoryId])
+  @@index([referenceType, referenceId])
+  @@map("InventoryTransactions")
+}
+
+model ProductAttribute {
+  id            BigInt   @id @default(autoincrement()) @map("ProductAttributeID")
+  categoryId    BigInt   @map("CategoryID")
+  attributeName String   @map("AttributeName") @db.VarChar(150)
+  dataType      String   @map("DataType") @db.VarChar(50)
+  unit          String?  @map("Unit") @db.VarChar(50)
+  isRequired    Boolean  @default(false) @map("IsRequired")
+  createdAt     DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  category Category                @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  values   ProductAttributeValue[]
+
+  @@index([categoryId])
+  @@map("ProductAttributes")
+}
+
+model ProductAttributeValue {
+  id                 BigInt   @id @default(autoincrement()) @map("ProductAttributeValueID")
+  productId          BigInt   @map("ProductID")
+  productVariantId   BigInt?  @map("ProductVariantID")
+  productAttributeId BigInt   @map("ProductAttributeID")
+  valueText          String   @map("ValueText") @db.VarChar(1000)
+  createdAt          DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  product          Product           @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant   ProductVariant?   @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productAttribute ProductAttribute  @relation(fields: [productAttributeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productId])
+  @@index([productVariantId])
+  @@index([productAttributeId])
+  @@map("ProductAttributeValues")
+}
+
+model ProductModerationLog {
+  id                 BigInt   @id @default(autoincrement()) @map("ProductModerationLogID")
+  productId          BigInt   @map("ProductID")
+  moderatorUserId    BigInt   @map("ModeratorUserID")
+  moderationStatus   String   @map("ModerationStatus") @db.VarChar(50)
+  reason             String?  @map("Reason") @db.VarChar(1000)
+  createdAt          DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  product       Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  moderatorUser User    @relation("ProductModerationModerator", fields: [moderatorUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productId])
+  @@index([moderatorUserId])
+  @@map("ProductModerationLogs")
+}
+
+model Cart {
+  id         BigInt    @id @default(autoincrement()) @map("CartID")
+  userId     BigInt    @map("UserID")
+  cartStatus String    @default("Active") @map("CartStatus") @db.VarChar(50)
+  createdAt  DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt  DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items CartItem[]
+
+  @@index([userId])
+  @@map("Carts")
+}
+
+model CartItem {
+  id                BigInt    @id @default(autoincrement()) @map("CartItemID")
+  cartId            BigInt    @map("CartID")
+  shopId            BigInt    @map("ShopID")
+  productId         BigInt    @map("ProductID")
+  productVariantId  BigInt    @map("ProductVariantID")
+  quantity          Int       @map("Quantity")
+  unitPriceSnapshot Decimal   @map("UnitPriceSnapshot") @db.Decimal(18, 2)
+  isSelected        Boolean   @default(true) @map("IsSelected")
+  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  cart           Cart           @relation(fields: [cartId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop           Shop           @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([cartId, productVariantId])
+  @@index([shopId])
+  @@index([productId])
+  @@map("CartItems")
+}
+
+model PaymentMethod {
+  id         BigInt   @id @default(autoincrement()) @map("PaymentMethodID")
+  methodCode String   @unique @map("MethodCode") @db.VarChar(50)
+  methodName String   @map("MethodName") @db.VarChar(100)
+  isOnline   Boolean  @default(false) @map("IsOnline")
+  isActive   Boolean  @default(true) @map("IsActive")
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  orders   Order[]
+  payments Payment[]
+
+  @@map("PaymentMethods")
+}
+
+model Order {
+  id                    BigInt    @id @default(autoincrement()) @map("OrderID")
+  orderCode             String    @unique @map("OrderCode") @db.VarChar(50)
+  userId                BigInt    @map("UserID")
+  shippingAddressId     BigInt?   @map("ShippingAddressID")
+  paymentMethodId       BigInt    @map("PaymentMethodID")
+  orderStatus           String    @default("Created") @map("OrderStatus") @db.VarChar(50)
+  paymentStatus         String    @default("Pending") @map("PaymentStatus") @db.VarChar(50)
+  receiverName          String    @map("ReceiverName") @db.VarChar(150)
+  receiverPhone         String    @map("ReceiverPhone") @db.VarChar(20)
+  shippingProvince      String    @map("ShippingProvince") @db.VarChar(100)
+  shippingDistrict      String    @map("ShippingDistrict") @db.VarChar(100)
+  shippingWard          String    @map("ShippingWard") @db.VarChar(100)
+  shippingStreetAddress String    @map("ShippingStreetAddress") @db.VarChar(255)
+  subtotalAmount        Decimal   @default(0) @map("SubtotalAmount") @db.Decimal(18, 2)
+  discountAmount        Decimal   @default(0) @map("DiscountAmount") @db.Decimal(18, 2)
+  shippingFeeAmount     Decimal   @default(0) @map("ShippingFeeAmount") @db.Decimal(18, 2)
+  totalAmount           Decimal   @map("TotalAmount") @db.Decimal(18, 2)
+  customerNote          String?   @map("CustomerNote") @db.VarChar(1000)
+  cancelledAt           DateTime? @map("CancelledAt") @db.Timestamp(3)
+  completedAt           DateTime? @map("CompletedAt") @db.Timestamp(3)
+  createdAt             DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt             DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingAddress Address?      @relation(fields: [shippingAddressId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  shopOrders      ShopOrder[]
+  items           OrderItem[]
+  statusHistories OrderStatusHistory[]
+  notes           OrderNote[]
+  cancellations   OrderCancellation[]
+  payments        Payment[]
+  voucherUsages   VoucherUsage[]
+  returnRequests  ReturnRequest[]
+  refundRequests  RefundRequest[]
+  complaints      Complaint[]
+
+  @@index([userId])
+  @@index([shippingAddressId])
+  @@index([paymentMethodId])
+  @@index([orderStatus])
+  @@map("Orders")
+}
+
+model ShopOrder {
+  id                 BigInt    @id @default(autoincrement()) @map("ShopOrderID")
+  orderId            BigInt    @map("OrderID")
+  shopId             BigInt    @map("ShopID")
+  shopOrderCode      String    @unique @map("ShopOrderCode") @db.VarChar(60)
+  shippingCompanyId  BigInt?   @map("ShippingCompanyID")
+  shippingServiceId  BigInt?   @map("ShippingServiceID")
+  shippingQuoteId    BigInt?   @map("ShippingQuoteID")
+  orderStatus        String    @default("WaitingForSeller") @map("OrderStatus") @db.VarChar(50)
+  subtotalAmount     Decimal   @default(0) @map("SubtotalAmount") @db.Decimal(18, 2)
+  discountAmount     Decimal   @default(0) @map("DiscountAmount") @db.Decimal(18, 2)
+  shippingFeeAmount  Decimal   @default(0) @map("ShippingFeeAmount") @db.Decimal(18, 2)
+  totalAmount        Decimal   @map("TotalAmount") @db.Decimal(18, 2)
+  sellerNote         String?   @map("SellerNote") @db.VarChar(1000)
+  confirmedAt        DateTime? @map("ConfirmedAt") @db.Timestamp(3)
+  preparedAt         DateTime? @map("PreparedAt") @db.Timestamp(3)
+  completedAt        DateTime? @map("CompletedAt") @db.Timestamp(3)
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCompany ShippingCompany? @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingService ShippingService? @relation(fields: [shippingServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingQuote   ShippingQuote?   @relation(fields: [shippingQuoteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  items           OrderItem[]
+  statusHistories OrderStatusHistory[]
+  notes           OrderNote[]
+  cancellations   OrderCancellation[]
+  shipments       Shipment[]
+  voucherUsages   VoucherUsage[]
+  shopReviews     ShopReview[]
+  returnRequests  ReturnRequest[]
+  refundRequests  RefundRequest[]
+  complaints      Complaint[]
+
+  @@index([orderId])
+  @@index([shopId])
+  @@index([orderStatus])
+  @@map("ShopOrders")
+}
+
+model OrderItem {
+  id                  BigInt   @id @default(autoincrement()) @map("OrderItemID")
+  orderId             BigInt   @map("OrderID")
+  shopOrderId         BigInt   @map("ShopOrderID")
+  shopId              BigInt   @map("ShopID")
+  productId           BigInt   @map("ProductID")
+  productVariantId    BigInt   @map("ProductVariantID")
+  productNameSnapshot String   @map("ProductNameSnapshot") @db.VarChar(255)
+  variantNameSnapshot String?  @map("VariantNameSnapshot") @db.VarChar(255)
+  skuSnapshot         String?  @map("SKUSnapshot") @db.VarChar(100)
+  unitPrice           Decimal  @map("UnitPrice") @db.Decimal(18, 2)
+  quantity            Int      @map("Quantity")
+  discountAmount      Decimal  @default(0) @map("DiscountAmount") @db.Decimal(18, 2)
+  lineTotal           Decimal  @default(0) @map("LineTotal") @db.Decimal(18, 2)
+  itemStatus          String   @default("Active") @map("ItemStatus") @db.VarChar(50)
+  createdAt           DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder      ShopOrder      @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop           Shop           @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  shipmentItems      ShipmentItem[]
+  productReviews     ProductReview[]
+  returnRequestItems ReturnRequestItem[]
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@index([productId])
+  @@map("OrderItems")
+}
+
+model OrderStatusHistory {
+  id              BigInt   @id @default(autoincrement()) @map("OrderStatusHistoryID")
+  orderId         BigInt?  @map("OrderID")
+  shopOrderId     BigInt?  @map("ShopOrderID")
+  fromStatus      String?  @map("FromStatus") @db.VarChar(50)
+  toStatus        String   @map("ToStatus") @db.VarChar(50)
+  changedByUserId BigInt?  @map("ChangedByUserID")
+  reason          String?  @map("Reason") @db.VarChar(1000)
+  createdAt       DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  order         Order?     @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder     ShopOrder? @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  changedByUser User?      @relation("OrderStatusChangedBy", fields: [changedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@map("OrderStatusHistories")
+}
+
+model OrderNote {
+  id              BigInt   @id @default(autoincrement()) @map("OrderNoteID")
+  orderId         BigInt?  @map("OrderID")
+  shopOrderId     BigInt?  @map("ShopOrderID")
+  createdByUserId BigInt?  @map("CreatedByUserID")
+  noteType        String   @default("Internal") @map("NoteType") @db.VarChar(50)
+  noteText        String   @map("NoteText") @db.VarChar(2000)
+  createdAt       DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  order         Order?     @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder     ShopOrder? @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdByUser User?      @relation("OrderNoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@map("OrderNotes")
+}
+
+model OrderCancellation {
+  id                 BigInt    @id @default(autoincrement()) @map("OrderCancellationID")
+  orderId            BigInt?   @map("OrderID")
+  shopOrderId        BigInt?   @map("ShopOrderID")
+  requestedByUserId  BigInt    @map("RequestedByUserID")
+  cancellationReason String    @map("CancellationReason") @db.VarChar(1000)
+  cancellationStatus String    @default("Pending") @map("CancellationStatus") @db.VarChar(50)
+  approvedByUserId   BigInt?   @map("ApprovedByUserID")
+  approvedAt         DateTime? @map("ApprovedAt") @db.Timestamp(3)
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  order           Order?     @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder       ShopOrder? @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestedByUser User       @relation("OrderCancellationRequestedBy", fields: [requestedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser  User?      @relation("OrderCancellationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@map("OrderCancellations")
+}
+
+model ShippingCompany {
+  id                 BigInt    @id @default(autoincrement()) @map("ShippingCompanyID")
+  ownerUserId        BigInt    @map("OwnerUserID")
+  code               String    @unique @default(uuid()) @map("CompanyCode") @db.Uuid
+  companyName        String    @map("CompanyName") @db.VarChar(150)
+  slug               String    @unique @map("Slug") @db.VarChar(180)
+  email              String?   @map("Email") @db.VarChar(255)
+  phoneNumber        String?   @map("PhoneNumber") @db.VarChar(20)
+  taxCode            String?   @map("TaxCode") @db.VarChar(50)
+  addressText        String?   @map("AddressText") @db.VarChar(500)
+  companyStatus      String    @default("PendingApproval") @map("CompanyStatus") @db.VarChar(50)
+  approvedByUserId   BigInt?   @map("ApprovedByUserID")
+  approvedAt         DateTime? @map("ApprovedAt") @db.Timestamp(3)
+  isDeleted          Boolean   @default(false) @map("IsDeleted")
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt          DateTime? @map("DeletedAt") @db.Timestamp(3)
+
+  ownerUser      User  @relation("ShippingCompanyOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser User? @relation("ShippingCompanyApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  services        ShippingService[]
+  quotes          ShippingQuote[]
+  shopOrders      ShopOrder[]
+  shipments       Shipment[]
+  shippingReviews ShippingReview[]
+  complaints      Complaint[] @relation("ComplaintAgainstShippingCompany")
+
+  @@index([ownerUserId])
+  @@map("ShippingCompanies")
+}
+
+model ShippingService {
+  id                BigInt    @id @default(autoincrement()) @map("ShippingServiceID")
+  shippingCompanyId BigInt    @map("ShippingCompanyID")
+  serviceCode       String    @map("ServiceCode") @db.VarChar(50)
+  serviceName       String    @map("ServiceName") @db.VarChar(150)
+  baseFee           Decimal   @map("BaseFee") @db.Decimal(18, 2)
+  feePerKg          Decimal   @default(0) @map("FeePerKg") @db.Decimal(18, 2)
+  estimatedMinDays  Int       @default(1) @map("EstimatedMinDays")
+  estimatedMaxDays  Int       @default(3) @map("EstimatedMaxDays")
+  isActive          Boolean   @default(true) @map("IsActive")
+  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quotes          ShippingQuote[]
+  shopOrders      ShopOrder[]
+  shipments       Shipment[]
+
+  @@unique([shippingCompanyId, serviceCode])
+  @@index([shippingCompanyId])
+  @@map("ShippingServices")
+}
+
+model ShippingQuote {
+  id                  BigInt   @id @default(autoincrement()) @map("ShippingQuoteID")
+  shopId              BigInt   @map("ShopID")
+  shippingCompanyId   BigInt   @map("ShippingCompanyID")
+  shippingServiceId   BigInt   @map("ShippingServiceID")
+  destinationProvince String   @map("DestinationProvince") @db.VarChar(100)
+  destinationDistrict String?  @map("DestinationDistrict") @db.VarChar(100)
+  totalWeightGram     Int      @map("TotalWeightGram")
+  quotedFee           Decimal  @map("QuotedFee") @db.Decimal(18, 2)
+  estimatedMinDays    Int      @map("EstimatedMinDays")
+  estimatedMaxDays    Int      @map("EstimatedMaxDays")
+  expiresAt           DateTime @map("ExpiresAt") @db.Timestamp(3)
+  createdAt           DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shop            Shop            @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingService ShippingService @relation(fields: [shippingServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrders      ShopOrder[]
+
+  @@index([shopId])
+  @@index([shippingCompanyId])
+  @@index([shippingServiceId])
+  @@map("ShippingQuotes")
+}
+
+model Shipment {
+  id                 BigInt    @id @default(autoincrement()) @map("ShipmentID")
+  shopOrderId        BigInt    @map("ShopOrderID")
+  shippingCompanyId  BigInt    @map("ShippingCompanyID")
+  shippingServiceId  BigInt    @map("ShippingServiceID")
+  shipmentCode       String    @unique @map("ShipmentCode") @db.VarChar(80)
+  trackingNumber     String?   @map("TrackingNumber") @db.VarChar(100)
+  shipmentStatus     String    @default("Pending") @map("ShipmentStatus") @db.VarChar(50)
+  shippingFee        Decimal   @default(0) @map("ShippingFee") @db.Decimal(18, 2)
+  codAmount          Decimal   @default(0) @map("CODAmount") @db.Decimal(18, 2)
+  pickupAddress      String?   @map("PickupAddress") @db.VarChar(500)
+  deliveryAddress    String    @map("DeliveryAddress") @db.VarChar(500)
+  recipientName      String    @map("RecipientName") @db.VarChar(150)
+  recipientPhone     String    @map("RecipientPhone") @db.VarChar(20)
+  expectedDeliveryAt DateTime? @map("ExpectedDeliveryAt") @db.Timestamp(3)
+  pickedUpAt         DateTime? @map("PickedUpAt") @db.Timestamp(3)
+  deliveredAt        DateTime? @map("DeliveredAt") @db.Timestamp(3)
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  shopOrder       ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingService ShippingService @relation(fields: [shippingServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  items             ShipmentItem[]
+  trackingHistories ShipmentTrackingHistory[]
+  shippingReviews   ShippingReview[]
+  complaints        Complaint[]
+
+  @@index([shopOrderId])
+  @@index([shippingCompanyId])
+  @@index([shipmentStatus])
+  @@map("Shipments")
+}
+
+model ShipmentItem {
+  id          BigInt   @id @default(autoincrement()) @map("ShipmentItemID")
+  shipmentId  BigInt   @map("ShipmentID")
+  orderItemId BigInt   @map("OrderItemID")
+  quantity    Int      @map("Quantity")
+  createdAt   DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([shipmentId])
+  @@index([orderItemId])
+  @@map("ShipmentItems")
+}
+
+model ShipmentTrackingHistory {
+  id              BigInt   @id @default(autoincrement()) @map("ShipmentTrackingHistoryID")
+  shipmentId      BigInt   @map("ShipmentID")
+  fromStatus      String?  @map("FromStatus") @db.VarChar(50)
+  toStatus        String   @map("ToStatus") @db.VarChar(50)
+  locationText    String?  @map("LocationText") @db.VarChar(255)
+  note            String?  @map("Note") @db.VarChar(1000)
+  updatedByUserId BigInt?  @map("UpdatedByUserID")
+  createdAt       DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shipment      Shipment @relation(fields: [shipmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  updatedByUser User?    @relation("ShipmentTrackingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([shipmentId])
+  @@map("ShipmentTrackingHistories")
+}
+
+model Payment {
+  id                      BigInt    @id @default(autoincrement()) @map("PaymentID")
+  orderId                 BigInt    @map("OrderID")
+  paymentMethodId         BigInt    @map("PaymentMethodID")
+  paymentCode             String    @unique @map("PaymentCode") @db.VarChar(80)
+  providerName            String?   @map("ProviderName") @db.VarChar(100)
+  providerTransactionCode String?   @map("ProviderTransactionCode") @db.VarChar(255)
+  amount                  Decimal   @map("Amount") @db.Decimal(18, 2)
+  paymentStatus           String    @default("Pending") @map("PaymentStatus") @db.VarChar(50)
+  paidAt                  DateTime? @map("PaidAt") @db.Timestamp(3)
+  expiredAt               DateTime? @map("ExpiredAt") @db.Timestamp(3)
+  createdAt               DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt               DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  transactions    PaymentTransaction[]
+  statusHistories PaymentStatusHistory[]
+  refundRequests  RefundRequest[]
+  refunds         Refund[]
+
+  @@index([orderId])
+  @@index([paymentMethodId])
+  @@index([paymentStatus])
+  @@map("Payments")
+}
+
+model PaymentTransaction {
+  id                      BigInt   @id @default(autoincrement()) @map("PaymentTransactionID")
+  paymentId               BigInt   @map("PaymentID")
+  transactionCode         String   @map("TransactionCode") @db.VarChar(255)
+  transactionType         String   @map("TransactionType") @db.VarChar(50)
+  transactionStatus       String   @map("TransactionStatus") @db.VarChar(50)
+  amount                  Decimal  @map("Amount") @db.Decimal(18, 2)
+  providerResponseCode    String?  @map("ProviderResponseCode") @db.VarChar(100)
+  providerResponseMessage String?  @map("ProviderResponseMessage") @db.VarChar(1000)
+  rawResponse             String?  @map("RawResponse") @db.Text
+  createdAt               DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([paymentId])
+  @@map("PaymentTransactions")
+}
+
+model PaymentStatusHistory {
+  id         BigInt   @id @default(autoincrement()) @map("PaymentStatusHistoryID")
+  paymentId  BigInt   @map("PaymentID")
+  fromStatus String?  @map("FromStatus") @db.VarChar(50)
+  toStatus   String   @map("ToStatus") @db.VarChar(50)
+  reason     String?  @map("Reason") @db.VarChar(1000)
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([paymentId])
+  @@map("PaymentStatusHistories")
+}
+
+model Voucher {
+  id                BigInt   @id @default(autoincrement()) @map("VoucherID")
+  voucherCode       String   @unique @map("VoucherCode") @db.VarChar(50)
+  voucherName       String   @map("VoucherName") @db.VarChar(150)
+  shopId            BigInt?  @map("ShopID")
+  discountType      String   @map("DiscountType") @db.VarChar(50)
+  discountValue     Decimal  @map("DiscountValue") @db.Decimal(18, 2)
+  maxDiscountAmount Decimal? @map("MaxDiscountAmount") @db.Decimal(18, 2)
+  minOrderAmount    Decimal  @default(0) @map("MinOrderAmount") @db.Decimal(18, 2)
+  usageLimit        Int?     @map("UsageLimit")
+  usedCount         Int      @default(0) @map("UsedCount")
+  startAt           DateTime @map("StartAt") @db.Timestamp(3)
+  endAt             DateTime @map("EndAt") @db.Timestamp(3)
+  voucherStatus     String   @default("Active") @map("VoucherStatus") @db.VarChar(50)
+  createdAt         DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shop   Shop?          @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usages VoucherUsage[]
+
+  @@index([shopId])
+  @@map("Vouchers")
+}
+
+model VoucherUsage {
+  id             BigInt   @id @default(autoincrement()) @map("VoucherUsageID")
+  voucherId      BigInt   @map("VoucherID")
+  userId         BigInt   @map("UserID")
+  orderId        BigInt?  @map("OrderID")
+  shopOrderId    BigInt?  @map("ShopOrderID")
+  discountAmount Decimal  @map("DiscountAmount") @db.Decimal(18, 2)
+  usedAt         DateTime @default(now()) @map("UsedAt") @db.Timestamp(3)
+
+  voucher   Voucher    @relation(fields: [voucherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user      User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order     Order?     @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder ShopOrder? @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([voucherId])
+  @@index([userId])
+  @@index([orderId])
+  @@map("VoucherUsages")
+}
+
+model ProductReview {
+  id               BigInt    @id @default(autoincrement()) @map("ProductReviewID")
+  orderItemId      BigInt    @map("OrderItemID")
+  productId        BigInt    @map("ProductID")
+  productVariantId BigInt?   @map("ProductVariantID")
+  userId           BigInt    @map("UserID")
+  rating           Int       @map("Rating") @db.SmallInt
+  reviewTitle      String?   @map("ReviewTitle") @db.VarChar(255)
+  reviewContent    String?   @map("ReviewContent") @db.VarChar(2000)
+  reviewStatus     String    @default("Published") @map("ReviewStatus") @db.VarChar(50)
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  orderItem      OrderItem       @relation(fields: [orderItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product        Product         @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([orderItemId, userId])
+  @@index([productId])
+  @@map("ProductReviews")
+}
+
+model ShopReview {
+  id            BigInt   @id @default(autoincrement()) @map("ShopReviewID")
+  shopOrderId   BigInt   @map("ShopOrderID")
+  shopId        BigInt   @map("ShopID")
+  userId        BigInt   @map("UserID")
+  rating        Int      @map("Rating") @db.SmallInt
+  reviewContent String?  @map("ReviewContent") @db.VarChar(2000)
+  reviewStatus  String   @default("Published") @map("ReviewStatus") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shopOrder ShopOrder @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user      User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([shopOrderId, userId])
+  @@index([shopId])
+  @@map("ShopReviews")
+}
+
+model ShippingReview {
+  id                BigInt   @id @default(autoincrement()) @map("ShippingReviewID")
+  shipmentId        BigInt   @map("ShipmentID")
+  shippingCompanyId BigInt   @map("ShippingCompanyID")
+  userId            BigInt   @map("UserID")
+  rating            Int      @map("Rating") @db.SmallInt
+  reviewContent     String?  @map("ReviewContent") @db.VarChar(2000)
+  reviewStatus      String   @default("Published") @map("ReviewStatus") @db.VarChar(50)
+  createdAt         DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shipment        Shipment        @relation(fields: [shipmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([shipmentId, userId])
+  @@index([shippingCompanyId])
+  @@map("ShippingReviews")
+}
+
+model ReturnRequest {
+  id                    BigInt    @id @default(autoincrement()) @map("ReturnRequestID")
+  returnCode            String    @unique @map("ReturnCode") @db.VarChar(80)
+  orderId               BigInt    @map("OrderID")
+  shopOrderId           BigInt    @map("ShopOrderID")
+  userId                BigInt    @map("UserID")
+  shopId                BigInt    @map("ShopID")
+  returnReason          String    @map("ReturnReason") @db.VarChar(1000)
+  returnRequestStatus   String    @default("Pending") @map("ReturnRequestStatus") @db.VarChar(50)
+  requestedRefundAmount Decimal   @map("RequestedRefundAmount") @db.Decimal(18, 2)
+  deadlineAt            DateTime  @map("DeadlineAt") @db.Timestamp(3)
+  reviewedByUserId      BigInt?   @map("ReviewedByUserID")
+  reviewedAt            DateTime? @map("ReviewedAt") @db.Timestamp(3)
+  resolutionNote        String?   @map("ResolutionNote") @db.VarChar(2000)
+  createdAt             DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt             DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder      ShopOrder @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User      @relation("ReturnRequestUser", fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop           Shop      @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedByUser User?     @relation("ReturnRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  items                  ReturnRequestItem[]
+  refundRequests         RefundRequest[]
+  complaints             Complaint[]
+  complaintEvidenceFiles ComplaintEvidenceFile[]
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@index([userId])
+  @@map("ReturnRequests")
+}
+
+model ReturnRequestItem {
+  id                    BigInt   @id @default(autoincrement()) @map("ReturnRequestItemID")
+  returnRequestId       BigInt   @map("ReturnRequestID")
+  orderItemId           BigInt   @map("OrderItemID")
+  quantity              Int      @map("Quantity")
+  requestedRefundAmount Decimal  @map("RequestedRefundAmount") @db.Decimal(18, 2)
+  itemCondition         String?  @map("ItemCondition") @db.VarChar(50)
+  createdAt             DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([returnRequestId])
+  @@index([orderItemId])
+  @@map("ReturnRequestItems")
+}
+
+model RefundRequest {
+  id                  BigInt    @id @default(autoincrement()) @map("RefundRequestID")
+  refundRequestCode   String    @unique @map("RefundRequestCode") @db.VarChar(80)
+  orderId             BigInt    @map("OrderID")
+  shopOrderId         BigInt?   @map("ShopOrderID")
+  paymentId           BigInt    @map("PaymentID")
+  returnRequestId     BigInt?   @map("ReturnRequestID")
+  complaintId         BigInt?   @map("ComplaintID")
+  requestedByUserId   BigInt    @map("RequestedByUserID")
+  amount              Decimal   @map("Amount") @db.Decimal(18, 2)
+  refundRequestStatus String    @default("Pending") @map("RefundRequestStatus") @db.VarChar(50)
+  reason              String?   @map("Reason") @db.VarChar(1000)
+  approvedByUserId    BigInt?   @map("ApprovedByUserID")
+  approvedAt          DateTime? @map("ApprovedAt") @db.Timestamp(3)
+  createdAt           DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder       ShopOrder?     @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment         Payment        @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  complaint       Complaint?     @relation(fields: [complaintId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestedByUser User           @relation("RefundRequestRequestedBy", fields: [requestedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser  User?          @relation("RefundRequestApprovedBy", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([returnRequestId])
+  @@map("RefundRequests")
+}
+
+model Refund {
+  id                 BigInt    @id @default(autoincrement()) @map("RefundID")
+  refundRequestId    BigInt    @map("RefundRequestID")
+  paymentId          BigInt    @map("PaymentID")
+  refundCode         String    @unique @map("RefundCode") @db.VarChar(80)
+  providerRefundCode String?   @map("ProviderRefundCode") @db.VarChar(255)
+  amount             Decimal   @map("Amount") @db.Decimal(18, 2)
+  refundStatus       String    @default("Pending") @map("RefundStatus") @db.VarChar(50)
+  refundedAt         DateTime? @map("RefundedAt") @db.Timestamp(3)
+  providerResponse   String?   @map("ProviderResponse") @db.Text
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  refundRequest RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([refundRequestId])
+  @@index([paymentId])
+  @@map("Refunds")
+}
+
+model Complaint {
+  id                       BigInt    @id @default(autoincrement()) @map("ComplaintID")
+  complaintCode            String    @unique @map("ComplaintCode") @db.VarChar(80)
+  complaintType            String    @map("ComplaintType") @db.VarChar(50)
+  orderId                  BigInt?   @map("OrderID")
+  shopOrderId              BigInt?   @map("ShopOrderID")
+  shipmentId               BigInt?   @map("ShipmentID")
+  returnRequestId          BigInt?   @map("ReturnRequestID")
+  complainantUserId        BigInt    @map("ComplainantUserID")
+  againstShopId            BigInt?   @map("AgainstShopID")
+  againstShippingCompanyId BigInt?   @map("AgainstShippingCompanyID")
+  complaintTitle           String    @map("ComplaintTitle") @db.VarChar(255)
+  complaintContent         String    @map("ComplaintContent") @db.VarChar(3000)
+  complaintStatus          String    @default("Open") @map("ComplaintStatus") @db.VarChar(50)
+  deadlineAt               DateTime  @map("DeadlineAt") @db.Timestamp(3)
+  assignedAdminUserId      BigInt?   @map("AssignedAdminUserID")
+  createdAt                DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt                DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  order                  Order?            @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder              ShopOrder?        @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shipment               Shipment?         @relation(fields: [shipmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnRequest          ReturnRequest?    @relation(fields: [returnRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  complainantUser        User              @relation("ComplaintComplainant", fields: [complainantUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  againstShop            Shop?             @relation("ComplaintAgainstShop", fields: [againstShopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  againstShippingCompany ShippingCompany?  @relation("ComplaintAgainstShippingCompany", fields: [againstShippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedAdminUser      User?             @relation("ComplaintAssignedAdmin", fields: [assignedAdminUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  refundRequests RefundRequest[]
+  evidenceFiles   ComplaintEvidenceFile[]
+  resolutions     ComplaintResolution[]
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@index([complainantUserId])
+  @@index([complaintStatus])
+  @@map("Complaints")
+}
+
+model ComplaintEvidenceFile {
+  id               BigInt   @id @default(autoincrement()) @map("ComplaintEvidenceFileID")
+  complaintId      BigInt?  @map("ComplaintID")
+  returnRequestId  BigInt?  @map("ReturnRequestID")
+  uploadedByUserId BigInt   @map("UploadedByUserID")
+  fileType         String   @map("FileType") @db.VarChar(50)
+  fileUrl          String   @map("FileUrl") @db.VarChar(1000)
+  description      String?  @map("Description") @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  complaint      Complaint?     @relation(fields: [complaintId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnRequest  ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedByUser User           @relation("ComplaintEvidenceUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([complaintId])
+  @@index([returnRequestId])
+  @@map("ComplaintEvidenceFiles")
+}
+
+model ComplaintResolution {
+  id                 BigInt   @id @default(autoincrement()) @map("ComplaintResolutionID")
+  complaintId        BigInt   @map("ComplaintID")
+  resolvedByUserId   BigInt   @map("ResolvedByUserID")
+  resolutionType     String   @map("ResolutionType") @db.VarChar(50)
+  compensationAmount Decimal? @map("CompensationAmount") @db.Decimal(18, 2)
+  resolutionContent  String   @map("ResolutionContent") @db.VarChar(3000)
+  createdAt          DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  complaint      Complaint @relation(fields: [complaintId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resolvedByUser User      @relation("ComplaintResolutionResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([complaintId])
+  @@map("ComplaintResolutions")
+}

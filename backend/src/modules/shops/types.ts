@@ -1,0 +1,23 @@
+export type ShopResponse = {
+  id: string;
+  idString: string;
+  ownerUserId: string;
+  ownerUserIdString: string;
+  shopName: string;
+  slug: string;
+  description: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+  province: string | null;
+  district: string | null;
+  ward: string | null;
+  streetAddress: string | null;
+  taxCode: string | null;
+  shopStatus: string;
+  approvedByUserId: string | null;
+  approvedByUserIdString: string | null;
+  approvedAt: Date | null;
+  isDeleted: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+};

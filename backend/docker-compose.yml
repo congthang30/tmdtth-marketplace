@@ -1,0 +1,71 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tmdtth-api
+    environment:
+      NODE_ENV: development
+      PORT: 3100
+      API_GLOBAL_PREFIX: api
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tmdtth}?schema=public"
+      JWT_SECRET: "${JWT_SECRET:-dev-only-change-me}"
+      JWT_EXPIRES_IN: "${JWT_EXPIRES_IN:-1d}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-admin@example.com}"
+      SELLER_EMAILS: "${SELLER_EMAILS:-seller@example.com}"
+      UPLOAD_DIR: uploads
+      UPLOAD_PUBLIC_PREFIX: /uploads
+      UPLOAD_MAX_FILE_SIZE_BYTES: 5242880
+    ports:
+      - "3100:3100"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - api_uploads:/app/uploads
+
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    container_name: tmdtth-db-init
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tmdtth}?schema=public"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: "${POSTGRES_DB:-tmdtth}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm run db:ensure && npm run prisma:migrate:deploy"
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: tmdtth-postgres
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-tmdtth}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${POSTGRES_HOST_PORT:-55433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  api_uploads:
