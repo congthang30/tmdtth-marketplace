@@ -238,6 +238,7 @@ export type SellerShopOrderResponse = {
   preparedAt: Date | null;
   completedAt: Date | null;
   items: OrderItemResponse[];
+  shipments?: OrderShipmentResponse[];
   createdAt: Date;
   updatedAt: Date | null;
 };

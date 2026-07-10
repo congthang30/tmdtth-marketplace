@@ -10,6 +10,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { createPaginatedResult } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { ActiveShippingServiceQueryDto } from './dto/active-shipping-service-query.dto';
 import { CreateShippingCompanyDto } from './dto/create-shipping-company.dto';
 import { CreateShippingQuoteDto } from './dto/create-shipping-quote.dto';
 import { CreateShippingServiceDto } from './dto/create-shipping-service.dto';
@@ -373,6 +374,44 @@ export class ShippingService {
       limit,
       total,
       message: 'Shipping services retrieved successfully',
+    });
+  }
+
+  async listActiveShippingServices(query: ActiveShippingServiceQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+    const where: Prisma.ShippingServiceWhereInput = {
+      isActive: true,
+      shippingCompany: {
+        companyStatus: SHIPPING_COMPANY_STATUS_APPROVED,
+        isDeleted: false,
+      },
+    };
+
+    if (query.shopId) {
+      await this.requireQuotableShop(this.parseShopId(query.shopId));
+    }
+
+    const [services, total] = await Promise.all([
+      this.prisma.shippingService.findMany({
+        where,
+        include: {
+          shippingCompany: true,
+        },
+        orderBy: [{ serviceName: 'asc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.shippingService.count({ where }),
+    ]);
+
+    return createPaginatedResult({
+      items: services.map((service) => this.toShippingServiceResponse(service)),
+      page,
+      limit,
+      total,
+      message: 'Active shipping services retrieved successfully',
     });
   }
 

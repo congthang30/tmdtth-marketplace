@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types';
@@ -9,6 +9,11 @@ import { ShopsService } from './shops.service';
 @UseGuards(JwtAuthGuard)
 export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
+
+  @Get('me')
+  getMyShop(@CurrentUser() user: AuthenticatedUser) {
+    return this.shopsService.getMyShop(user);
+  }
 
   @Post()
   createShop(

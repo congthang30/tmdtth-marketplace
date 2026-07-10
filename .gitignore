@@ -4,6 +4,8 @@ coverage
 .env
 .env.local
 npm-debug.log*
+.npm-cache/
+.tmp/
 .agents/
 .codex/
 .git-backups/

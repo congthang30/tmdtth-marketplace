@@ -175,6 +175,28 @@ const sellerShopOrderInclude = {
   items: {
     orderBy: [{ createdAt: 'asc' }],
   },
+  shipments: {
+    orderBy: [{ createdAt: 'asc' }],
+    include: {
+      shippingCompany: {
+        select: {
+          id: true,
+          companyName: true,
+          slug: true,
+        },
+      },
+      shippingService: {
+        select: {
+          id: true,
+          serviceCode: true,
+          serviceName: true,
+        },
+      },
+      trackingHistories: {
+        orderBy: [{ createdAt: 'asc' }],
+      },
+    },
+  },
 } satisfies Prisma.ShopOrderInclude;
 
 type SellerShopOrderEntity = Prisma.ShopOrderGetPayload<{
@@ -1682,6 +1704,9 @@ export class OrdersService {
       preparedAt: shopOrder.preparedAt,
       completedAt: shopOrder.completedAt,
       items: shopOrder.items.map((item) => this.toOrderItemResponse(item)),
+      shipments: (shopOrder.shipments ?? []).map((shipment) =>
+        this.toOrderShipmentResponse(shipment),
+      ),
       createdAt: shopOrder.createdAt,
       updatedAt: shopOrder.updatedAt,
     };

@@ -10,6 +10,9 @@ import { ShopsService } from './shops.service';
 
 type ShopDelegateMock = {
   findUnique: jest.Mock<Promise<ShopEntity | null>, [unknown]>;
+  findFirst: jest.Mock<Promise<ShopEntity | null>, [unknown]>;
+  findMany: jest.Mock<Promise<ShopEntity[]>, [unknown]>;
+  count: jest.Mock<Promise<number>, [unknown]>;
   create: jest.Mock<Promise<ShopEntity>, [ShopCreateArgs]>;
   update: jest.Mock<Promise<ShopEntity>, [ShopUpdateArgs]>;
 };
@@ -121,11 +124,71 @@ describe('ShopsService', () => {
     prisma = {
       shop: {
         findUnique: jest.fn<Promise<ShopEntity | null>, [unknown]>(),
+        findFirst: jest.fn<Promise<ShopEntity | null>, [unknown]>(),
+        findMany: jest.fn<Promise<ShopEntity[]>, [unknown]>(),
+        count: jest.fn<Promise<number>, [unknown]>(),
         create: jest.fn<Promise<ShopEntity>, [ShopCreateArgs]>(),
         update: jest.fn<Promise<ShopEntity>, [ShopUpdateArgs]>(),
       },
     };
     service = new ShopsService(prisma as unknown as PrismaService);
+  });
+
+  describe('listShops', () => {
+    it('lists non-deleted shops filtered by status with pagination', async () => {
+      prisma.shop.findMany.mockResolvedValue([createShopEntity()]);
+      prisma.shop.count.mockResolvedValue(1);
+
+      const result = await service.listShops({
+        page: 2,
+        limit: 5,
+        status: 'PendingApproval',
+      });
+      const findArgs = prisma.shop.findMany.mock.calls[0][0] as {
+        where: { isDeleted: boolean; shopStatus: string };
+        skip: number;
+        take: number;
+      };
+
+      expect(findArgs.where).toEqual({
+        isDeleted: false,
+        shopStatus: 'PendingApproval',
+      });
+      expect(findArgs.skip).toBe(5);
+      expect(findArgs.take).toBe(5);
+      expect(result.meta).toEqual({
+        page: 2,
+        limit: 5,
+        total: 1,
+        totalPages: 1,
+      });
+      expect(result.items[0].shopStatus).toBe('PendingApproval');
+    });
+  });
+
+  describe('getMyShop', () => {
+    it('returns the latest non-deleted shop owned by the current user', async () => {
+      prisma.shop.findFirst.mockResolvedValue(
+        createShopEntity({ ownerUserId: sellerUser.id }),
+      );
+
+      const result = await service.getMyShop(sellerUser);
+      const findArgs = prisma.shop.findFirst.mock.calls[0][0] as {
+        where: { ownerUserId: bigint; isDeleted: boolean };
+      };
+
+      expect(findArgs.where).toEqual({
+        ownerUserId: sellerUser.id,
+        isDeleted: false,
+      });
+      expect(result?.ownerUserId).toBe('7');
+    });
+
+    it('returns null when the current user has no shop', async () => {
+      prisma.shop.findFirst.mockResolvedValue(null);
+
+      await expect(service.getMyShop(sellerUser)).resolves.toBeNull();
+    });
   });
 
   describe('createShop', () => {

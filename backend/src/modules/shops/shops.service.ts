@@ -4,8 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  createPaginatedResult,
+  getPaginationParams,
+} from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { AdminShopQueryDto } from './dto/admin-shop-query.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { ShopResponse } from './types';
 
@@ -16,6 +21,44 @@ const SHOP_STATUS_REJECTED = 'Rejected';
 @Injectable()
 export class ShopsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async listShops(query: AdminShopQueryDto) {
+    const { page, limit, skip, take } = getPaginationParams(query);
+    const where = {
+      isDeleted: false,
+      ...(query.status ? { shopStatus: query.status } : {}),
+    };
+
+    const [shops, total] = await Promise.all([
+      this.prisma.shop.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { shopName: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.shop.count({ where }),
+    ]);
+
+    return createPaginatedResult({
+      items: shops.map((shop) => this.toShopResponse(shop)),
+      page,
+      limit,
+      total,
+      message: 'Shops retrieved successfully',
+    });
+  }
+
+  async getMyShop(user: AuthenticatedUser): Promise<ShopResponse | null> {
+    const shop = await this.prisma.shop.findFirst({
+      where: {
+        ownerUserId: user.id,
+        isDeleted: false,
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    return shop ? this.toShopResponse(shop) : null;
+  }
 
   async createShop(
     user: AuthenticatedUser,

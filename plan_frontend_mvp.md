@@ -19,6 +19,18 @@ Ghi chu trang thai hien tai:
 | Task ID | Trang thai | Ngay | Ghi chu |
 | --- | --- | --- | --- |
 | FE-PLAN | Hoan thanh | 2026-07-03 | Da doc `build_fe.md`, ra soat backend modules/controllers, xac dinh roles/API/screens, lap backlog frontend MVP va backend unblockers trong file nay. |
+| FE-00 | Hoan thanh | 2026-07-03 | Scaffold Vite React TypeScript trong `frontend/`; cai dependencies bat buoc `react-router-dom`, `axios`, `@tanstack/react-query`, `react-hook-form`, `zod`, `@hookform/resolvers`, `zustand`, `lucide-react`, `tailwindcss`; cau hinh Tailwind/PostCSS, alias `@/*`, `.env.example`, Vite dev port 5173; tao base app providers, router, public/dashboard layout, placeholder pages, UI link button, API/domain types va format helpers. Verify: `npm.cmd install` pass 0 vulnerabilities, `npm.cmd run build` pass, `npm.cmd run lint` pass. |
+| FE-01 | Hoan thanh | 2026-07-03 | Tao Axios API client doc `VITE_API_BASE_URL`, unwrap backend response, normalize API error, intercept Bearer token/401/403; tao token storage va Zustand auth store; them auth service login/register/logout/me; them Login/Register/Profile pages, AuthSessionProvider, ProtectedRoute, RoleRoute, LogoutButton; gan provider/router/layout voi session va role menu. Verify: `npm.cmd run build` pass, `npm.cmd run lint` pass. |
+| FE-02 | Hoan thanh | 2026-07-03 | Bo sung shared UI primitives: Button/TextInput/SelectInput/Textarea/Badge/Table/Pagination/Modal/Skeleton, EmptyState/ErrorState, Zustand toast store va ToastViewport; cai thien public/dashboard responsive header; them formatDate/formatStatus helpers. Verify: `npm.cmd run build` pass, `npm.cmd run lint` pass. |
+| FE-03 | Hoan thanh | 2026-07-03 | Xay public catalog dung API that: categories tree, product list pagination/search/category/price/sort, product card/detail, media URL normalize theo API origin, variant selector, quantity selector, public reviews list va add-to-cart mutation cho user da login; homepage `/` va `/products` deu mo catalog that. Verify: `npm.cmd run build` pass, `npm.cmd run lint` pass; build co canh bao Vite chunk >500kB nhung khong fail. |
+| FE-04 | Hoan thanh | 2026-07-03 | Them account feature cho `/users/me` va `/addresses`; profile page load/update thong tin ca nhan, sync lai auth store; addresses page CRUD, set default, delete confirm modal, inline validation theo DTO backend; them route/nav `/addresses`. Verify: `npm.cmd run build` pass, `npm.cmd run lint` pass; build co canh bao Vite chunk >500kB nhung khong fail. |
+| FE-05 | Hoan thanh | 2026-07-03 | Them cart va checkout: cart load/update quantity/select/delete, summary va route `/cart`; checkout load addresses/payment methods, server-side preview `/orders/checkout-preview`, create order `/orders`, toast va navigate `/orders/:id`; shipping fee hien theo preview backend, chua chon shipping quote rieng vi create-order DTO hien chua nhan shipping service/quote id. Verify: `npm.cmd run build` pass, `npm.cmd run lint` pass; build co canh bao Vite chunk >500kB nhung khong fail. |
+| FE-06 | Hoan thanh | 2026-07-10 | Them customer orders flow: `/orders` history pagination, `/orders/:id` detail, cancel order voi reason, fake online payment success, shipment tracking display, product review modal voi React Hook Form + Zod va backend error rendering. Verify: `npm.cmd run lint` pass; `npm.cmd run build` pass khi redirect npm cache/temp sang `D:\TMDTTH\.npm-cache` va `D:\TMDTTH\.tmp` do C: het dung luong; build co canh bao Vite chunk >500kB nhung khong fail. |
+| FE-10 | Hoan thanh | 2026-07-10 | Them backend unblockers toi thieu: `GET /api/shops/me`, `GET /api/admin/shops?page&limit&status`, `GET /api/shipping/services?shopId=` cho customer/seller; bo sung seller order response tra `shipments` de cap nhat tracking sau reload. Verify backend: `npm.cmd run build`, `npm.cmd test -- --runInBand`, `npm.cmd run test:e2e -- --runInBand`, `npm.cmd run lint`, `npm.cmd audit --omit=dev`, `npm.cmd run prisma:validate` deu pass khi redirect npm cache/temp sang D:. |
+| FE-07 | Hoan thanh | 2026-07-10 | Them seller shop/product management: dashboard, shop registration, product list/create/edit/delete, variant CRUD, image upload/list/edit/delete/set thumbnail, inventory per variant; route guard Seller va menu seller. Verify frontend: `npm.cmd run build` pass, `npm.cmd run lint` pass; build co canh bao Vite chunk >500kB nhung khong fail. |
+| FE-08 | Hoan thanh | 2026-07-10 | Them seller order/shipment flow: seller order list/detail, confirm, prepare, create shipment voi active shipping services, update tracking PickedUp/InTransit/Delivered, hien tracking history. Verify frontend/backend gates pass nhu FE-07/FE-10. |
+| FE-09 | Hoan thanh | 2026-07-10 | Them admin management: dashboard, category CRUD/deactivate, shop approval/rejection, shipping company CRUD/delete, shipping service CRUD/deactivate; route guard Admin va role-aware nav. Verify frontend/backend gates pass nhu FE-07/FE-10. |
+| FE-11 | Hoan thanh | 2026-07-10 | Update `frontend/README.md`, `.env.example` co san, frontend build/lint pass va backend gates pass. Runtime verify bang local NestJS API port `3100` + embedded PostgreSQL port `55432` vi Docker daemon pipe khong kha dung; `npm.cmd run test:mvp` pass voi order Completed va duplicate review blocked; smoke frontend `/products` 200, admin/seller/customer API smoke pass. |
 
 Quy tac cap nhat:
 - Moi task chi duoc danh dau `Hoan thanh` khi da code, build pass va verify luong lien quan.
@@ -182,9 +194,10 @@ Nhung API sau co the can them de frontend MVP khong phai hardcode ID:
 
 | Gap ID | Muc do | Mo ta | De xuat |
 | --- | --- | --- | --- |
-| BE-FE-01 | Blocker Admin shop approval | Admin chi co approve/reject theo `shopId`, chua co list pending shops. | Them `GET /api/admin/shops?page&limit&status` hoac `GET /api/admin/shops/pending`. |
-| BE-FE-02 | Blocker Seller product create sau reload | Seller co `POST /api/shops` nhung chua co `GET /api/shops/me` de lay shop cua minh, trong khi product create can `shopId`. | Them `GET /api/shops/me` tra shop cua current seller/customer neu co. |
-| BE-FE-03 | Blocker Customer shipping quote | Customer quote can `shippingServiceId`, nhung customer khong co API list active shipping services. | Them public/customer `GET /api/shipping/services?shopId=` hoac cho `GET /api/admin/shipping-services` thanh route protected theo admin only + tao route customer rieng. |
+| BE-FE-01 | Da xu ly | Admin chi co approve/reject theo `shopId`, chua co list pending shops. | Da them `GET /api/admin/shops?page&limit&status`. |
+| BE-FE-02 | Da xu ly | Seller co `POST /api/shops` nhung chua co `GET /api/shops/me` de lay shop cua minh, trong khi product create can `shopId`. | Da them `GET /api/shops/me` tra shop moi nhat cua current user hoac `null`. |
+| BE-FE-03 | Da xu ly | Customer quote can `shippingServiceId`, nhung customer khong co API list active shipping services. | Da them `GET /api/shipping/services?shopId=` cho Customer/Seller, chi tra service active cua company approved. |
+| BE-FE-06 | Da xu ly | Seller order detail chua tra shipments, nen sau reload khong biet `shipmentId` de update tracking. | Da bo sung `shipments` trong seller shop order response. |
 | BE-FE-04 | Nice-have Admin shop dashboard | Khong co admin dashboard/stat endpoint. | Frontend co the dung card tinh tu list API hien co, hoac de dashboard tinh tinh. |
 | BE-FE-05 | Nice-have Seller shop status | Seller khong xem duoc trang thai shop pending/rejected sau dang ky neu mat response. | Giai quyet chung voi `GET /api/shops/me`. |
 
@@ -312,7 +325,7 @@ frontend/
 
 ### FE-00 - Project bootstrap
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Create Vite React TypeScript app in `frontend/`.
@@ -328,7 +341,7 @@ Acceptance:
 
 ### FE-01 - API client, auth store, route guards
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - `services/api.ts` with base URL from `VITE_API_BASE_URL`.
@@ -347,7 +360,7 @@ Acceptance:
 
 ### FE-02 - Layout and shared UI
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Public layout and app dashboard layout.
@@ -362,7 +375,7 @@ Acceptance:
 
 ### FE-03 - Public catalog and product detail
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Category tree load.
@@ -378,7 +391,7 @@ Acceptance:
 
 ### FE-04 - Customer profile and addresses
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - `/profile` view/update.
@@ -392,7 +405,7 @@ Acceptance:
 
 ### FE-05 - Cart and checkout
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Cart list with quantity update, select/unselect, delete.
@@ -408,7 +421,7 @@ Acceptance:
 
 ### FE-06 - Customer orders, payment, review
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Order history and detail.
@@ -425,7 +438,7 @@ Acceptance:
 
 ### FE-07 - Seller shop and product management
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Seller dashboard.
@@ -443,7 +456,7 @@ Acceptance:
 
 ### FE-08 - Seller orders and shipment
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Seller shop order list/detail.
@@ -458,7 +471,7 @@ Acceptance:
 
 ### FE-09 - Admin management
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Admin layout/dashboard.
@@ -474,7 +487,7 @@ Acceptance:
 
 ### FE-10 - Backend unblockers if required
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - Add minimal backend APIs listed in section 2 only when frontend cannot meet MVP otherwise.
@@ -487,7 +500,7 @@ Acceptance:
 
 ### FE-11 - MVP acceptance and docs
 
-Status: Chua bat dau
+Status: Hoan thanh
 
 Scope:
 - End-to-end manual or automated script with backend Docker running.
@@ -581,4 +594,3 @@ Rationale:
 - Customer buying flow proves marketplace value early.
 - Seller/Admin screens then complete operational flow.
 - Backend unblockers are delayed until proven necessary by frontend implementation, but BE-FE-01/02/03 are expected to be needed for a polished MVP.
-

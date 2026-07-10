@@ -691,6 +691,40 @@ describe('ShippingService admin shipping companies', () => {
     expect(result.items[0].serviceCode).toBe('STD');
   });
 
+  it('lists active shipping services for an approved shop', async () => {
+    prisma.shop.findUnique.mockResolvedValue(createShippingQuoteShopEntity());
+    prisma.shippingService.findMany.mockResolvedValue([
+      createShippingServiceWithCompanyEntity(),
+    ]);
+    prisma.shippingService.count.mockResolvedValue(1);
+
+    const result = await service.listActiveShippingServices({
+      page: 1,
+      limit: 10,
+      shopId: '100',
+    });
+    const serviceFindArgs = prisma.shippingService.findMany.mock
+      .calls[0][0] as {
+      where: {
+        isActive: boolean;
+        shippingCompany: { companyStatus: string; isDeleted: boolean };
+      };
+      skip: number;
+      take: number;
+    };
+
+    expect(serviceFindArgs.where).toEqual({
+      isActive: true,
+      shippingCompany: {
+        companyStatus: 'Approved',
+        isDeleted: false,
+      },
+    });
+    expect(serviceFindArgs.skip).toBe(0);
+    expect(serviceFindArgs.take).toBe(10);
+    expect(result.items[0].serviceCode).toBe('STD');
+  });
+
   it('creates a shipping service for an approved company', async () => {
     prisma.shippingCompany.findUnique.mockResolvedValue(
       createShippingCompanyEntity(),
