@@ -25,6 +25,7 @@ import type {
   ShippingServiceListResponse,
   Shop,
   ShopRequest,
+  UploadListResponse,
   UploadedFile,
   VariantRequest,
 } from './types';
@@ -180,6 +181,16 @@ export const sellerShippingApi = {
 };
 
 export const sellerUploadsApi = {
+  async list(page = 1, limit = 8): Promise<UploadListResponse> {
+    const response = await apiGetResponse<UploadListResponse['items']>('/uploads', {
+      params: { page, limit },
+    });
+
+    return {
+      items: response.data,
+      meta: response.meta,
+    };
+  },
   async upload(file: File): Promise<UploadedFile> {
     const formData = new FormData();
     formData.append('file', file);

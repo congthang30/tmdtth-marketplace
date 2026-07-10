@@ -1,19 +1,19 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
-import { LogIn } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { z } from 'zod';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { TextInput } from '@/components/ui/TextInput';
-import { getErrorMessage } from '@/services/errors';
-import { useAuthStore } from '@/stores/auth.store';
-import { authApi } from '../api';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { LogIn } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { TextInput } from "@/components/ui/TextInput";
+import { getErrorMessage } from "@/services/errors";
+import { useAuthStore } from "@/stores/auth.store";
+import { authApi } from "../api";
 
 const loginSchema = z.object({
-  email: z.string().trim().email('Enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  email: z.string().trim().email("Vui lòng nhập địa chỉ email hợp lệ"),
+  password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -31,8 +31,8 @@ export function LoginPage() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
-      password: '',
+      email: "",
+      password: "",
     },
   });
 
@@ -41,7 +41,7 @@ export function LoginPage() {
     onSuccess: (data) => {
       setAuth({ accessToken: data.accessToken, user: data.user });
       const state = location.state as LocationState | null;
-      navigate(state?.from ?? '/dashboard', { replace: true });
+      navigate(state?.from ?? "/dashboard", { replace: true });
     },
   });
 
@@ -53,11 +53,12 @@ export function LoginPage() {
     <div className="mx-auto max-w-md rounded-lg border border-border bg-white p-6 shadow-panel">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-          Sign in
+          Đăng nhập
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">Welcome back</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Chào mừng Bạn trở lại</h1>
         <p className="mt-2 text-sm text-muted">
-          Use a seeded or registered account to access role-based workflows.
+          Sử dụng tài khoản đã đăng ký để truy cập các chức năng phù hợp với vai
+          trò.
         </p>
       </div>
 
@@ -76,25 +77,25 @@ export function LoginPage() {
           type="email"
           autoComplete="email"
           error={form.formState.errors.email?.message}
-          {...form.register('email')}
+          {...form.register("email")}
         />
         <TextInput
-          label="Password"
+          label="Mật khẩu"
           type="password"
           autoComplete="current-password"
           error={form.formState.errors.password?.message}
-          {...form.register('password')}
+          {...form.register("password")}
         />
         <Button type="submit" disabled={mutation.isPending} className="w-full">
           <LogIn size={16} aria-hidden="true" />
-          {mutation.isPending ? 'Signing in...' : 'Login'}
+          {mutation.isPending ? "Đang đăng nhập..." : "Đăng nhập"}
         </Button>
       </form>
 
       <p className="mt-5 text-center text-sm text-muted">
-        New here?{' '}
+        Chưa có tài khoản?{" "}
         <Link className="font-medium text-primary-700" to="/register">
-          Create an account
+          Đăng ký ngay
         </Link>
       </p>
     </div>

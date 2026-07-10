@@ -1,9 +1,9 @@
-import { ArrowRight, Boxes, Store } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { Badge } from '@/components/ui/Badge';
-import type { ProductListItem } from '../types';
-import { getProductPriceLabel } from '../utils';
-import { ProductVisual } from './ProductVisual';
+import { ArrowRight, Boxes, Store } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Badge } from "@/components/ui/Badge";
+import type { ProductListItem } from "../types";
+import { getProductPriceLabel } from "../utils";
+import { ProductVisual } from "./ProductVisual";
 
 type ProductCardProps = {
   product: ProductListItem;
@@ -23,7 +23,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex flex-wrap gap-2">
           <Badge>{product.category.categoryName}</Badge>
           {product.quantityAvailable > 0 ? (
-            <Badge>{product.quantityAvailable} available</Badge>
+            <Badge>Còn {product.quantityAvailable} sản phẩm</Badge>
           ) : null}
         </div>
         <h2 className="mt-3 line-clamp-2 min-h-12 text-base font-semibold leading-6 text-ink">
@@ -39,14 +39,14 @@ export function ProductCard({ product }: ProductCardProps) {
           </p>
           <p className="flex items-center gap-2">
             <Boxes size={14} aria-hidden="true" />
-            Sold {product.soldCount}
+            Đã bán {product.soldCount}
           </p>
         </div>
         <Link
           to={`/products/${product.slug}`}
           className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700 hover:text-primary-600"
         >
-          View detail
+          Xem chi tiết
           <ArrowRight size={15} aria-hidden="true" />
         </Link>
       </div>

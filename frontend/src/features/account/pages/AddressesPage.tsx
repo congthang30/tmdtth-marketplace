@@ -1,38 +1,54 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit, MapPin, Plus, Star, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { TextInput } from '@/components/ui/TextInput';
-import { Textarea } from '@/components/ui/Textarea';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { addressesApi } from '../api';
-import type { Address, AddressRequest } from '../types';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit, MapPin, Plus, Star, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { TextInput } from "@/components/ui/TextInput";
+import { Textarea } from "@/components/ui/Textarea";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { addressesApi } from "../api";
+import type { Address, AddressRequest } from "../types";
 
 const addressSchema = z.object({
   receiverName: z
     .string()
     .trim()
-    .min(2, 'Receiver name must be at least 2 characters')
-    .max(150, 'Receiver name is too long'),
+    .min(2, "Tên người nhận phải có ít nhất 2 ký tự")
+    .max(150, "Tên người nhận quá dài"),
   phoneNumber: z
     .string()
     .trim()
-    .regex(/^[0-9+()\s-]{8,20}$/, 'Enter a valid phone number'),
-  province: z.string().trim().min(2).max(100),
-  district: z.string().trim().min(2).max(100),
-  ward: z.string().trim().min(2).max(100),
-  streetAddress: z.string().trim().min(2).max(255),
-  fullAddress: z.string().trim().max(600).optional(),
+    .regex(/^[0-9+()\s-]{8,20}$/, "Vui lòng nhập số điện thoại hợp lệ"),
+  province: z
+    .string()
+    .trim()
+    .min(2, "Vui lòng nhập tỉnh/thành phố")
+    .max(100, "Tên tỉnh/thành phố quá dài"),
+  district: z
+    .string()
+    .trim()
+    .min(2, "Vui lòng nhập quận/huyện")
+    .max(100, "Tên quận/huyện quá dài"),
+  ward: z
+    .string()
+    .trim()
+    .min(2, "Vui lòng nhập phường/xã")
+    .max(100, "Tên phường/xã quá dài"),
+  streetAddress: z
+    .string()
+    .trim()
+    .min(2, "Vui lòng nhập địa chỉ đường/phố")
+    .max(255, "Địa chỉ đường/phố quá dài"),
+  fullAddress: z.string().trim().max(600, "Địa chỉ đầy đủ quá dài").optional(),
   isDefault: z.boolean().optional(),
 });
 
@@ -44,7 +60,7 @@ type AddressFormModalProps = {
   onClose: () => void;
 };
 
-const addressQueryKey = ['account', 'addresses'];
+const addressQueryKey = ["account", "addresses"];
 
 const toAddressRequest = (
   values: AddressFormValues,
@@ -60,23 +76,19 @@ const toAddressRequest = (
   ...(includeDefault ? { isDefault: Boolean(values.isDefault) } : {}),
 });
 
-function AddressFormModal({
-  open,
-  address,
-  onClose,
-}: AddressFormModalProps) {
+function AddressFormModal({ open, address, onClose }: AddressFormModalProps) {
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
   const form = useForm<AddressFormValues>({
     resolver: zodResolver(addressSchema),
     defaultValues: {
-      receiverName: '',
-      phoneNumber: '',
-      province: '',
-      district: '',
-      ward: '',
-      streetAddress: '',
-      fullAddress: '',
+      receiverName: "",
+      phoneNumber: "",
+      province: "",
+      district: "",
+      ward: "",
+      streetAddress: "",
+      fullAddress: "",
       isDefault: false,
     },
   });
@@ -87,13 +99,13 @@ function AddressFormModal({
     }
 
     form.reset({
-      receiverName: address?.receiverName ?? '',
-      phoneNumber: address?.phoneNumber ?? '',
-      province: address?.province ?? '',
-      district: address?.district ?? '',
-      ward: address?.ward ?? '',
-      streetAddress: address?.streetAddress ?? '',
-      fullAddress: address?.fullAddress ?? '',
+      receiverName: address?.receiverName ?? "",
+      phoneNumber: address?.phoneNumber ?? "",
+      province: address?.province ?? "",
+      district: address?.district ?? "",
+      ward: address?.ward ?? "",
+      streetAddress: address?.streetAddress ?? "",
+      fullAddress: address?.fullAddress ?? "",
       isDefault: address?.isDefault ?? false,
     });
   }, [address, form, open]);
@@ -106,8 +118,8 @@ function AddressFormModal({
     onSuccess: async (savedAddress) => {
       await queryClient.invalidateQueries({ queryKey: addressQueryKey });
       pushToast({
-        tone: 'success',
-        title: address ? 'Address updated' : 'Address created',
+        tone: "success",
+        title: address ? "Đã cập nhật địa chỉ" : "Đã tạo địa chỉ",
         description: savedAddress.fullAddress ?? savedAddress.streetAddress,
       });
       onClose();
@@ -117,19 +129,19 @@ function AddressFormModal({
   return (
     <Modal
       open={open}
-      title={address ? 'Edit address' : 'New address'}
+      title={address ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ"}
       onClose={onClose}
       footer={
         <>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            Hủy
           </Button>
           <Button
             type="submit"
             form="address-form"
             disabled={mutation.isPending}
           >
-            {mutation.isPending ? 'Saving...' : 'Save address'}
+            {mutation.isPending ? "Đang lưu..." : "Lưu địa chỉ"}
           </Button>
         </>
       }
@@ -146,41 +158,41 @@ function AddressFormModal({
         onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
       >
         <TextInput
-          label="Receiver"
+          label="Người nhận"
           error={form.formState.errors.receiverName?.message}
-          {...form.register('receiverName')}
+          {...form.register("receiverName")}
         />
         <TextInput
-          label="Phone"
+          label="Số điện thoại"
           error={form.formState.errors.phoneNumber?.message}
-          {...form.register('phoneNumber')}
+          {...form.register("phoneNumber")}
         />
         <TextInput
-          label="Province"
+          label="Tỉnh/Thành phố"
           error={form.formState.errors.province?.message}
-          {...form.register('province')}
+          {...form.register("province")}
         />
         <TextInput
-          label="District"
+          label="Quận/Huyện"
           error={form.formState.errors.district?.message}
-          {...form.register('district')}
+          {...form.register("district")}
         />
         <TextInput
-          label="Ward"
+          label="Phường/Xã"
           error={form.formState.errors.ward?.message}
-          {...form.register('ward')}
+          {...form.register("ward")}
         />
         <TextInput
-          label="Street address"
+          label="Địa chỉ đường/phố"
           error={form.formState.errors.streetAddress?.message}
-          {...form.register('streetAddress')}
+          {...form.register("streetAddress")}
         />
         <div className="sm:col-span-2">
           <Textarea
-            label="Full address"
+            label="Địa chỉ đầy đủ"
             rows={3}
             error={form.formState.errors.fullAddress?.message}
-            {...form.register('fullAddress')}
+            {...form.register("fullAddress")}
           />
         </div>
         {!address ? (
@@ -188,9 +200,9 @@ function AddressFormModal({
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-border text-primary-600"
-              {...form.register('isDefault')}
+              {...form.register("isDefault")}
             />
-            Set as default address
+            Đặt làm địa chỉ mặc định
           </label>
         ) : null}
       </form>
@@ -215,8 +227,8 @@ export function AddressesPage() {
     onSuccess: async (address) => {
       await queryClient.invalidateQueries({ queryKey: addressQueryKey });
       pushToast({
-        tone: 'success',
-        title: 'Default address updated',
+        tone: "success",
+        title: "Đã cập nhật địa chỉ mặc định",
         description: address.fullAddress ?? address.streetAddress,
       });
     },
@@ -227,8 +239,8 @@ export function AddressesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: addressQueryKey });
       pushToast({
-        tone: 'success',
-        title: 'Address deleted',
+        tone: "success",
+        title: "Đã xóa địa chỉ",
       });
       setDeletingAddress(null);
     },
@@ -254,16 +266,17 @@ export function AddressesPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Addresses
+              Địa chỉ
             </p>
-            <h1 className="mt-2 text-2xl font-semibold">Delivery addresses</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Địa chỉ giao hàng</h1>
             <p className="mt-2 text-sm text-muted">
-              Manage receiver, phone and default address for checkout.
+              Quản lý người nhận, số điện thoại và địa chỉ mặc định khi thanh
+              toán.
             </p>
           </div>
           <Button type="button" onClick={openCreate}>
             <Plus size={16} aria-hidden="true" />
-            New address
+            Thêm địa chỉ
           </Button>
         </div>
       </section>
@@ -278,8 +291,8 @@ export function AddressesPage() {
 
       {addressesQuery.isError ? (
         <ErrorState
-          title="Cannot load addresses"
-          message="Your session may have expired or the address API is unavailable."
+          title="Không thể tải danh sách địa chỉ"
+          message="Phiên đăng nhập có thể đã hết hạn hoặc hệ thống đang tạm thời gián đoạn."
         />
       ) : null}
 
@@ -297,9 +310,11 @@ export function AddressesPage() {
                       <h2 className="font-semibold text-ink">
                         {address.receiverName}
                       </h2>
-                      {address.isDefault ? <Badge>Default</Badge> : null}
+                      {address.isDefault ? <Badge>Mặc định</Badge> : null}
                     </div>
-                    <p className="mt-1 text-sm text-muted">{address.phoneNumber}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {address.phoneNumber}
+                    </p>
                   </div>
                   <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-50 text-primary-700">
                     <MapPin size={18} aria-hidden="true" />
@@ -320,7 +335,7 @@ export function AddressesPage() {
                       onClick={() => setDefaultMutation.mutate(address.id)}
                     >
                       <Star size={16} aria-hidden="true" />
-                      Set default
+                      Đặt mặc định
                     </Button>
                   ) : null}
                   <Button
@@ -329,7 +344,7 @@ export function AddressesPage() {
                     onClick={() => openEdit(address)}
                   >
                     <Edit size={16} aria-hidden="true" />
-                    Edit
+                    Chỉnh sửa
                   </Button>
                   <Button
                     type="button"
@@ -337,7 +352,7 @@ export function AddressesPage() {
                     onClick={() => setDeletingAddress(address)}
                   >
                     <Trash2 size={16} aria-hidden="true" />
-                    Delete
+                    Xóa
                   </Button>
                 </div>
               </article>
@@ -345,12 +360,12 @@ export function AddressesPage() {
           </div>
         ) : (
           <EmptyState
-            title="No delivery addresses"
-            description="Create a default address before checkout."
+            title="Chưa có địa chỉ giao hàng"
+            description="Hãy tạo địa chỉ mặc định trước khi thanh toán."
             action={
               <Button type="button" onClick={openCreate}>
                 <Plus size={16} aria-hidden="true" />
-                New address
+                Thêm địa chỉ
               </Button>
             }
           />
@@ -365,7 +380,7 @@ export function AddressesPage() {
 
       <Modal
         open={Boolean(deletingAddress)}
-        title="Delete address"
+        title="Xóa địa chỉ"
         onClose={() => setDeletingAddress(null)}
         footer={
           <>
@@ -374,7 +389,7 @@ export function AddressesPage() {
               variant="secondary"
               onClick={() => setDeletingAddress(null)}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="button"
@@ -386,7 +401,7 @@ export function AddressesPage() {
                 }
               }}
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? "Đang xóa..." : "Xóa"}
             </Button>
           </>
         }
@@ -397,8 +412,8 @@ export function AddressesPage() {
           </Alert>
         ) : null}
         <p className="text-sm leading-6 text-muted">
-          This removes the address for {deletingAddress?.receiverName}. Checkout
-          will no longer offer it as a delivery option.
+          Địa chỉ của {deletingAddress?.receiverName} sẽ bị xóa và không còn
+          xuất hiện trong các lựa chọn giao hàng khi thanh toán.
         </p>
       </Modal>
     </div>

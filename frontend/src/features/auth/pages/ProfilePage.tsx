@@ -1,31 +1,31 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Save, ShieldCheck, UserRound } from 'lucide-react';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { SelectInput } from '@/components/ui/SelectInput';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { TextInput } from '@/components/ui/TextInput';
-import { profileApi } from '@/features/account/api';
-import { getErrorMessage } from '@/services/errors';
-import { useAuthStore } from '@/stores/auth.store';
-import { useToastStore } from '@/stores/toast.store';
-import { formatStatus } from '@/utils/format';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Save, ShieldCheck, UserRound } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { SelectInput } from "@/components/ui/SelectInput";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { TextInput } from "@/components/ui/TextInput";
+import { profileApi } from "@/features/account/api";
+import { getErrorMessage } from "@/services/errors";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToastStore } from "@/stores/toast.store";
+import { formatStatus } from "@/utils/format";
 
 const profileSchema = z.object({
   fullName: z
     .string()
     .trim()
-    .min(2, 'Full name must be at least 2 characters')
-    .max(150, 'Full name is too long'),
-  gender: z.string().max(20).optional(),
+    .min(2, "Họ và tên phải có ít nhất 2 ký tự")
+    .max(150, "Họ và tên quá dài"),
+  gender: z.string().max(20, "Giá trị giới tính không hợp lệ").optional(),
   dateOfBirth: z.string().optional(),
-  avatarUrl: z.string().trim().max(1000, 'Avatar URL is too long').optional(),
+  avatarUrl: z.string().trim().max(1000, "URL ảnh đại diện quá dài").optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -37,15 +37,15 @@ export function ProfilePage() {
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: '',
-      gender: '',
-      dateOfBirth: '',
-      avatarUrl: '',
+      fullName: "",
+      gender: "",
+      dateOfBirth: "",
+      avatarUrl: "",
     },
   });
 
   const meQuery = useQuery({
-    queryKey: ['account', 'me'],
+    queryKey: ["account", "me"],
     queryFn: profileApi.getMe,
   });
 
@@ -55,10 +55,10 @@ export function ProfilePage() {
     }
 
     form.reset({
-      fullName: meQuery.data.profile?.fullName ?? '',
-      gender: meQuery.data.profile?.gender ?? '',
-      dateOfBirth: meQuery.data.profile?.dateOfBirth?.slice(0, 10) ?? '',
-      avatarUrl: meQuery.data.profile?.avatarUrl ?? '',
+      fullName: meQuery.data.profile?.fullName ?? "",
+      gender: meQuery.data.profile?.gender ?? "",
+      dateOfBirth: meQuery.data.profile?.dateOfBirth?.slice(0, 10) ?? "",
+      avatarUrl: meQuery.data.profile?.avatarUrl ?? "",
     });
     setUser(meQuery.data);
   }, [form, meQuery.data, setUser]);
@@ -68,8 +68,8 @@ export function ProfilePage() {
     onSuccess: (data) => {
       setUser(data);
       pushToast({
-        tone: 'success',
-        title: 'Profile updated',
+        tone: "success",
+        title: "Đã cập nhật hồ sơ",
         description: data.profile?.fullName ?? data.email,
       });
     },
@@ -87,8 +87,8 @@ export function ProfilePage() {
   if (meQuery.isError || !meQuery.data) {
     return (
       <ErrorState
-        title="Cannot load profile"
-        message="Your session may have expired or the users API is unavailable."
+        title="Không thể tải hồ sơ"
+        message="Phiên đăng nhập có thể đã hết hạn hoặc hệ thống đang tạm thời gián đoạn."
       />
     );
   }
@@ -100,11 +100,12 @@ export function ProfilePage() {
       <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-            Profile
+            Hồ sơ
           </p>
-          <h1 className="mt-2 text-2xl font-semibold">Account information</h1>
+          <h1 className="mt-2 text-2xl font-semibold">Thông tin tài khoản</h1>
           <p className="mt-2 text-sm text-muted">
-            This form updates `/users/me` and refreshes the active auth session.
+            Cập nhật thông tin cá nhân đang được sử dụng trong tài khoản của
+            Bạn.
           </p>
         </div>
 
@@ -126,37 +127,37 @@ export function ProfilePage() {
           )}
         >
           <TextInput
-            label="Full name"
+            label="Họ và tên"
             autoComplete="name"
             error={form.formState.errors.fullName?.message}
-            {...form.register('fullName')}
+            {...form.register("fullName")}
           />
           <SelectInput
-            label="Gender"
+            label="Giới tính"
             error={form.formState.errors.gender?.message}
-            {...form.register('gender')}
+            {...form.register("gender")}
           >
-            <option value="">Not set</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
-            <option value="other">Other</option>
+            <option value="">Chưa thiết lập</option>
+            <option value="female">Nữ</option>
+            <option value="male">Nam</option>
+            <option value="other">Khác</option>
           </SelectInput>
           <TextInput
-            label="Date of birth"
+            label="Ngày sinh"
             type="date"
             error={form.formState.errors.dateOfBirth?.message}
-            {...form.register('dateOfBirth')}
+            {...form.register("dateOfBirth")}
           />
           <TextInput
-            label="Avatar URL"
+            label="URL ảnh đại diện"
             autoComplete="url"
             error={form.formState.errors.avatarUrl?.message}
-            {...form.register('avatarUrl')}
+            {...form.register("avatarUrl")}
           />
           <div className="sm:col-span-2">
             <Button type="submit" disabled={mutation.isPending}>
               <Save size={16} aria-hidden="true" />
-              {mutation.isPending ? 'Saving...' : 'Save profile'}
+              {mutation.isPending ? "Đang lưu..." : "Lưu hồ sơ"}
             </Button>
           </div>
         </form>
@@ -177,23 +178,25 @@ export function ProfilePage() {
 
         <dl className="mt-6 space-y-4 text-sm">
           <div className="flex justify-between gap-4">
-            <dt className="text-muted">Phone</dt>
-            <dd className="font-medium">{user.phoneNumber ?? 'Not set'}</dd>
+            <dt className="text-muted">Số điện thoại</dt>
+            <dd className="font-medium">
+              {user.phoneNumber ?? "Chưa thiết lập"}
+            </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted">Status</dt>
+            <dt className="text-muted">Trạng thái</dt>
             <dd className="font-medium">{formatStatus(user.userStatus)}</dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-muted">Email</dt>
             <dd className="font-medium">
-              {user.emailConfirmed ? 'Confirmed' : 'Unconfirmed'}
+              {user.emailConfirmed ? "Đã xác nhận" : "Chưa xác nhận"}
             </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted">Phone</dt>
+            <dt className="text-muted">Số điện thoại</dt>
             <dd className="font-medium">
-              {user.phoneConfirmed ? 'Confirmed' : 'Unconfirmed'}
+              {user.phoneConfirmed ? "Đã xác nhận" : "Chưa xác nhận"}
             </dd>
           </div>
         </dl>
@@ -201,11 +204,17 @@ export function ProfilePage() {
         <div className="mt-6">
           <p className="flex items-center gap-2 text-sm font-medium text-muted">
             <ShieldCheck size={16} aria-hidden="true" />
-            Roles
+            Vai trò
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {user.roles.map((role) => (
-              <Badge key={role}>{role}</Badge>
+              <Badge key={role}>
+                {role === "Admin"
+                  ? "Quản trị viên"
+                  : role === "Seller"
+                    ? "Người bán"
+                    : "Khách hàng"}
+              </Badge>
             ))}
           </div>
         </div>

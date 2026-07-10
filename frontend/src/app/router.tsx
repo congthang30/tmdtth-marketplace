@@ -1,33 +1,33 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PublicLayout } from '@/components/layout/PublicLayout';
-import { PlaceholderPage } from '@/components/common/PlaceholderPage';
-import { CatalogPage } from '@/features/catalog/pages/CatalogPage';
-import { ProductDetailPage } from '@/features/catalog/pages/ProductDetailPage';
-import { AddressesPage } from '@/features/account/pages/AddressesPage';
-import { CartPage } from '@/features/cart/pages/CartPage';
-import { CheckoutPage } from '@/features/checkout/pages/CheckoutPage';
-import { OrderDetailPage } from '@/features/orders/pages/OrderDetailPage';
-import { OrdersPage } from '@/features/orders/pages/OrdersPage';
-import { LoginPage } from '@/features/auth/pages/LoginPage';
-import { ProfilePage } from '@/features/auth/pages/ProfilePage';
-import { RegisterPage } from '@/features/auth/pages/RegisterPage';
-import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute';
-import { RoleRoute } from '@/features/auth/components/RoleRoute';
-import { SellerDashboardPage } from '@/features/seller/pages/SellerDashboardPage';
-import { SellerShopRegisterPage } from '@/features/seller/pages/SellerShopRegisterPage';
-import { SellerProductsPage } from '@/features/seller/pages/SellerProductsPage';
-import { SellerProductFormPage } from '@/features/seller/pages/SellerProductFormPage';
-import { SellerProductVariantsPage } from '@/features/seller/pages/SellerProductVariantsPage';
-import { SellerProductImagesPage } from '@/features/seller/pages/SellerProductImagesPage';
-import { SellerProductInventoryPage } from '@/features/seller/pages/SellerProductInventoryPage';
-import { SellerOrdersPage } from '@/features/seller/pages/SellerOrdersPage';
-import { SellerOrderDetailPage } from '@/features/seller/pages/SellerOrderDetailPage';
-import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage';
-import { AdminCategoriesPage } from '@/features/admin/pages/AdminCategoriesPage';
-import { AdminShopsPage } from '@/features/admin/pages/AdminShopsPage';
-import { AdminShippingCompaniesPage } from '@/features/admin/pages/AdminShippingCompaniesPage';
-import { AdminShippingServicesPage } from '@/features/admin/pages/AdminShippingServicesPage';
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PublicLayout } from "@/components/layout/PublicLayout";
+import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { CatalogPage } from "@/features/catalog/pages/CatalogPage";
+import { ProductDetailPage } from "@/features/catalog/pages/ProductDetailPage";
+import { AddressesPage } from "@/features/account/pages/AddressesPage";
+import { CartPage } from "@/features/cart/pages/CartPage";
+import { CheckoutPage } from "@/features/checkout/pages/CheckoutPage";
+import { OrderDetailPage } from "@/features/orders/pages/OrderDetailPage";
+import { OrdersPage } from "@/features/orders/pages/OrdersPage";
+import { LoginPage } from "@/features/auth/pages/LoginPage";
+import { ProfilePage } from "@/features/auth/pages/ProfilePage";
+import { RegisterPage } from "@/features/auth/pages/RegisterPage";
+import { ProtectedRoute } from "@/features/auth/components/ProtectedRoute";
+import { RoleRoute } from "@/features/auth/components/RoleRoute";
+import { SellerDashboardPage } from "@/features/seller/pages/SellerDashboardPage";
+import { SellerShopRegisterPage } from "@/features/seller/pages/SellerShopRegisterPage";
+import { SellerProductsPage } from "@/features/seller/pages/SellerProductsPage";
+import { SellerProductFormPage } from "@/features/seller/pages/SellerProductFormPage";
+import { SellerProductVariantsPage } from "@/features/seller/pages/SellerProductVariantsPage";
+import { SellerProductImagesPage } from "@/features/seller/pages/SellerProductImagesPage";
+import { SellerProductInventoryPage } from "@/features/seller/pages/SellerProductInventoryPage";
+import { SellerOrdersPage } from "@/features/seller/pages/SellerOrdersPage";
+import { SellerOrderDetailPage } from "@/features/seller/pages/SellerOrderDetailPage";
+import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage";
+import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage";
+import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
+import { AdminShippingCompaniesPage } from "@/features/admin/pages/AdminShippingCompaniesPage";
+import { AdminShippingServicesPage } from "@/features/admin/pages/AdminShippingServicesPage";
 
 export const router = createBrowserRouter([
   {
@@ -38,15 +38,15 @@ export const router = createBrowserRouter([
         element: <CatalogPage />,
       },
       {
-        path: 'products',
+        path: "products",
         element: <CatalogPage />,
       },
       {
-        path: 'products/:slug',
+        path: "products/:slug",
         element: <ProductDetailPage />,
       },
       {
-        path: 'cart',
+        path: "cart",
         element: (
           <ProtectedRoute>
             <CartPage />
@@ -54,7 +54,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'checkout',
+        path: "checkout",
         element: (
           <ProtectedRoute>
             <CheckoutPage />
@@ -62,27 +62,27 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'login',
+        path: "login",
         element: <LoginPage />,
       },
       {
-        path: 'register',
+        path: "register",
         element: <RegisterPage />,
       },
       {
-        path: 'forbidden',
+        path: "forbidden",
         element: (
           <PlaceholderPage
             eyebrow="403"
-            title="Access denied"
-            description="Your account does not have permission to open this area."
+            title="Không có quyền truy cập"
+            description="Tài khoản của Bạn không có quyền mở khu vực này."
           />
         ),
       },
     ],
   },
   {
-    path: '/',
+    path: "/",
     element: (
       <ProtectedRoute>
         <DashboardLayout />
@@ -90,147 +90,147 @@ export const router = createBrowserRouter([
     ),
     children: [
       {
-        path: 'dashboard',
+        path: "dashboard",
         element: (
           <PlaceholderPage
-            eyebrow="Workspace"
-            title="Dashboard"
-            description="Role-aware dashboards and navigation are added after auth is wired."
+            eyebrow="Khu vực làm việc"
+            title="Tổng quan"
+            description="Nội dung tổng quan được hiển thị theo vai trò của tài khoản."
           />
         ),
       },
       {
-        path: 'profile',
+        path: "profile",
         element: <ProfilePage />,
       },
       {
-        path: 'addresses',
+        path: "addresses",
         element: <AddressesPage />,
       },
       {
-        path: 'orders',
+        path: "orders",
         element: <OrdersPage />,
       },
       {
-        path: 'orders/:id',
+        path: "orders/:id",
         element: <OrderDetailPage />,
       },
       {
-        path: 'seller',
+        path: "seller",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerDashboardPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/shop/register',
+        path: "seller/shop/register",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerShopRegisterPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products',
+        path: "seller/products",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductsPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products/create',
+        path: "seller/products/create",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductFormPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products/:id/edit',
+        path: "seller/products/:id/edit",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductFormPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products/:id/variants',
+        path: "seller/products/:id/variants",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductVariantsPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products/:id/images',
+        path: "seller/products/:id/images",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductImagesPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/products/:id/inventory',
+        path: "seller/products/:id/inventory",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerProductInventoryPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/orders',
+        path: "seller/orders",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerOrdersPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'seller/orders/:id',
+        path: "seller/orders/:id",
         element: (
-          <RoleRoute allowedRoles={['Seller']}>
+          <RoleRoute allowedRoles={["Seller"]}>
             <SellerOrderDetailPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'admin',
+        path: "admin",
         element: (
-          <RoleRoute allowedRoles={['Admin']}>
+          <RoleRoute allowedRoles={["Admin"]}>
             <AdminDashboardPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'admin/categories',
+        path: "admin/categories",
         element: (
-          <RoleRoute allowedRoles={['Admin']}>
+          <RoleRoute allowedRoles={["Admin"]}>
             <AdminCategoriesPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'admin/shops',
+        path: "admin/shops",
         element: (
-          <RoleRoute allowedRoles={['Admin']}>
+          <RoleRoute allowedRoles={["Admin"]}>
             <AdminShopsPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'admin/shipping/companies',
+        path: "admin/shipping/companies",
         element: (
-          <RoleRoute allowedRoles={['Admin']}>
+          <RoleRoute allowedRoles={["Admin"]}>
             <AdminShippingCompaniesPage />
           </RoleRoute>
         ),
       },
       {
-        path: 'admin/shipping/services',
+        path: "admin/shipping/services",
         element: (
-          <RoleRoute allowedRoles={['Admin']}>
+          <RoleRoute allowedRoles={["Admin"]}>
             <AdminShippingServicesPage />
           </RoleRoute>
         ),
@@ -238,17 +238,17 @@ export const router = createBrowserRouter([
     ],
   },
   {
-    path: 'not-found',
+    path: "not-found",
     element: (
       <PlaceholderPage
         eyebrow="404"
-        title="Page not found"
-        description="The requested screen is not available."
+        title="Không tìm thấy trang"
+        description="Trang Bạn yêu cầu không tồn tại hoặc không còn khả dụng."
       />
     ),
   },
   {
-    path: '*',
+    path: "*",
     element: <Navigate to="/not-found" replace />,
   },
 ]);

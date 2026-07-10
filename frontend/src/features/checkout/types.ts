@@ -1,3 +1,5 @@
+import type { ApiMeta } from '@/types/api';
+
 export type CheckoutAddressSummary = {
   id: string;
   idString: string;
@@ -51,8 +53,30 @@ export type CheckoutPreviewItem = {
     idString: string;
     sku: string;
     variantName: string;
+    weightGram: number;
   };
   shop: CheckoutShopSummary;
+};
+
+export type CheckoutShippingSelection = {
+  shippingQuoteId: string;
+  shippingQuoteIdString: string;
+  shippingCompany: {
+    id: string;
+    idString: string;
+    companyName: string;
+    slug: string;
+  };
+  shippingService: {
+    id: string;
+    idString: string;
+    serviceCode: string;
+    serviceName: string;
+  };
+  quotedFee: string;
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+  expiresAt: string;
 };
 
 export type CheckoutPreviewShopGroup = {
@@ -62,6 +86,7 @@ export type CheckoutPreviewShopGroup = {
   discountAmount: string;
   shippingFeeAmount: string;
   totalAmount: string;
+  shippingSelection: CheckoutShippingSelection | null;
 };
 
 export type CheckoutPreviewResponse = {
@@ -83,10 +108,60 @@ export type CheckoutRequest = {
   paymentMethodId: string;
   selectedCartItemIds?: string[];
   voucherCode?: string;
+  shippingSelections?: CheckoutShippingSelectionRequest[];
 };
 
 export type CreateOrderRequest = CheckoutRequest & {
   customerNote?: string;
+};
+
+export type CheckoutShippingSelectionRequest = {
+  shopId: string;
+  shippingServiceId: string;
+  shippingQuoteId: string;
+};
+
+export type ShippingServiceOption = {
+  id: string;
+  idString: string;
+  shippingCompanyId: string;
+  shippingCompanyIdString: string;
+  serviceCode: string;
+  serviceName: string;
+  baseFee: string;
+  feePerKg: string;
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+  isActive: boolean;
+};
+
+export type ShippingServiceListResponse = {
+  items: ShippingServiceOption[];
+  meta?: ApiMeta;
+};
+
+export type ShippingQuoteRequest = {
+  shopId: string;
+  shippingServiceId: string;
+  destinationProvince: string;
+  destinationDistrict?: string;
+  totalWeightGram: number;
+};
+
+export type ShippingQuote = {
+  id: string;
+  idString: string;
+  shop: CheckoutShopSummary;
+  shippingCompany: CheckoutShippingSelection['shippingCompany'];
+  shippingService: CheckoutShippingSelection['shippingService'];
+  destinationProvince: string;
+  destinationDistrict: string | null;
+  totalWeightGram: number;
+  quotedFee: string;
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+  expiresAt: string;
+  createdAt: string;
 };
 
 export type OrderResponse = {

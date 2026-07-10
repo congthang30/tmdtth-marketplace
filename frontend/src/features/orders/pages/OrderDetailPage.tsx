@@ -1,36 +1,48 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   CheckCircle2,
   MessageSquarePlus,
   PackageCheck,
   XCircle,
-} from 'lucide-react';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { useParams } from 'react-router-dom';
-import { z } from 'zod';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ButtonLink } from '@/components/ui/ButtonLink';
-import { Modal } from '@/components/ui/Modal';
-import { SelectInput } from '@/components/ui/SelectInput';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { Textarea } from '@/components/ui/Textarea';
-import { reviewsApi } from '@/features/reviews/api';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatDateTime, formatMoney, formatStatus } from '@/utils/format';
-import { orderPaymentsApi, ordersApi } from '../api';
-import type { OrderItem } from '../types';
+} from "lucide-react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { useParams } from "react-router-dom";
+import { z } from "zod";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Modal } from "@/components/ui/Modal";
+import { SelectInput } from "@/components/ui/SelectInput";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Textarea } from "@/components/ui/Textarea";
+import { reviewsApi } from "@/features/reviews/api";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatDateTime, formatMoney, formatStatus } from "@/utils/format";
+import { orderPaymentsApi, ordersApi } from "../api";
+import type { OrderItem } from "../types";
 
 const reviewSchema = z.object({
-  rating: z.coerce.number().int().min(1).max(5),
-  reviewTitle: z.string().trim().max(255).optional(),
-  reviewContent: z.string().trim().max(2000).optional(),
+  rating: z.coerce
+    .number()
+    .int("Số sao phải là số nguyên")
+    .min(1, "Tối thiểu 1 sao")
+    .max(5, "Tối đa 5 sao"),
+  reviewTitle: z
+    .string()
+    .trim()
+    .max(255, "Tiêu đề đánh giá quá dài")
+    .optional(),
+  reviewContent: z
+    .string()
+    .trim()
+    .max(2000, "Nội dung đánh giá quá dài")
+    .optional(),
 });
 
 type ReviewFormValues = z.infer<typeof reviewSchema>;
@@ -41,7 +53,7 @@ type ReviewModalProps = {
   onClose: () => void;
 };
 
-const reviewableStatuses = ['Delivered', 'Completed'];
+const reviewableStatuses = ["Delivered", "Completed"];
 
 function ReviewModal({ item, onClose }: ReviewModalProps) {
   const pushToast = useToastStore((state) => state.pushToast);
@@ -49,8 +61,8 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
     resolver: zodResolver(reviewSchema),
     defaultValues: {
       rating: 5,
-      reviewTitle: '',
-      reviewContent: '',
+      reviewTitle: "",
+      reviewContent: "",
     },
   });
 
@@ -58,8 +70,8 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
     mutationFn: reviewsApi.createProductReview,
     onSuccess: () => {
       pushToast({
-        tone: 'success',
-        title: 'Review submitted',
+        tone: "success",
+        title: "Đã gửi đánh giá",
         description: item?.productNameSnapshot,
       });
       form.reset();
@@ -74,19 +86,19 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
   return (
     <Modal
       open={Boolean(item)}
-      title="Review product"
+      title="Đánh giá sản phẩm"
       onClose={onClose}
       footer={
         <>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            Hủy
           </Button>
           <Button
             type="submit"
             form="review-form"
             disabled={mutation.isPending}
           >
-            {mutation.isPending ? 'Submitting...' : 'Submit review'}
+            {mutation.isPending ? "Đang gửi..." : "Gửi đánh giá"}
           </Button>
         </>
       }
@@ -112,29 +124,29 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
         )}
       >
         <SelectInput
-          label="Rating"
+          label="Số sao"
           error={form.formState.errors.rating?.message}
-          {...form.register('rating')}
+          {...form.register("rating")}
         >
-          <option value="5">5 stars</option>
-          <option value="4">4 stars</option>
-          <option value="3">3 stars</option>
-          <option value="2">2 stars</option>
-          <option value="1">1 star</option>
+          <option value="5">5 sao</option>
+          <option value="4">4 sao</option>
+          <option value="3">3 sao</option>
+          <option value="2">2 sao</option>
+          <option value="1">1 sao</option>
         </SelectInput>
         <Textarea
-          label="Title"
+          label="Tiêu đề"
           rows={2}
           maxLength={255}
           error={form.formState.errors.reviewTitle?.message}
-          {...form.register('reviewTitle')}
+          {...form.register("reviewTitle")}
         />
         <Textarea
-          label="Review"
+          label="Nội dung đánh giá"
           rows={5}
           maxLength={2000}
           error={form.formState.errors.reviewContent?.message}
-          {...form.register('reviewContent')}
+          {...form.register("reviewContent")}
         />
       </form>
     </Modal>
@@ -144,31 +156,31 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [isCancelOpen, setIsCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReason, setCancelReason] = useState("");
   const [reviewItem, setReviewItem] = useState<OrderItem | null>(null);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
 
   const orderQuery = useQuery({
-    queryKey: ['orders', 'detail', id],
-    queryFn: () => ordersApi.getMyOrder(id ?? ''),
+    queryKey: ["orders", "detail", id],
+    queryFn: () => ordersApi.getMyOrder(id ?? ""),
     enabled: Boolean(id),
   });
 
   const invalidateOrders = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['orders'] }),
-      queryClient.invalidateQueries({ queryKey: ['orders', 'detail', id] }),
+      queryClient.invalidateQueries({ queryKey: ["orders"] }),
+      queryClient.invalidateQueries({ queryKey: ["orders", "detail", id] }),
     ]);
   };
 
   const cancelMutation = useMutation({
-    mutationFn: () => ordersApi.cancelOrder(id ?? '', cancelReason.trim()),
+    mutationFn: () => ordersApi.cancelOrder(id ?? "", cancelReason.trim()),
     onSuccess: async () => {
       await invalidateOrders();
-      pushToast({ tone: 'success', title: 'Order cancelled' });
+      pushToast({ tone: "success", title: "Đã hủy đơn hàng" });
       setIsCancelOpen(false);
-      setCancelReason('');
+      setCancelReason("");
     },
   });
 
@@ -176,7 +188,7 @@ export function OrderDetailPage() {
     mutationFn: orderPaymentsApi.markFakeSuccess,
     onSuccess: async () => {
       await invalidateOrders();
-      pushToast({ tone: 'success', title: 'Payment marked paid' });
+      pushToast({ tone: "success", title: "Đã xác nhận thanh toán" });
     },
   });
 
@@ -192,19 +204,19 @@ export function OrderDetailPage() {
   if (orderQuery.isError || !orderQuery.data) {
     return (
       <ErrorState
-        title="Cannot load order"
-        message="The order was not found or the orders API is unavailable."
+        title="Không thể tải đơn hàng"
+        message="Không tìm thấy đơn hàng hoặc hệ thống đang tạm thời gián đoạn."
       />
     );
   }
 
   const order = orderQuery.data;
   const canCancel =
-    order.orderStatus === 'Created' && order.paymentStatus === 'Pending';
+    order.orderStatus === "Created" && order.paymentStatus === "Pending";
   const pendingFakePayment = order.payments.find(
     (payment) =>
-      payment.paymentStatus === 'Pending' &&
-      payment.paymentMethod.methodCode === 'FAKE_ONLINE',
+      payment.paymentStatus === "Pending" &&
+      payment.paymentMethod.methodCode === "FAKE_ONLINE",
   );
 
   return (
@@ -213,7 +225,7 @@ export function OrderDetailPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Order detail
+              Chi tiết đơn hàng
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold">{order.orderCode}</h1>
@@ -229,10 +241,14 @@ export function OrderDetailPage() {
               <Button
                 type="button"
                 disabled={fakePaymentMutation.isPending}
-                onClick={() => fakePaymentMutation.mutate(pendingFakePayment.id)}
+                onClick={() =>
+                  fakePaymentMutation.mutate(pendingFakePayment.id)
+                }
               >
                 <Banknote size={16} aria-hidden="true" />
-                {fakePaymentMutation.isPending ? 'Processing...' : 'Mark paid'}
+                {fakePaymentMutation.isPending
+                  ? "Đang xử lý..."
+                  : "Xác nhận đã thanh toán"}
               </Button>
             ) : null}
             {canCancel ? (
@@ -242,7 +258,7 @@ export function OrderDetailPage() {
                 onClick={() => setIsCancelOpen(true)}
               >
                 <XCircle size={16} aria-hidden="true" />
-                Cancel order
+                Hủy đơn hàng
               </Button>
             ) : null}
           </div>
@@ -273,7 +289,7 @@ export function OrderDetailPage() {
                       {shopOrder.shop.shopName}
                     </h2>
                     <p className="mt-1 text-sm text-muted">
-                      {shopOrder.shopOrderCode} -{' '}
+                      {shopOrder.shopOrderCode} -{" "}
                       {formatStatus(shopOrder.orderStatus)}
                     </p>
                   </div>
@@ -293,7 +309,7 @@ export function OrderDetailPage() {
                           {item.productNameSnapshot}
                         </p>
                         <p className="mt-1 text-sm text-muted">
-                          {item.variantNameSnapshot ?? 'Default'} x{' '}
+                          {item.variantNameSnapshot ?? "Mặc định"} x{" "}
                           {item.quantity}
                         </p>
                         <p className="mt-1 text-sm text-muted">
@@ -311,7 +327,7 @@ export function OrderDetailPage() {
                             onClick={() => setReviewItem(item)}
                           >
                             <MessageSquarePlus size={16} aria-hidden="true" />
-                            Review
+                            Đánh giá
                           </Button>
                         ) : null}
                       </div>
@@ -323,7 +339,7 @@ export function OrderDetailPage() {
                   <div className="mt-5 space-y-3">
                     <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
                       <PackageCheck size={16} aria-hidden="true" />
-                      Shipments
+                      Vận đơn
                     </h3>
                     {shopOrder.shipments.map((shipment) => (
                       <div
@@ -336,7 +352,7 @@ export function OrderDetailPage() {
                               {shipment.shipmentCode}
                             </p>
                             <p className="mt-1 text-muted">
-                              {shipment.shippingCompany.companyName} -{' '}
+                              {shipment.shippingCompany.companyName} -{" "}
                               {shipment.shippingService.serviceName}
                             </p>
                           </div>
@@ -348,7 +364,7 @@ export function OrderDetailPage() {
                               <div key={history.id} className="text-muted">
                                 <span className="font-medium text-ink">
                                   {formatStatus(history.toStatus)}
-                                </span>{' '}
+                                </span>{" "}
                                 {formatDateTime(history.createdAt)}
                               </div>
                             ))}
@@ -364,24 +380,28 @@ export function OrderDetailPage() {
         </div>
 
         <aside className="h-fit rounded-lg border border-border bg-white p-5 shadow-panel">
-          <h2 className="text-lg font-semibold text-ink">Summary</h2>
+          <h2 className="text-lg font-semibold text-ink">Tóm tắt</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Subtotal</dt>
-              <dd className="font-medium">{formatMoney(order.subtotalAmount)}</dd>
+              <dt className="text-muted">Tạm tính</dt>
+              <dd className="font-medium">
+                {formatMoney(order.subtotalAmount)}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Discount</dt>
-              <dd className="font-medium">{formatMoney(order.discountAmount)}</dd>
+              <dt className="text-muted">Giảm giá</dt>
+              <dd className="font-medium">
+                {formatMoney(order.discountAmount)}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Shipping</dt>
+              <dt className="text-muted">Phí vận chuyển</dt>
               <dd className="font-medium">
                 {formatMoney(order.shippingFeeAmount)}
               </dd>
             </div>
             <div className="flex justify-between gap-4 border-t border-border pt-3">
-              <dt className="font-semibold text-ink">Total</dt>
+              <dt className="font-semibold text-ink">Tổng cộng</dt>
               <dd className="text-lg font-semibold text-primary-700">
                 {formatMoney(order.totalAmount)}
               </dd>
@@ -392,8 +412,9 @@ export function OrderDetailPage() {
             <p className="font-medium text-ink">{order.receiverName}</p>
             <p className="mt-1 text-muted">{order.receiverPhone}</p>
             <p className="mt-2 text-muted">
-              {order.shippingAddress.streetAddress}, {order.shippingAddress.ward},{' '}
-              {order.shippingAddress.district}, {order.shippingAddress.province}
+              {order.shippingAddress.streetAddress},{" "}
+              {order.shippingAddress.ward}, {order.shippingAddress.district},{" "}
+              {order.shippingAddress.province}
             </p>
           </div>
 
@@ -410,21 +431,23 @@ export function OrderDetailPage() {
                   <Badge>{formatStatus(payment.paymentStatus)}</Badge>
                 </div>
                 <p className="mt-1 text-muted">{payment.paymentCode}</p>
-                <p className="mt-1 font-semibold">{formatMoney(payment.amount)}</p>
+                <p className="mt-1 font-semibold">
+                  {formatMoney(payment.amount)}
+                </p>
               </div>
             ))}
           </div>
 
           <ButtonLink to="/orders" variant="secondary">
             <CheckCircle2 size={16} aria-hidden="true" />
-            Back to orders
+            Quay lại đơn hàng
           </ButtonLink>
         </aside>
       </section>
 
       <Modal
         open={isCancelOpen}
-        title="Cancel order"
+        title="Hủy đơn hàng"
         onClose={() => setIsCancelOpen(false)}
         footer={
           <>
@@ -433,7 +456,7 @@ export function OrderDetailPage() {
               variant="secondary"
               onClick={() => setIsCancelOpen(false)}
             >
-              Keep order
+              Giữ đơn hàng
             </Button>
             <Button
               type="button"
@@ -441,7 +464,7 @@ export function OrderDetailPage() {
               disabled={!cancelReason.trim() || cancelMutation.isPending}
               onClick={() => cancelMutation.mutate()}
             >
-              {cancelMutation.isPending ? 'Cancelling...' : 'Cancel order'}
+              {cancelMutation.isPending ? "Đang hủy..." : "Hủy đơn hàng"}
             </Button>
           </>
         }
@@ -452,7 +475,7 @@ export function OrderDetailPage() {
           </Alert>
         ) : null}
         <Textarea
-          label="Reason"
+          label="Lý do"
           rows={4}
           maxLength={1000}
           value={cancelReason}

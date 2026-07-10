@@ -215,3 +215,16 @@ export type UploadedFile = {
   size: number;
   url: string;
 };
+
+export type StoredUploadFile = {
+  fileName: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+};
+
+export type UploadListResponse = {
+  items: StoredUploadFile[];
+  meta?: ApiMeta;
+};

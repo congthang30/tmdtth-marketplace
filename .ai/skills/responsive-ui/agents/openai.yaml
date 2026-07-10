@@ -1,0 +1,4 @@
+interface:
+  display_name: "Responsive UI"
+  short_description: "Design interfaces across viewport sizes"
+  default_prompt: "Use $responsive-ui to implement or audit a responsive interface in this project."

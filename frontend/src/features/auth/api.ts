@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from '@/services/api';
-import type { AuthUser } from '@/types/domain';
+import type { AppRole, AuthUser } from '@/types/domain';
 
 export type LoginRequest = {
   email: string;
@@ -18,6 +18,18 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
+export type RoleCheckResponse = {
+  role: AppRole;
+  allowed: true;
+  user: AuthUser;
+};
+
+const roleCheckPathByRole: Record<AppRole, string> = {
+  Customer: '/auth/role-check/customer',
+  Seller: '/auth/role-check/seller',
+  Admin: '/auth/role-check/admin',
+};
+
 export const authApi = {
   login(body: LoginRequest) {
     return apiPost<AuthResponse, LoginRequest>('/auth/login', body);
@@ -30,5 +42,8 @@ export const authApi = {
   },
   me() {
     return apiGet<AuthUser>('/auth/me');
+  },
+  roleCheck(role: AppRole) {
+    return apiGet<RoleCheckResponse>(roleCheckPathByRole[role]);
   },
 };

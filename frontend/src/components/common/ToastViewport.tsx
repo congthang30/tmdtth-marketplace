@@ -1,11 +1,11 @@
-import { CheckCircle2, Info, TriangleAlert, X } from 'lucide-react';
-import { useToastStore } from '@/stores/toast.store';
-import type { ToastTone } from '@/stores/toast.store';
+import { CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
+import { useToastStore } from "@/stores/toast.store";
+import type { ToastTone } from "@/stores/toast.store";
 
 const toneClass: Record<ToastTone, string> = {
-  success: 'border-success/30 bg-green-50 text-success',
-  danger: 'border-danger/30 bg-red-50 text-danger',
-  info: 'border-primary-100 bg-primary-50 text-primary-700',
+  success: "border-success/30 bg-green-50 text-success",
+  danger: "border-danger/30 bg-red-50 text-danger",
+  info: "border-primary-100 bg-primary-50 text-primary-700",
 };
 
 const toneIcon = {
@@ -31,9 +31,9 @@ export function ToastViewport() {
           <div
             key={message.id}
             className={[
-              'flex gap-3 rounded-lg border p-4 shadow-lg',
+              "flex gap-3 rounded-lg border p-4 shadow-lg",
               toneClass[message.tone],
-            ].join(' ')}
+            ].join(" ")}
             role="status"
           >
             <Icon className="mt-0.5 shrink-0" size={18} aria-hidden="true" />
@@ -46,7 +46,7 @@ export function ToastViewport() {
             <button
               type="button"
               className="grid h-7 w-7 shrink-0 place-items-center rounded-md hover:bg-white/60"
-              aria-label="Dismiss notification"
+              aria-label="Đóng thông báo"
               onClick={() => dismissToast(message.id)}
             >
               <X size={15} aria-hidden="true" />

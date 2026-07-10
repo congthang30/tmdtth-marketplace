@@ -68,7 +68,7 @@ npm run lint
 
 1. Admin creates categories and shipping setup, then approves a pending shop.
 2. Seller registers a shop, creates products, variants, images, and inventory.
-3. Customer browses catalog, adds items to cart, checks out, pays fake online if applicable, and reviews completed items.
+3. Customer browses catalog, adds items to cart, gets shipping quotes, checks out, pays fake online if applicable, and reviews completed items.
 4. Seller confirms, prepares, creates shipment, and updates tracking to delivered.
 
 Seeded demo users use password `Demo@123456`:

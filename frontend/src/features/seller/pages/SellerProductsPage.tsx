@@ -1,14 +1,21 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit, Images, Layers, PackagePlus, Trash2, Warehouse } from 'lucide-react';
-import { useState } from 'react';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ButtonLink } from '@/components/ui/ButtonLink';
-import { Modal } from '@/components/ui/Modal';
-import { Pagination } from '@/components/ui/Pagination';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Edit,
+  Images,
+  Layers,
+  PackagePlus,
+  Trash2,
+  Warehouse,
+} from "lucide-react";
+import { useState } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Modal } from "@/components/ui/Modal";
+import { Pagination } from "@/components/ui/Pagination";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -16,12 +23,12 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-} from '@/components/ui/Table';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatMoney, formatStatus } from '@/utils/format';
-import { sellerProductsApi } from '../api';
-import type { SellerProduct } from '../types';
+} from "@/components/ui/Table";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatMoney, formatStatus } from "@/utils/format";
+import { sellerProductsApi } from "../api";
+import type { SellerProduct } from "../types";
 
 export function SellerProductsPage() {
   const [page, setPage] = useState(1);
@@ -29,15 +36,15 @@ export function SellerProductsPage() {
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
   const productsQuery = useQuery({
-    queryKey: ['seller', 'products', page],
+    queryKey: ["seller", "products", page],
     queryFn: () => sellerProductsApi.list(page, 10),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (productId: string) => sellerProductsApi.delete(productId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['seller', 'products'] });
-      pushToast({ tone: 'success', title: 'Product deleted' });
+      await queryClient.invalidateQueries({ queryKey: ["seller", "products"] });
+      pushToast({ tone: "success", title: "Đã xóa sản phẩm" });
       setDeleteTarget(null);
     },
   });
@@ -51,16 +58,16 @@ export function SellerProductsPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Seller products
+              Sản phẩm của gian hàng
             </p>
-            <h1 className="mt-2 text-2xl font-semibold">Products</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Sản phẩm</h1>
             <p className="mt-2 text-sm text-muted">
-              Create products and manage variants, images and inventory.
+              Tạo sản phẩm và quản lý phân loại, hình ảnh, tồn kho.
             </p>
           </div>
           <ButtonLink to="/seller/products/create">
             <PackagePlus size={16} aria-hidden="true" />
-            New product
+            Thêm sản phẩm
           </ButtonLink>
         </div>
       </section>
@@ -68,8 +75,8 @@ export function SellerProductsPage() {
       {productsQuery.isLoading ? <Skeleton className="h-96 w-full" /> : null}
       {productsQuery.isError ? (
         <ErrorState
-          title="Cannot load products"
-          message="The seller products API is unavailable."
+          title="Không thể tải sản phẩm"
+          message="Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại."
         />
       ) : null}
 
@@ -79,11 +86,13 @@ export function SellerProductsPage() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableHeaderCell>Product</TableHeaderCell>
-                  <TableHeaderCell>Status</TableHeaderCell>
-                  <TableHeaderCell>Price</TableHeaderCell>
-                  <TableHeaderCell>Stock</TableHeaderCell>
-                  <TableHeaderCell className="text-right">Actions</TableHeaderCell>
+                  <TableHeaderCell>Sản phẩm</TableHeaderCell>
+                  <TableHeaderCell>Trạng thái</TableHeaderCell>
+                  <TableHeaderCell>Giá</TableHeaderCell>
+                  <TableHeaderCell>Tồn kho</TableHeaderCell>
+                  <TableHeaderCell className="text-right">
+                    Thao tác
+                  </TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -91,12 +100,14 @@ export function SellerProductsPage() {
                   <TableRow key={product.id}>
                     <TableCell>
                       <p className="font-medium">{product.productName}</p>
-                      <p className="text-xs text-muted">{product.category.categoryName}</p>
+                      <p className="text-xs text-muted">
+                        {product.category.categoryName}
+                      </p>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
                         <Badge>{formatStatus(product.productStatus)}</Badge>
-                        {product.isViolation ? <Badge>Violation</Badge> : null}
+                        {product.isViolation ? <Badge>Vi phạm</Badge> : null}
                       </div>
                     </TableCell>
                     <TableCell>{formatMoney(product.basePrice)}</TableCell>
@@ -108,28 +119,28 @@ export function SellerProductsPage() {
                           variant="secondary"
                         >
                           <Edit size={15} aria-hidden="true" />
-                          Edit
+                          Chỉnh sửa
                         </ButtonLink>
                         <ButtonLink
                           to={`/seller/products/${product.id}/variants`}
                           variant="secondary"
                         >
                           <Layers size={15} aria-hidden="true" />
-                          Variants
+                          Phân loại
                         </ButtonLink>
                         <ButtonLink
                           to={`/seller/products/${product.id}/images`}
                           variant="secondary"
                         >
                           <Images size={15} aria-hidden="true" />
-                          Images
+                          Hình ảnh
                         </ButtonLink>
                         <ButtonLink
                           to={`/seller/products/${product.id}/inventory`}
                           variant="secondary"
                         >
                           <Warehouse size={15} aria-hidden="true" />
-                          Inventory
+                          Tồn kho
                         </ButtonLink>
                         <Button
                           type="button"
@@ -137,7 +148,7 @@ export function SellerProductsPage() {
                           onClick={() => setDeleteTarget(product)}
                         >
                           <Trash2 size={15} aria-hidden="true" />
-                          Delete
+                          Xóa
                         </Button>
                       </div>
                     </TableCell>
@@ -153,12 +164,12 @@ export function SellerProductsPage() {
           </div>
         ) : (
           <EmptyState
-            title="No seller products"
-            description="Create your first product after your shop is approved."
+            title="Chưa có sản phẩm"
+            description="Hãy tạo sản phẩm đầu tiên sau khi gian hàng được phê duyệt."
             action={
               <ButtonLink to="/seller/products/create">
                 <PackagePlus size={16} aria-hidden="true" />
-                New product
+                Thêm sản phẩm
               </ButtonLink>
             }
           />
@@ -167,7 +178,7 @@ export function SellerProductsPage() {
 
       <Modal
         open={Boolean(deleteTarget)}
-        title="Delete product"
+        title="Xóa sản phẩm"
         onClose={() => setDeleteTarget(null)}
         footer={
           <>
@@ -176,15 +187,17 @@ export function SellerProductsPage() {
               variant="secondary"
               onClick={() => setDeleteTarget(null)}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="button"
               variant="danger"
               disabled={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? "Đang xóa..." : "Xóa"}
             </Button>
           </>
         }
@@ -192,7 +205,7 @@ export function SellerProductsPage() {
         <p className="text-sm text-muted">
           {deleteMutation.isError
             ? getErrorMessage(deleteMutation.error)
-            : `Delete ${deleteTarget?.productName ?? 'this product'}?`}
+            : `Bạn có muốn xóa sản phẩm ${deleteTarget?.productName ?? "này"} không?`}
         </p>
       </Modal>
     </div>

@@ -10,7 +10,10 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { createPaginatedResult } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
-import { CheckoutPreviewDto } from './dto/checkout-preview.dto';
+import {
+  CheckoutPreviewDto,
+  CheckoutShippingSelectionDto,
+} from './dto/checkout-preview.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { ConfirmShopOrderDto } from './dto/confirm-shop-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -22,6 +25,7 @@ import {
   CheckoutPreviewItem,
   CheckoutPreviewResponse,
   CheckoutPreviewShopGroup,
+  CheckoutShippingSelectionSummary,
   CheckoutShopSummary,
   OrderItemResponse,
   OrderListItemResponse,
@@ -37,6 +41,7 @@ const ACTIVE_CART_STATUS = 'Active';
 const PUBLIC_PRODUCT_STATUS = 'Published';
 const PUBLIC_VARIANT_STATUS = 'Active';
 const PUBLIC_SHOP_STATUS = 'Approved';
+const SHIPPING_COMPANY_STATUS_APPROVED = 'Approved';
 const ORDER_STATUS_CREATED = 'Created';
 const ORDER_STATUS_CONFIRMED = 'Confirmed';
 const ORDER_STATUS_PREPARED = 'Prepared';
@@ -209,6 +214,7 @@ type ShopGroupAccumulator = {
   subtotalAmount: Prisma.Decimal;
   discountAmount: Prisma.Decimal;
   shippingFeeAmount: Prisma.Decimal;
+  shippingSelection: ResolvedCheckoutShippingSelection | null;
 };
 
 type CheckoutClient = PrismaService | Prisma.TransactionClient;
@@ -246,6 +252,37 @@ type CheckoutContext = {
   shippingFeeAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
 };
+
+type ResolvedCheckoutShippingSelection = {
+  shippingQuoteId: bigint;
+  shippingCompanyId: bigint;
+  shippingServiceId: bigint;
+  summary: CheckoutShippingSelectionSummary;
+};
+
+const checkoutShippingQuoteInclude = {
+  shippingCompany: {
+    select: {
+      id: true,
+      companyName: true,
+      slug: true,
+      companyStatus: true,
+      isDeleted: true,
+    },
+  },
+  shippingService: {
+    select: {
+      id: true,
+      serviceCode: true,
+      serviceName: true,
+      isActive: true,
+    },
+  },
+} satisfies Prisma.ShippingQuoteInclude;
+
+type CheckoutShippingQuote = Prisma.ShippingQuoteGetPayload<{
+  include: typeof checkoutShippingQuoteInclude;
+}>;
 
 @Injectable()
 export class OrdersService {
@@ -580,6 +617,15 @@ export class OrdersService {
             orderId: order.id,
             shopId: BigInt(group.shop.id),
             shopOrderCode: this.createBusinessCode('SORD', now),
+            shippingCompanyId: group.shippingSelection
+              ? BigInt(group.shippingSelection.shippingCompany.id)
+              : null,
+            shippingServiceId: group.shippingSelection
+              ? BigInt(group.shippingSelection.shippingService.id)
+              : null,
+            shippingQuoteId: group.shippingSelection
+              ? BigInt(group.shippingSelection.shippingQuoteId)
+              : null,
             orderStatus: SHOP_ORDER_STATUS_WAITING_FOR_SELLER,
             subtotalAmount: this.toDecimal(group.subtotalAmount),
             discountAmount: this.toDecimal(group.discountAmount),
@@ -970,7 +1016,15 @@ export class OrdersService {
     }
 
     const items = selectedItems.map((item) => this.toPreviewItem(item));
-    const shopGroups = this.buildShopGroups(items);
+    const baseShopGroups = this.buildShopGroups(items);
+    const shippingSelections = await this.resolveCheckoutShippingSelections(
+      client,
+      dto.shippingSelections,
+      baseShopGroups,
+      address,
+      new Date(),
+    );
+    const shopGroups = this.buildShopGroups(items, shippingSelections);
     const zero = new Prisma.Decimal(0);
     const subtotalAmount = shopGroups.reduce(
       (total, group) => total.add(this.toDecimal(group.subtotalAmount)),
@@ -1165,6 +1219,7 @@ export class OrdersService {
         idString: item.productVariant.id.toString(),
         sku: item.productVariant.sku,
         variantName: item.productVariant.variantName,
+        weightGram: item.productVariant.weightGram,
       },
       shop: this.toShopSummary(item),
     };
@@ -1207,6 +1262,7 @@ export class OrdersService {
 
   private buildShopGroups(
     items: CheckoutPreviewItem[],
+    shippingSelections = new Map<string, ResolvedCheckoutShippingSelection>(),
   ): CheckoutPreviewShopGroup[] {
     const groupsByShopId = new Map<string, ShopGroupAccumulator>();
 
@@ -1226,6 +1282,15 @@ export class OrdersService {
     }
 
     return [...groupsByShopId.values()].map((group) => {
+      const shippingSelection = shippingSelections.get(group.shop.id) ?? null;
+
+      if (shippingSelection) {
+        group.shippingFeeAmount = this.toDecimal(
+          shippingSelection.summary.quotedFee,
+        );
+        group.shippingSelection = shippingSelection;
+      }
+
       const totalAmount = group.subtotalAmount
         .sub(group.discountAmount)
         .add(group.shippingFeeAmount);
@@ -1237,6 +1302,7 @@ export class OrdersService {
         discountAmount: this.formatMoney(group.discountAmount),
         shippingFeeAmount: this.formatMoney(group.shippingFeeAmount),
         totalAmount: this.formatMoney(totalAmount),
+        shippingSelection: group.shippingSelection?.summary ?? null,
       };
     });
   }
@@ -1250,6 +1316,183 @@ export class OrdersService {
       subtotalAmount: new Prisma.Decimal(0),
       discountAmount: new Prisma.Decimal(0),
       shippingFeeAmount: new Prisma.Decimal(0),
+      shippingSelection: null,
+    };
+  }
+
+  private async resolveCheckoutShippingSelections(
+    client: CheckoutClient,
+    selections: CheckoutShippingSelectionDto[] | undefined,
+    shopGroups: CheckoutPreviewShopGroup[],
+    address: CheckoutAddressEntity,
+    now: Date,
+  ): Promise<Map<string, ResolvedCheckoutShippingSelection>> {
+    if (!selections?.length) {
+      return new Map();
+    }
+
+    const requiredShopIds = new Set(shopGroups.map((group) => group.shop.id));
+    const selectionsByShopId = new Map<
+      string,
+      ResolvedCheckoutShippingSelection
+    >();
+
+    for (const selection of selections) {
+      const shopId = this.parseId(
+        selection.shopId,
+        'shippingSelections.shopId',
+      );
+      const shopIdString = shopId.toString();
+
+      if (!requiredShopIds.has(shopIdString)) {
+        throw new BadRequestException({
+          code: 'CHECKOUT_SHIPPING_SELECTION_INVALID',
+          message: 'Shipping selection does not match selected cart shops',
+          details: [
+            { field: 'shippingSelections.shopId', shopId: shopIdString },
+          ],
+        });
+      }
+
+      if (selectionsByShopId.has(shopIdString)) {
+        throw new BadRequestException({
+          code: 'CHECKOUT_SHIPPING_SELECTION_DUPLICATED',
+          message: 'Each shop can only have one shipping selection',
+          details: [
+            { field: 'shippingSelections.shopId', shopId: shopIdString },
+          ],
+        });
+      }
+
+      const shippingServiceId = this.parseId(
+        selection.shippingServiceId,
+        'shippingSelections.shippingServiceId',
+      );
+      const shippingQuoteId = this.parseId(
+        selection.shippingQuoteId,
+        'shippingSelections.shippingQuoteId',
+      );
+      const quote = await client.shippingQuote.findUnique({
+        where: { id: shippingQuoteId },
+        include: checkoutShippingQuoteInclude,
+      });
+
+      if (!quote) {
+        throw new BadRequestException({
+          code: 'SHIPPING_QUOTE_NOT_FOUND',
+          message: 'Shipping quote not found',
+          details: [{ field: 'shippingSelections.shippingQuoteId' }],
+        });
+      }
+
+      this.ensureCheckoutShippingQuoteMatchesSelection(
+        quote,
+        shopId,
+        shippingServiceId,
+        address,
+        now,
+      );
+
+      selectionsByShopId.set(shopIdString, {
+        shippingQuoteId: quote.id,
+        shippingCompanyId: quote.shippingCompanyId,
+        shippingServiceId: quote.shippingServiceId,
+        summary: this.toCheckoutShippingSelectionSummary(quote),
+      });
+    }
+
+    const missingShopIds = [...requiredShopIds].filter(
+      (shopId) => !selectionsByShopId.has(shopId),
+    );
+
+    if (missingShopIds.length > 0) {
+      throw new BadRequestException({
+        code: 'CHECKOUT_SHIPPING_SELECTION_REQUIRED',
+        message: 'Shipping selection is required for every selected shop',
+        details: missingShopIds.map((shopId) => ({
+          field: 'shippingSelections.shopId',
+          shopId,
+        })),
+      });
+    }
+
+    return selectionsByShopId;
+  }
+
+  private ensureCheckoutShippingQuoteMatchesSelection(
+    quote: CheckoutShippingQuote,
+    shopId: bigint,
+    shippingServiceId: bigint,
+    address: CheckoutAddressEntity,
+    now: Date,
+  ): void {
+    if (
+      quote.shopId !== shopId ||
+      quote.shippingServiceId !== shippingServiceId
+    ) {
+      throw new BadRequestException({
+        code: 'SHIPPING_QUOTE_MISMATCH',
+        message: 'Shipping quote does not match checkout selection',
+        details: [{ field: 'shippingSelections.shippingQuoteId' }],
+      });
+    }
+
+    if (
+      quote.shippingCompany.companyStatus !==
+        SHIPPING_COMPANY_STATUS_APPROVED ||
+      quote.shippingCompany.isDeleted ||
+      !quote.shippingService.isActive
+    ) {
+      throw new BadRequestException({
+        code: 'SHIPPING_SERVICE_UNAVAILABLE',
+        message: 'Shipping service is no longer available',
+        details: [{ field: 'shippingSelections.shippingServiceId' }],
+      });
+    }
+
+    if (
+      quote.destinationProvince !== address.province ||
+      (quote.destinationDistrict &&
+        quote.destinationDistrict !== address.district)
+    ) {
+      throw new BadRequestException({
+        code: 'SHIPPING_QUOTE_ADDRESS_MISMATCH',
+        message: 'Shipping quote does not match the selected address',
+        details: [{ field: 'addressId' }],
+      });
+    }
+
+    if (quote.expiresAt <= now) {
+      throw new BadRequestException({
+        code: 'SHIPPING_QUOTE_EXPIRED',
+        message: 'Shipping quote has expired',
+        details: [{ field: 'shippingSelections.shippingQuoteId' }],
+      });
+    }
+  }
+
+  private toCheckoutShippingSelectionSummary(
+    quote: CheckoutShippingQuote,
+  ): CheckoutShippingSelectionSummary {
+    return {
+      shippingQuoteId: quote.id.toString(),
+      shippingQuoteIdString: quote.id.toString(),
+      shippingCompany: {
+        id: quote.shippingCompany.id.toString(),
+        idString: quote.shippingCompany.id.toString(),
+        companyName: quote.shippingCompany.companyName,
+        slug: quote.shippingCompany.slug,
+      },
+      shippingService: {
+        id: quote.shippingService.id.toString(),
+        idString: quote.shippingService.id.toString(),
+        serviceCode: quote.shippingService.serviceCode,
+        serviceName: quote.shippingService.serviceName,
+      },
+      quotedFee: this.formatMoney(this.toDecimal(quote.quotedFee)),
+      estimatedMinDays: quote.estimatedMinDays,
+      estimatedMaxDays: quote.estimatedMaxDays,
+      expiresAt: quote.expiresAt,
     };
   }
 

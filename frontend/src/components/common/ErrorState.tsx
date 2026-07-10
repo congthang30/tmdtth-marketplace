@@ -1,5 +1,5 @@
-import { AlertTriangle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { AlertTriangle } from "lucide-react";
+import type { ReactNode } from "react";
 
 type ErrorStateProps = {
   title?: string;
@@ -8,7 +8,7 @@ type ErrorStateProps = {
 };
 
 export function ErrorState({
-  title = 'Something went wrong',
+  title = "Đã xảy ra lỗi",
   message,
   action,
 }: ErrorStateProps) {

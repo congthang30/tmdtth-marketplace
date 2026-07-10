@@ -1,17 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { ProductVisual } from '@/features/catalog/components/ProductVisual';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatMoney } from '@/utils/format';
-import { cartApi, cartQueryKey } from '../api';
-import type { CartItemResponse } from '../types';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { ProductVisual } from "@/features/catalog/components/ProductVisual";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatMoney } from "@/utils/format";
+import { cartApi, cartQueryKey } from "../api";
+import type { CartItemResponse } from "../types";
 
 type CartItemCardProps = {
   item: CartItemResponse;
@@ -38,7 +38,7 @@ function CartItemCard({
           disabled={isMutating}
           onChange={(event) => onSelectChange(item, event.target.checked)}
         />
-        Select
+        Chọn
       </label>
       <Link
         to={`/products/${item.product.slug}`}
@@ -46,7 +46,9 @@ function CartItemCard({
       >
         <ProductVisual
           imageUrl={item.product.thumbnailImage?.imageUrl}
-          altText={item.product.thumbnailImage?.altText ?? item.product.productName}
+          altText={
+            item.product.thumbnailImage?.altText ?? item.product.productName
+          }
           className="aspect-square"
         />
       </Link>
@@ -79,7 +81,9 @@ function CartItemCard({
           <button
             type="button"
             className="grid h-9 w-9 place-items-center hover:bg-surface disabled:opacity-40"
-            disabled={item.quantity >= item.variant.quantityAvailable || isMutating}
+            disabled={
+              item.quantity >= item.variant.quantityAvailable || isMutating
+            }
             onClick={() => onQuantityChange(item, item.quantity + 1)}
           >
             <Plus size={14} aria-hidden="true" />
@@ -131,7 +135,7 @@ export function CartPage() {
     mutationFn: cartApi.deleteItem,
     onSuccess: async () => {
       await invalidateCart();
-      pushToast({ tone: 'success', title: 'Cart item removed' });
+      pushToast({ tone: "success", title: "Đã xóa sản phẩm khỏi giỏ hàng" });
     },
   });
 
@@ -150,20 +154,20 @@ export function CartPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Cart
+              Giỏ hàng
             </p>
-            <h1 className="mt-2 text-2xl font-semibold">Shopping cart</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Giỏ hàng của Bạn</h1>
             <p className="mt-2 text-sm text-muted">
-              Review quantities and selected items before checkout.
+              Kiểm tra số lượng và các sản phẩm đã chọn trước khi thanh toán.
             </p>
           </div>
           <Button
             type="button"
             disabled={!cart || cart.selectedItemCount === 0}
-            onClick={() => navigate('/checkout')}
+            onClick={() => navigate("/checkout")}
           >
             <ShoppingBag size={16} aria-hidden="true" />
-            Checkout
+            Thanh toán
           </Button>
         </div>
       </section>
@@ -182,8 +186,8 @@ export function CartPage() {
 
       {cartQuery.isError ? (
         <ErrorState
-          title="Cannot load cart"
-          message="Your session may have expired or the cart API is unavailable."
+          title="Không thể tải giỏ hàng"
+          message="Phiên đăng nhập có thể đã hết hạn hoặc hệ thống đang tạm thời gián đoạn."
         />
       ) : null}
 
@@ -207,22 +211,22 @@ export function CartPage() {
               ))}
             </div>
             <aside className="h-fit rounded-lg border border-border bg-white p-5 shadow-panel">
-              <h2 className="text-lg font-semibold text-ink">Summary</h2>
+              <h2 className="text-lg font-semibold text-ink">Tóm tắt</h2>
               <dl className="mt-4 space-y-3 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Items</dt>
+                  <dt className="text-muted">Sản phẩm</dt>
                   <dd className="font-medium">{cart.itemCount}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Selected</dt>
+                  <dt className="text-muted">Đã chọn</dt>
                   <dd className="font-medium">{cart.selectedItemCount}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Subtotal</dt>
+                  <dt className="text-muted">Tạm tính</dt>
                   <dd className="font-medium">{formatMoney(cart.subtotal)}</dd>
                 </div>
                 <div className="flex justify-between gap-4 border-t border-border pt-3">
-                  <dt className="font-medium text-ink">Selected subtotal</dt>
+                  <dt className="font-medium text-ink">Tạm tính mục đã chọn</dt>
                   <dd className="font-semibold text-primary-700">
                     {formatMoney(cart.selectedSubtotal)}
                   </dd>
@@ -232,21 +236,21 @@ export function CartPage() {
                 type="button"
                 className="mt-5 w-full"
                 disabled={cart.selectedItemCount === 0}
-                onClick={() => navigate('/checkout')}
+                onClick={() => navigate("/checkout")}
               >
                 <ShoppingBag size={16} aria-hidden="true" />
-                Checkout
+                Thanh toán
               </Button>
             </aside>
           </div>
         ) : (
           <EmptyState
-            title="Your cart is empty"
-            description="Browse the catalog and add a stocked variant to start checkout."
+            title="Giỏ hàng đang trống"
+            description="Hãy chọn sản phẩm còn hàng để bắt đầu mua sắm."
             action={
-              <Button type="button" onClick={() => navigate('/products')}>
+              <Button type="button" onClick={() => navigate("/products")}>
                 <ShoppingBag size={16} aria-hidden="true" />
-                Browse products
+                Xem sản phẩm
               </Button>
             }
           />

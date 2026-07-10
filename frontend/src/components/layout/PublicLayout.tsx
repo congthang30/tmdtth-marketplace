@@ -1,16 +1,25 @@
-import { ShoppingCart, Store, UserRound } from 'lucide-react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
-import { ButtonLink } from '@/components/ui/ButtonLink';
-import { LogoutButton } from '@/features/auth/components/LogoutButton';
-import { useAuthStore } from '@/stores/auth.store';
+import { useQuery } from "@tanstack/react-query";
+import { Activity, ShoppingCart, Store, UserRound } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { Badge } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { LogoutButton } from "@/features/auth/components/LogoutButton";
+import { systemApi } from "@/services/system";
+import { useAuthStore } from "@/stores/auth.store";
 
 const publicLinks = [
-  { to: '/products', label: 'Products' },
-  { to: '/dashboard', label: 'Workspace' },
+  { to: "/products", label: "Sản phẩm" },
+  { to: "/dashboard", label: "Khu vực làm việc" },
 ];
 
 export function PublicLayout() {
   const user = useAuthStore((state) => state.user);
+  const healthQuery = useQuery({
+    queryKey: ["system", "health"],
+    queryFn: systemApi.health,
+    refetchInterval: 60_000,
+    retry: false,
+  });
 
   return (
     <div className="min-h-screen bg-surface text-ink">
@@ -29,11 +38,11 @@ export function PublicLayout() {
                 to={link.to}
                 className={({ isActive }) =>
                   [
-                    'rounded-md px-3 py-2 text-sm font-medium',
+                    "rounded-md px-3 py-2 text-sm font-medium",
                     isActive
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-muted hover:bg-surface hover:text-ink',
-                  ].join(' ')
+                      ? "bg-primary-50 text-primary-700"
+                      : "text-muted hover:bg-surface hover:text-ink",
+                  ].join(" ")
                 }
               >
                 {link.label}
@@ -41,22 +50,26 @@ export function PublicLayout() {
             ))}
           </nav>
           <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={healthQuery.isError ? "danger" : "success"}>
+              <Activity size={14} aria-hidden="true" />
+              {healthQuery.isError ? "API ngoại tuyến" : "API trực tuyến"}
+            </Badge>
             <ButtonLink to="/cart" variant="secondary">
               <ShoppingCart size={16} aria-hidden="true" />
-              Cart
+              Giỏ hàng
             </ButtonLink>
             {user ? (
               <>
                 <ButtonLink to="/profile" variant="secondary">
                   <UserRound size={16} aria-hidden="true" />
-                  Profile
+                  Hồ sơ
                 </ButtonLink>
                 <LogoutButton />
               </>
             ) : (
               <ButtonLink to="/login">
                 <UserRound size={16} aria-hidden="true" />
-                Login
+                Đăng nhập
               </ButtonLink>
             )}
           </div>

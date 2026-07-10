@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ecommerce UI"
+  short_description: "Design ecommerce components and purchase flows"
+  default_prompt: "Use $ecommerce-ui to design or review an ecommerce interface for this project."

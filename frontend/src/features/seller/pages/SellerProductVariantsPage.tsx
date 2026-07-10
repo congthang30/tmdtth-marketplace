@@ -1,18 +1,18 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit, Layers, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { useParams } from 'react-router-dom';
-import { z } from 'zod';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { SelectInput } from '@/components/ui/SelectInput';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit, Layers, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { useParams } from "react-router-dom";
+import { z } from "zod";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { SelectInput } from "@/components/ui/SelectInput";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -20,42 +20,61 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-} from '@/components/ui/Table';
-import { TextInput } from '@/components/ui/TextInput';
-import { Textarea } from '@/components/ui/Textarea';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatMoney, formatStatus } from '@/utils/format';
-import { sellerProductsApi } from '../api';
-import type { SellerVariant, VariantRequest } from '../types';
+} from "@/components/ui/Table";
+import { TextInput } from "@/components/ui/TextInput";
+import { Textarea } from "@/components/ui/Textarea";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatMoney, formatStatus } from "@/utils/format";
+import { sellerProductsApi } from "../api";
+import type { SellerVariant, VariantRequest } from "../types";
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
 const integerPattern = /^\d*$/;
 
 const variantSchema = z.object({
-  sku: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/),
-  variantName: z.string().trim().min(1).max(255),
-  variantOptionJson: z.string().trim().max(4000).optional(),
-  price: z.string().trim().regex(moneyPattern),
-  compareAtPrice: z.string().trim().regex(moneyPattern).or(z.literal('')).optional(),
-  weightGram: z.string().regex(integerPattern).optional(),
-  variantStatus: z.enum(['Active', 'Inactive']),
+  sku: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "SKU không hợp lệ"),
+  variantName: z
+    .string()
+    .trim()
+    .min(1, "Vui lòng nhập tên phân loại")
+    .max(255, "Tên phân loại quá dài"),
+  variantOptionJson: z
+    .string()
+    .trim()
+    .max(4000, "Dữ liệu tùy chọn quá dài")
+    .optional(),
+  price: z.string().trim().regex(moneyPattern, "Giá bán không hợp lệ"),
+  compareAtPrice: z
+    .string()
+    .trim()
+    .regex(moneyPattern, "Giá so sánh không hợp lệ")
+    .or(z.literal(""))
+    .optional(),
+  weightGram: z
+    .string()
+    .regex(integerPattern, "Khối lượng phải là số nguyên không âm")
+    .optional(),
+  variantStatus: z.enum(["Active", "Inactive"]),
 });
 
 type VariantFormValues = z.infer<typeof variantSchema>;
 
 const defaultValues: VariantFormValues = {
-  sku: '',
-  variantName: '',
-  variantOptionJson: '',
-  price: '',
-  compareAtPrice: '',
-  weightGram: '',
-  variantStatus: 'Active',
+  sku: "",
+  variantName: "",
+  variantOptionJson: "",
+  price: "",
+  compareAtPrice: "",
+  weightGram: "",
+  variantStatus: "Active",
 };
 
 const optionalString = (value: string | undefined) => {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
@@ -74,16 +93,18 @@ const toRequest = (values: VariantFormValues): VariantRequest => ({
 const toFormValues = (variant: SellerVariant): VariantFormValues => ({
   sku: variant.sku,
   variantName: variant.variantName,
-  variantOptionJson: variant.variantOptionJson ?? '',
+  variantOptionJson: variant.variantOptionJson ?? "",
   price: variant.price,
-  compareAtPrice: variant.compareAtPrice ?? '',
-  weightGram: String(variant.weightGram ?? ''),
-  variantStatus: variant.variantStatus === 'Inactive' ? 'Inactive' : 'Active',
+  compareAtPrice: variant.compareAtPrice ?? "",
+  weightGram: String(variant.weightGram ?? ""),
+  variantStatus: variant.variantStatus === "Inactive" ? "Inactive" : "Active",
 });
 
 export function SellerProductVariantsPage() {
   const { id } = useParams<{ id: string }>();
-  const [editingVariant, setEditingVariant] = useState<SellerVariant | null>(null);
+  const [editingVariant, setEditingVariant] = useState<SellerVariant | null>(
+    null,
+  );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SellerVariant | null>(null);
   const queryClient = useQueryClient();
@@ -92,16 +113,16 @@ export function SellerProductVariantsPage() {
     resolver: zodResolver(variantSchema),
     defaultValues,
   });
-  const productId = id ?? '';
+  const productId = id ?? "";
   const variantsQuery = useQuery({
-    queryKey: ['seller', 'products', productId, 'variants'],
+    queryKey: ["seller", "products", productId, "variants"],
     queryFn: () => sellerProductsApi.listVariants(productId),
     enabled: Boolean(productId),
   });
 
   const invalidate = () =>
     queryClient.invalidateQueries({
-      queryKey: ['seller', 'products', productId, 'variants'],
+      queryKey: ["seller", "products", productId, "variants"],
     });
 
   const saveMutation = useMutation({
@@ -115,7 +136,11 @@ export function SellerProductVariantsPage() {
         : sellerProductsApi.createVariant(productId, toRequest(values)),
     onSuccess: async (variant) => {
       await invalidate();
-      pushToast({ tone: 'success', title: 'Variant saved', description: variant.sku });
+      pushToast({
+        tone: "success",
+        title: "Đã lưu phân loại",
+        description: variant.sku,
+      });
       setEditingVariant(null);
       setIsCreateOpen(false);
       form.reset(defaultValues);
@@ -127,7 +152,7 @@ export function SellerProductVariantsPage() {
       sellerProductsApi.deleteVariant(productId, variantId),
     onSuccess: async () => {
       await invalidate();
-      pushToast({ tone: 'success', title: 'Variant deleted' });
+      pushToast({ tone: "success", title: "Đã xóa phân loại" });
       setDeleteTarget(null);
     },
   });
@@ -148,13 +173,13 @@ export function SellerProductVariantsPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Seller products
+              Sản phẩm của gian hàng
             </p>
-            <h1 className="mt-2 text-2xl font-semibold">Variants</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Phân loại sản phẩm</h1>
           </div>
           <Button type="button" onClick={() => setIsCreateOpen(true)}>
             <Plus size={16} aria-hidden="true" />
-            New variant
+            Thêm phân loại
           </Button>
         </div>
       </section>
@@ -162,8 +187,8 @@ export function SellerProductVariantsPage() {
       {variantsQuery.isLoading ? <Skeleton className="h-80 w-full" /> : null}
       {variantsQuery.isError ? (
         <ErrorState
-          title="Cannot load variants"
-          message="The product variants API is unavailable."
+          title="Không thể tải phân loại"
+          message="Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại."
         />
       ) : null}
       {!variantsQuery.isLoading && !variantsQuery.isError ? (
@@ -172,11 +197,13 @@ export function SellerProductVariantsPage() {
             <TableHead>
               <TableRow>
                 <TableHeaderCell>SKU</TableHeaderCell>
-                <TableHeaderCell>Name</TableHeaderCell>
-                <TableHeaderCell>Status</TableHeaderCell>
-                <TableHeaderCell>Price</TableHeaderCell>
-                <TableHeaderCell>Available</TableHeaderCell>
-                <TableHeaderCell className="text-right">Actions</TableHeaderCell>
+                <TableHeaderCell>Tên phân loại</TableHeaderCell>
+                <TableHeaderCell>Trạng thái</TableHeaderCell>
+                <TableHeaderCell>Giá</TableHeaderCell>
+                <TableHeaderCell>Còn hàng</TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Thao tác
+                </TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -197,7 +224,7 @@ export function SellerProductVariantsPage() {
                         onClick={() => setEditingVariant(variant)}
                       >
                         <Edit size={15} aria-hidden="true" />
-                        Edit
+                        Chỉnh sửa
                       </Button>
                       <Button
                         type="button"
@@ -205,7 +232,7 @@ export function SellerProductVariantsPage() {
                         onClick={() => setDeleteTarget(variant)}
                       >
                         <Trash2 size={15} aria-hidden="true" />
-                        Delete
+                        Xóa
                       </Button>
                     </div>
                   </TableCell>
@@ -215,12 +242,12 @@ export function SellerProductVariantsPage() {
           </Table>
         ) : (
           <EmptyState
-            title="No variants"
-            description="Add at least one variant before setting inventory."
+            title="Chưa có phân loại"
+            description="Hãy thêm ít nhất một phân loại trước khi thiết lập tồn kho."
             action={
               <Button type="button" onClick={() => setIsCreateOpen(true)}>
                 <Layers size={16} aria-hidden="true" />
-                New variant
+                Thêm phân loại
               </Button>
             }
           />
@@ -229,7 +256,7 @@ export function SellerProductVariantsPage() {
 
       <Modal
         open={isModalOpen}
-        title={editingVariant ? 'Edit variant' : 'Create variant'}
+        title={editingVariant ? "Chỉnh sửa phân loại" : "Tạo phân loại"}
         onClose={() => {
           setEditingVariant(null);
           setIsCreateOpen(false);
@@ -244,14 +271,14 @@ export function SellerProductVariantsPage() {
                 setIsCreateOpen(false);
               }}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="submit"
               form="variant-form"
               disabled={saveMutation.isPending}
             >
-              {saveMutation.isPending ? 'Saving...' : 'Save'}
+              {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
             </Button>
           </>
         }
@@ -269,51 +296,51 @@ export function SellerProductVariantsPage() {
           <TextInput
             label="SKU"
             error={form.formState.errors.sku?.message}
-            {...form.register('sku')}
+            {...form.register("sku")}
           />
           <TextInput
-            label="Variant name"
+            label="Tên phân loại"
             error={form.formState.errors.variantName?.message}
-            {...form.register('variantName')}
+            {...form.register("variantName")}
           />
           <TextInput
-            label="Price"
+            label="Giá bán"
             inputMode="decimal"
             error={form.formState.errors.price?.message}
-            {...form.register('price')}
+            {...form.register("price")}
           />
           <TextInput
-            label="Compare at price"
+            label="Giá so sánh"
             inputMode="decimal"
             error={form.formState.errors.compareAtPrice?.message}
-            {...form.register('compareAtPrice')}
+            {...form.register("compareAtPrice")}
           />
           <TextInput
-            label="Weight grams"
+            label="Khối lượng (gam)"
             inputMode="numeric"
             error={form.formState.errors.weightGram?.message}
-            {...form.register('weightGram')}
+            {...form.register("weightGram")}
           />
           <SelectInput
-            label="Status"
+            label="Trạng thái"
             error={form.formState.errors.variantStatus?.message}
-            {...form.register('variantStatus')}
+            {...form.register("variantStatus")}
           >
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
+            <option value="Active">Đang hoạt động</option>
+            <option value="Inactive">Ngừng hoạt động</option>
           </SelectInput>
           <Textarea
-            label="Options JSON"
+            label="Tùy chọn dạng JSON"
             rows={3}
             error={form.formState.errors.variantOptionJson?.message}
-            {...form.register('variantOptionJson')}
+            {...form.register("variantOptionJson")}
           />
         </form>
       </Modal>
 
       <Modal
         open={Boolean(deleteTarget)}
-        title="Delete variant"
+        title="Xóa phân loại"
         onClose={() => setDeleteTarget(null)}
         footer={
           <>
@@ -322,15 +349,17 @@ export function SellerProductVariantsPage() {
               variant="secondary"
               onClick={() => setDeleteTarget(null)}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="button"
               variant="danger"
               disabled={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? "Đang xóa..." : "Xóa"}
             </Button>
           </>
         }
@@ -338,7 +367,7 @@ export function SellerProductVariantsPage() {
         <p className="text-sm text-muted">
           {deleteMutation.isError
             ? getErrorMessage(deleteMutation.error)
-            : `Delete variant ${deleteTarget?.sku ?? ''}?`}
+            : `Bạn có muốn xóa phân loại ${deleteTarget?.sku ?? ""} không?`}
         </p>
       </Modal>
     </div>

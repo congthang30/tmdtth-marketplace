@@ -10,60 +10,70 @@ import {
   Store,
   Truck,
   Warehouse,
-} from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { LogoutButton } from '@/features/auth/components/LogoutButton';
-import { useAuthStore } from '@/stores/auth.store';
-import type { AppRole } from '@/types/domain';
+} from "lucide-react";
+import { NavLink, Outlet } from "react-router-dom";
+import { LogoutButton } from "@/features/auth/components/LogoutButton";
+import { useAuthStore } from "@/stores/auth.store";
+import type { AppRole } from "@/types/domain";
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/products', label: 'Catalog', icon: Boxes },
-  { to: '/addresses', label: 'Addresses', icon: MapPin },
-  { to: '/orders', label: 'Orders', icon: ClipboardList },
-  { to: '/seller', label: 'Seller home', icon: Store, roles: ['Seller'] },
+  { to: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
+  { to: "/products", label: "Danh mục sản phẩm", icon: Boxes },
+  { to: "/addresses", label: "Địa chỉ", icon: MapPin },
+  { to: "/orders", label: "Đơn hàng", icon: ClipboardList },
   {
-    to: '/seller/shop/register',
-    label: 'Register shop',
+    to: "/seller",
+    label: "Tổng quan người bán",
     icon: Store,
-    roles: ['Seller'],
+    roles: ["Seller"],
   },
   {
-    to: '/seller/products',
-    label: 'Seller products',
+    to: "/seller/shop/register",
+    label: "Đăng ký gian hàng",
+    icon: Store,
+    roles: ["Seller"],
+  },
+  {
+    to: "/seller/products",
+    label: "Sản phẩm của gian hàng",
     icon: PackagePlus,
-    roles: ['Seller'],
+    roles: ["Seller"],
   },
   {
-    to: '/seller/orders',
-    label: 'Seller orders',
+    to: "/seller/orders",
+    label: "Đơn hàng của gian hàng",
     icon: Warehouse,
-    roles: ['Seller'],
+    roles: ["Seller"],
   },
-  { to: '/admin', label: 'Admin home', icon: ShieldCheck, roles: ['Admin'] },
   {
-    to: '/admin/categories',
-    label: 'Categories',
+    to: "/admin",
+    label: "Tổng quan quản trị",
+    icon: ShieldCheck,
+    roles: ["Admin"],
+  },
+  {
+    to: "/admin/categories",
+    label: "Danh mục",
     icon: FolderTree,
-    roles: ['Admin'],
+    roles: ["Admin"],
   },
   {
-    to: '/admin/shops',
-    label: 'Shop approvals',
+    to: "/admin/shops",
+    label: "Duyệt gian hàng",
     icon: Store,
-    roles: ['Admin'],
+    roles: ["Admin"],
   },
   {
-    to: '/admin/shipping/companies',
-    label: 'Carriers',
+    to: "/admin/shipping/companies",
+    label: "Đơn vị vận chuyển",
     icon: Truck,
-    roles: ['Admin'],
+    roles: ["Admin"],
   },
   {
-    to: '/admin/shipping/services',
-    label: 'Shipping services',
+    to: "/admin/shipping/services",
+    label: "Dịch vụ vận chuyển",
     icon: ClipboardList,
-    roles: ['Admin'],
+    roles: ["Admin"],
   },
 ] satisfies Array<{
   to: string;
@@ -81,15 +91,15 @@ const canViewItem = (roles: AppRole[], itemRoles?: AppRole[]) => {
 };
 
 const getRoleLabel = (roles: AppRole[]) => {
-  if (roles.includes('Admin')) {
-    return 'Admin';
+  if (roles.includes("Admin")) {
+    return "Quản trị viên";
   }
 
-  if (roles.includes('Seller')) {
-    return 'Seller';
+  if (roles.includes("Seller")) {
+    return "Người bán";
   }
 
-  return 'Customer';
+  return "Khách hàng";
 };
 
 export function DashboardLayout() {
@@ -97,7 +107,7 @@ export function DashboardLayout() {
   const visibleItems = navItems.filter((item) =>
     canViewItem(user?.roles ?? [], item.roles),
   );
-  const fullName = user?.profile?.fullName ?? user?.email ?? 'Account';
+  const fullName = user?.profile?.fullName ?? user?.email ?? "Tài khoản";
   const roleLabel = getRoleLabel(user?.roles ?? []);
 
   return (
@@ -110,7 +120,7 @@ export function DashboardLayout() {
             </span>
             <div>
               <p className="text-sm font-semibold">TMDTTH</p>
-              <p className="text-xs text-muted">Marketplace ops</p>
+              <p className="text-xs text-muted">Quản lý sàn thương mại</p>
             </div>
           </div>
           <nav className="flex gap-2 overflow-x-auto px-3 pb-4 lg:block lg:space-y-1">
@@ -120,11 +130,11 @@ export function DashboardLayout() {
                 to={item.to}
                 className={({ isActive }) =>
                   [
-                    'flex min-w-max items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
+                    "flex min-w-max items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
                     isActive
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-muted hover:bg-surface hover:text-ink',
-                  ].join(' ')
+                      ? "bg-primary-50 text-primary-700"
+                      : "text-muted hover:bg-surface hover:text-ink",
+                  ].join(" ")
                 }
               >
                 <item.icon size={16} aria-hidden="true" />
@@ -138,7 +148,7 @@ export function DashboardLayout() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Frontend MVP
+                  Khu vực tài khoản
                 </p>
                 <h1 className="text-xl font-semibold">{fullName}</h1>
               </div>

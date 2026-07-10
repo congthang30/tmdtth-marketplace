@@ -1,6 +1,6 @@
-import { PackageSearch } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { resolveMediaUrl } from '../utils';
+import { PackageSearch } from "lucide-react";
+import { useEffect, useState } from "react";
+import { resolveMediaUrl } from "../utils";
 
 type ProductVisualProps = {
   imageUrl: string | null | undefined;
@@ -11,7 +11,7 @@ type ProductVisualProps = {
 export function ProductVisual({
   imageUrl,
   altText,
-  className = '',
+  className = "",
 }: ProductVisualProps) {
   const [failed, setFailed] = useState(false);
   const resolvedUrl = resolveMediaUrl(imageUrl);
@@ -24,13 +24,13 @@ export function ProductVisual({
     return (
       <div
         className={[
-          'grid place-items-center bg-primary-50 text-primary-700',
+          "grid place-items-center bg-primary-50 text-primary-700",
           className,
-        ].join(' ')}
+        ].join(" ")}
       >
         <div className="grid place-items-center gap-2 text-center">
           <PackageSearch size={28} aria-hidden="true" />
-          <span className="text-xs font-medium">Product image</span>
+          <span className="text-xs font-medium">Hình ảnh sản phẩm</span>
         </div>
       </div>
     );
@@ -39,8 +39,8 @@ export function ProductVisual({
   return (
     <img
       src={resolvedUrl}
-      alt={altText ?? ''}
-      className={['h-full w-full object-cover', className].join(' ')}
+      alt={altText ?? ""}
+      className={["h-full w-full object-cover", className].join(" ")}
       onError={() => setFailed(true)}
     />
   );

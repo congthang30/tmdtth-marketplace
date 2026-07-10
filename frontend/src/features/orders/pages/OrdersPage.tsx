@@ -1,20 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
-import { Eye, PackageCheck } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Badge } from '@/components/ui/Badge';
-import { ButtonLink } from '@/components/ui/ButtonLink';
-import { Pagination } from '@/components/ui/Pagination';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { formatDateTime, formatMoney, formatStatus } from '@/utils/format';
-import { ordersApi } from '../api';
+import { useQuery } from "@tanstack/react-query";
+import { Eye, PackageCheck } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Badge } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { Pagination } from "@/components/ui/Pagination";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { formatDateTime, formatMoney, formatStatus } from "@/utils/format";
+import { ordersApi } from "../api";
 
 export function OrdersPage() {
   const [page, setPage] = useState(1);
   const ordersQuery = useQuery({
-    queryKey: ['orders', 'my', page],
+    queryKey: ["orders", "my", page],
     queryFn: () => ordersApi.listMyOrders(page, 10),
   });
 
@@ -25,11 +25,11 @@ export function OrdersPage() {
     <div className="space-y-5">
       <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-          Orders
+          Đơn hàng
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">My orders</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Đơn hàng của Bạn</h1>
         <p className="mt-2 text-sm text-muted">
-          Track customer orders, payment state and shipments.
+          Theo dõi trạng thái đơn hàng, thanh toán và vận chuyển.
         </p>
       </section>
 
@@ -43,8 +43,8 @@ export function OrdersPage() {
 
       {ordersQuery.isError ? (
         <ErrorState
-          title="Cannot load orders"
-          message="Your session may have expired or the orders API is unavailable."
+          title="Không thể tải đơn hàng"
+          message="Phiên đăng nhập có thể đã hết hạn hoặc hệ thống đang tạm thời gián đoạn."
         />
       ) : null}
 
@@ -80,7 +80,7 @@ export function OrdersPage() {
                       {formatMoney(order.totalAmount)}
                     </p>
                     <p className="mt-1 text-sm text-muted">
-                      {order.shopOrders.length} shop order(s)
+                      {order.shopOrders.length} gian hàng
                     </p>
                   </div>
                 </div>
@@ -95,8 +95,8 @@ export function OrdersPage() {
                         {shopOrder.shop.shopName}
                       </p>
                       <p className="mt-1 text-muted">
-                        {formatStatus(shopOrder.orderStatus)} -{' '}
-                        {shopOrder.items.length} item(s)
+                        {formatStatus(shopOrder.orderStatus)} -{" "}
+                        {shopOrder.items.length} sản phẩm
                       </p>
                     </div>
                   ))}
@@ -105,7 +105,7 @@ export function OrdersPage() {
                 <div className="mt-4">
                   <ButtonLink to={`/orders/${order.id}`} variant="secondary">
                     <Eye size={16} aria-hidden="true" />
-                    View detail
+                    Xem chi tiết
                   </ButtonLink>
                 </div>
               </article>
@@ -118,12 +118,12 @@ export function OrdersPage() {
           </div>
         ) : (
           <EmptyState
-            title="No orders yet"
-            description="Created orders will appear here after checkout."
+            title="Chưa có đơn hàng"
+            description="Đơn hàng sẽ xuất hiện tại đây sau khi Bạn hoàn tất thanh toán."
             action={
               <ButtonLink to="/products">
                 <PackageCheck size={16} aria-hidden="true" />
-                Browse catalog
+                Xem danh mục sản phẩm
               </ButtonLink>
             }
           />

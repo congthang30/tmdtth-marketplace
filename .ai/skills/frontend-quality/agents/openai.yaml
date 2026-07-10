@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Quality"
+  short_description: "Keep frontend code production ready"
+  default_prompt: "Use $frontend-quality to review or implement production-ready frontend code in this project."

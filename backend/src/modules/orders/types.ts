@@ -43,6 +43,7 @@ export type CheckoutVariantSummary = {
   idString: string;
   sku: string;
   variantName: string;
+  weightGram: number;
 };
 
 export type CheckoutPreviewItem = {
@@ -61,6 +62,27 @@ export type CheckoutPreviewItem = {
   shop: CheckoutShopSummary;
 };
 
+export type CheckoutShippingSelectionSummary = {
+  shippingQuoteId: string;
+  shippingQuoteIdString: string;
+  shippingCompany: {
+    id: string;
+    idString: string;
+    companyName: string;
+    slug: string;
+  };
+  shippingService: {
+    id: string;
+    idString: string;
+    serviceCode: string;
+    serviceName: string;
+  };
+  quotedFee: string;
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+  expiresAt: Date;
+};
+
 export type CheckoutPreviewShopGroup = {
   shop: CheckoutShopSummary;
   items: CheckoutPreviewItem[];
@@ -68,6 +90,7 @@ export type CheckoutPreviewShopGroup = {
   discountAmount: string;
   shippingFeeAmount: string;
   totalAmount: string;
+  shippingSelection: CheckoutShippingSelectionSummary | null;
 };
 
 export type CheckoutPreviewResponse = {

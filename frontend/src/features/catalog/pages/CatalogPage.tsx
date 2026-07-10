@@ -1,67 +1,67 @@
-import { useQuery } from '@tanstack/react-query';
-import { Filter, RotateCcw, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { Pagination } from '@/components/ui/Pagination';
-import { SelectInput } from '@/components/ui/SelectInput';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { TextInput } from '@/components/ui/TextInput';
-import { catalogApi, categoriesApi } from '../api';
-import type { ProductListQuery } from '../types';
-import { flattenCategories } from '../utils';
-import { ProductCard } from '../components/ProductCard';
+import { useQuery } from "@tanstack/react-query";
+import { Filter, RotateCcw, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
+import { SelectInput } from "@/components/ui/SelectInput";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { TextInput } from "@/components/ui/TextInput";
+import { catalogApi, categoriesApi } from "../api";
+import type { ProductListQuery } from "../types";
+import { flattenCategories } from "../utils";
+import { ProductCard } from "../components/ProductCard";
 
 type CatalogFilters = {
   q: string;
   categoryId: string;
   minPrice: string;
   maxPrice: string;
-  sortBy: NonNullable<ProductListQuery['sortBy']>;
-  sortOrder: NonNullable<ProductListQuery['sortOrder']>;
+  sortBy: NonNullable<ProductListQuery["sortBy"]>;
+  sortOrder: NonNullable<ProductListQuery["sortOrder"]>;
 };
 
 const defaultFilters: CatalogFilters = {
-  q: '',
-  categoryId: '',
-  minPrice: '',
-  maxPrice: '',
-  sortBy: 'createdAt',
-  sortOrder: 'desc',
+  q: "",
+  categoryId: "",
+  minPrice: "",
+  maxPrice: "",
+  sortBy: "createdAt",
+  sortOrder: "desc",
 };
 
-const sortByOptions: CatalogFilters['sortBy'][] = [
-  'createdAt',
-  'basePrice',
-  'soldCount',
-  'viewCount',
-  'productName',
+const sortByOptions: CatalogFilters["sortBy"][] = [
+  "createdAt",
+  "basePrice",
+  "soldCount",
+  "viewCount",
+  "productName",
 ];
 
-const sortOrderOptions: CatalogFilters['sortOrder'][] = ['desc', 'asc'];
+const sortOrderOptions: CatalogFilters["sortOrder"][] = ["desc", "asc"];
 
 const getPage = (searchParams: URLSearchParams) => {
-  const page = Number(searchParams.get('page'));
+  const page = Number(searchParams.get("page"));
   return Number.isInteger(page) && page > 0 ? page : 1;
 };
 
 const getFiltersFromParams = (
   searchParams: URLSearchParams,
 ): CatalogFilters => {
-  const sortByParam = searchParams.get('sortBy') as CatalogFilters['sortBy'];
+  const sortByParam = searchParams.get("sortBy") as CatalogFilters["sortBy"];
   const sortOrderParam = searchParams.get(
-    'sortOrder',
-  ) as CatalogFilters['sortOrder'];
+    "sortOrder",
+  ) as CatalogFilters["sortOrder"];
 
   return {
-    q: searchParams.get('q') ?? '',
-    categoryId: searchParams.get('categoryId') ?? '',
-    minPrice: searchParams.get('minPrice') ?? '',
-    maxPrice: searchParams.get('maxPrice') ?? '',
+    q: searchParams.get("q") ?? "",
+    categoryId: searchParams.get("categoryId") ?? "",
+    minPrice: searchParams.get("minPrice") ?? "",
+    maxPrice: searchParams.get("maxPrice") ?? "",
     sortBy: sortByOptions.includes(sortByParam)
       ? sortByParam
       : defaultFilters.sortBy,
@@ -80,13 +80,13 @@ const setParam = (params: URLSearchParams, key: string, value: string) => {
   params.delete(key);
 };
 
-const getSortLabel = (sortBy: CatalogFilters['sortBy']) =>
+const getSortLabel = (sortBy: CatalogFilters["sortBy"]) =>
   ({
-    createdAt: 'Newest',
-    basePrice: 'Price',
-    soldCount: 'Sold count',
-    viewCount: 'Views',
-    productName: 'Name',
+    createdAt: "Mới nhất",
+    basePrice: "Giá",
+    soldCount: "Lượt bán",
+    viewCount: "Lượt xem",
+    productName: "Tên sản phẩm",
   })[sortBy];
 
 export function CatalogPage() {
@@ -110,12 +110,12 @@ export function CatalogPage() {
   );
 
   const categoriesQuery = useQuery({
-    queryKey: ['catalog', 'categories'],
+    queryKey: ["catalog", "categories"],
     queryFn: categoriesApi.list,
   });
 
   const productsQuery = useQuery({
-    queryKey: ['catalog', 'products', query],
+    queryKey: ["catalog", "products", query],
     queryFn: () => catalogApi.listProducts(query),
   });
 
@@ -130,23 +130,23 @@ export function CatalogPage() {
   const applyFilters = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('page', '1');
-    setParam(nextParams, 'q', filters.q.trim());
-    setParam(nextParams, 'categoryId', filters.categoryId);
-    setParam(nextParams, 'minPrice', filters.minPrice);
-    setParam(nextParams, 'maxPrice', filters.maxPrice);
-    nextParams.set('sortBy', filters.sortBy);
-    nextParams.set('sortOrder', filters.sortOrder);
+    nextParams.set("page", "1");
+    setParam(nextParams, "q", filters.q.trim());
+    setParam(nextParams, "categoryId", filters.categoryId);
+    setParam(nextParams, "minPrice", filters.minPrice);
+    setParam(nextParams, "maxPrice", filters.maxPrice);
+    nextParams.set("sortBy", filters.sortBy);
+    nextParams.set("sortOrder", filters.sortOrder);
     setSearchParams(nextParams);
   };
 
   const resetFilters = () => {
-    setSearchParams({ page: '1' });
+    setSearchParams({ page: "1" });
   };
 
   const changePage = (nextPage: number) => {
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('page', String(nextPage));
+    nextParams.set("page", String(nextPage));
     setSearchParams(nextParams);
   };
 
@@ -156,20 +156,20 @@ export function CatalogPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Public catalog
+              Danh mục công khai
             </p>
             <h1 className="mt-2 text-2xl font-semibold text-ink">
-              Browse marketplace products
+              Khám phá sản phẩm trên sàn
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-              Live data from the NestJS API with category, price, sorting and
-              pagination.
+              Tìm kiếm và lọc sản phẩm theo danh mục, khoảng giá và thứ tự hiển
+              thị.
             </p>
           </div>
           {meta ? (
             <div className="rounded-md border border-border px-4 py-3 text-sm text-muted">
-              <span className="font-semibold text-ink">{meta.total}</span>{' '}
-              products
+              <span className="font-semibold text-ink">{meta.total}</span> sản
+              phẩm
             </div>
           ) : null}
         </div>
@@ -179,15 +179,15 @@ export function CatalogPage() {
           onSubmit={applyFilters}
         >
           <TextInput
-            label="Search"
+            label="Tìm kiếm"
             value={filters.q}
-            placeholder="Name, brand or description"
+            placeholder="Tên, thương hiệu hoặc mô tả"
             onChange={(event) =>
               setFilters((current) => ({ ...current, q: event.target.value }))
             }
           />
           <SelectInput
-            label="Category"
+            label="Danh mục"
             value={filters.categoryId}
             onChange={(event) =>
               setFilters((current) => ({
@@ -196,7 +196,7 @@ export function CatalogPage() {
               }))
             }
           >
-            <option value="">All categories</option>
+            <option value="">Tất cả danh mục</option>
             {categoryOptions.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.label}
@@ -204,7 +204,7 @@ export function CatalogPage() {
             ))}
           </SelectInput>
           <TextInput
-            label="Min price"
+            label="Giá thấp nhất"
             inputMode="numeric"
             value={filters.minPrice}
             onChange={(event) =>
@@ -215,7 +215,7 @@ export function CatalogPage() {
             }
           />
           <TextInput
-            label="Max price"
+            label="Giá cao nhất"
             inputMode="numeric"
             value={filters.maxPrice}
             onChange={(event) =>
@@ -226,12 +226,12 @@ export function CatalogPage() {
             }
           />
           <SelectInput
-            label="Sort by"
+            label="Sắp xếp theo"
             value={filters.sortBy}
             onChange={(event) =>
               setFilters((current) => ({
                 ...current,
-                sortBy: event.target.value as CatalogFilters['sortBy'],
+                sortBy: event.target.value as CatalogFilters["sortBy"],
               }))
             }
           >
@@ -242,22 +242,22 @@ export function CatalogPage() {
             ))}
           </SelectInput>
           <SelectInput
-            label="Order"
+            label="Thứ tự"
             value={filters.sortOrder}
             onChange={(event) =>
               setFilters((current) => ({
                 ...current,
-                sortOrder: event.target.value as CatalogFilters['sortOrder'],
+                sortOrder: event.target.value as CatalogFilters["sortOrder"],
               }))
             }
           >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
+            <option value="desc">Giảm dần</option>
+            <option value="asc">Tăng dần</option>
           </SelectInput>
           <div className="flex items-end gap-2">
             <Button type="submit" className="h-10">
               <Search size={16} aria-hidden="true" />
-              Apply
+              Áp dụng
             </Button>
             <Button
               type="button"
@@ -272,7 +272,7 @@ export function CatalogPage() {
 
         {categoriesQuery.isError ? (
           <Alert tone="danger" className="mt-4">
-            Categories could not be loaded, but products can still be browsed.
+            Không thể tải danh mục, nhưng Bạn vẫn có thể xem sản phẩm.
           </Alert>
         ) : null}
       </section>
@@ -287,8 +287,8 @@ export function CatalogPage() {
 
       {productsQuery.isError ? (
         <ErrorState
-          title="Cannot load products"
-          message="Check that the backend API is running on port 3100 and try again."
+          title="Không thể tải sản phẩm"
+          message="Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại sau."
         />
       ) : null}
 
@@ -308,12 +308,12 @@ export function CatalogPage() {
           </>
         ) : (
           <EmptyState
-            title="No products found"
-            description="Adjust filters or reset the catalog query."
+            title="Không tìm thấy sản phẩm"
+            description="Hãy thay đổi điều kiện lọc hoặc đặt lại bộ lọc."
             action={
               <Button type="button" variant="secondary" onClick={resetFilters}>
                 <Filter size={16} aria-hidden="true" />
-                Reset filters
+                Đặt lại bộ lọc
               </Button>
             }
           />

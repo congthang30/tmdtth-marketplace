@@ -84,6 +84,9 @@ export const adminShippingCompaniesApi = {
       body,
     );
   },
+  get(companyId: string) {
+    return apiGet<ShippingCompany>(`/admin/shipping-companies/${companyId}`);
+  },
   update(companyId: string, body: ShippingCompanyRequest) {
     return apiPatch<ShippingCompany, ShippingCompanyRequest>(
       `/admin/shipping-companies/${companyId}`,
@@ -120,6 +123,9 @@ export const adminShippingServicesApi = {
       '/admin/shipping-services',
       body,
     );
+  },
+  get(serviceId: string) {
+    return apiGet<ShippingService>(`/admin/shipping-services/${serviceId}`);
   },
   update(serviceId: string, body: ShippingServiceRequest) {
     return apiPatch<ShippingService, ShippingServiceRequest>(

@@ -1,38 +1,52 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Store } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
-import { z } from 'zod';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { TextInput } from '@/components/ui/TextInput';
-import { Textarea } from '@/components/ui/Textarea';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { sellerShopApi } from '../api';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Store } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { TextInput } from "@/components/ui/TextInput";
+import { Textarea } from "@/components/ui/Textarea";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { sellerShopApi } from "../api";
 
 const shopSchema = z.object({
-  shopName: z.string().trim().min(2).max(150),
-  description: z.string().trim().max(1000).optional(),
-  email: z.string().trim().email().max(255).or(z.literal('')).optional(),
+  shopName: z
+    .string()
+    .trim()
+    .min(2, "Tên gian hàng phải có ít nhất 2 ký tự")
+    .max(150, "Tên gian hàng quá dài"),
+  description: z.string().trim().max(1000, "Mô tả quá dài").optional(),
+  email: z
+    .string()
+    .trim()
+    .email("Email không hợp lệ")
+    .max(255, "Email quá dài")
+    .or(z.literal(""))
+    .optional(),
   phoneNumber: z
     .string()
     .trim()
-    .regex(/^[0-9+().\-\s]{7,20}$/)
-    .or(z.literal(''))
+    .regex(/^[0-9+().\-\s]{7,20}$/, "Số điện thoại không hợp lệ")
+    .or(z.literal(""))
     .optional(),
-  province: z.string().trim().max(100).optional(),
-  district: z.string().trim().max(100).optional(),
-  ward: z.string().trim().max(100).optional(),
-  streetAddress: z.string().trim().max(255).optional(),
-  taxCode: z.string().trim().max(50).optional(),
+  province: z.string().trim().max(100, "Tên tỉnh/thành phố quá dài").optional(),
+  district: z.string().trim().max(100, "Tên quận/huyện quá dài").optional(),
+  ward: z.string().trim().max(100, "Tên phường/xã quá dài").optional(),
+  streetAddress: z
+    .string()
+    .trim()
+    .max(255, "Địa chỉ đường/phố quá dài")
+    .optional(),
+  taxCode: z.string().trim().max(50, "Mã số thuế quá dài").optional(),
 });
 
 type ShopFormValues = z.infer<typeof shopSchema>;
 
 const cleanOptional = (value: string | undefined) => {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
@@ -43,28 +57,29 @@ export function SellerShopRegisterPage() {
   const form = useForm<ShopFormValues>({
     resolver: zodResolver(shopSchema),
     defaultValues: {
-      shopName: '',
-      description: '',
-      email: '',
-      phoneNumber: '',
-      province: '',
-      district: '',
-      ward: '',
-      streetAddress: '',
-      taxCode: '',
+      shopName: "",
+      description: "",
+      email: "",
+      phoneNumber: "",
+      province: "",
+      district: "",
+      ward: "",
+      streetAddress: "",
+      taxCode: "",
     },
   });
 
   const mutation = useMutation({
     mutationFn: sellerShopApi.createShop,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['seller', 'shop'] });
+      await queryClient.invalidateQueries({ queryKey: ["seller", "shop"] });
       pushToast({
-        tone: 'success',
-        title: 'Shop submitted',
-        description: 'Admin approval is required before products can publish.',
+        tone: "success",
+        title: "Đã gửi đăng ký gian hàng",
+        description:
+          "Gian hàng cần được quản trị viên phê duyệt trước khi đăng bán sản phẩm.",
       });
-      navigate('/seller');
+      navigate("/seller");
     },
   });
 
@@ -72,11 +87,11 @@ export function SellerShopRegisterPage() {
     <div className="space-y-5">
       <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-          Seller
+          Người bán
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">Register shop</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Đăng ký gian hàng</h1>
         <p className="mt-2 text-sm text-muted">
-          Submit your shop profile for admin approval.
+          Gửi thông tin gian hàng để quản trị viên phê duyệt.
         </p>
       </section>
 
@@ -103,57 +118,57 @@ export function SellerShopRegisterPage() {
           )}
         >
           <TextInput
-            label="Shop name"
+            label="Tên gian hàng"
             error={form.formState.errors.shopName?.message}
-            {...form.register('shopName')}
+            {...form.register("shopName")}
           />
           <TextInput
             label="Email"
             type="email"
             error={form.formState.errors.email?.message}
-            {...form.register('email')}
+            {...form.register("email")}
           />
           <TextInput
-            label="Phone"
+            label="Số điện thoại"
             error={form.formState.errors.phoneNumber?.message}
-            {...form.register('phoneNumber')}
+            {...form.register("phoneNumber")}
           />
           <TextInput
-            label="Tax code"
+            label="Mã số thuế"
             error={form.formState.errors.taxCode?.message}
-            {...form.register('taxCode')}
+            {...form.register("taxCode")}
           />
           <TextInput
-            label="Province"
+            label="Tỉnh/Thành phố"
             error={form.formState.errors.province?.message}
-            {...form.register('province')}
+            {...form.register("province")}
           />
           <TextInput
-            label="District"
+            label="Quận/Huyện"
             error={form.formState.errors.district?.message}
-            {...form.register('district')}
+            {...form.register("district")}
           />
           <TextInput
-            label="Ward"
+            label="Phường/Xã"
             error={form.formState.errors.ward?.message}
-            {...form.register('ward')}
+            {...form.register("ward")}
           />
           <TextInput
-            label="Street address"
+            label="Địa chỉ đường/phố"
             error={form.formState.errors.streetAddress?.message}
-            {...form.register('streetAddress')}
+            {...form.register("streetAddress")}
           />
           <Textarea
-            label="Description"
+            label="Mô tả"
             rows={4}
             className="md:col-span-2"
             error={form.formState.errors.description?.message}
-            {...form.register('description')}
+            {...form.register("description")}
           />
           <div className="md:col-span-2">
             <Button type="submit" disabled={mutation.isPending}>
               <Store size={16} aria-hidden="true" />
-              {mutation.isPending ? 'Submitting...' : 'Submit shop'}
+              {mutation.isPending ? "Đang gửi..." : "Gửi đăng ký"}
             </Button>
           </div>
         </form>

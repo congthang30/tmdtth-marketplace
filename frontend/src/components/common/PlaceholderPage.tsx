@@ -1,5 +1,5 @@
-import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 type PlaceholderPageProps = {
   eyebrow: string;
@@ -30,14 +30,14 @@ export function PlaceholderPage({
           to="/products"
           className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-panel hover:bg-primary-700"
         >
-          Open catalog
+          Mở danh mục sản phẩm
           <ArrowRight size={16} aria-hidden="true" />
         </Link>
         <Link
           to="/dashboard"
           className="inline-flex items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface"
         >
-          Open workspace
+          Mở khu vực làm việc
         </Link>
       </div>
     </section>

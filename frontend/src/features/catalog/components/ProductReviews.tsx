@@ -1,9 +1,9 @@
-import { Star } from 'lucide-react';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { formatDate } from '@/utils/format';
-import type { PublicProductReview } from '../types';
+import { Star } from "lucide-react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { formatDate } from "@/utils/format";
+import type { PublicProductReview } from "../types";
 
 type ProductReviewsProps = {
   reviews: PublicProductReview[];
@@ -13,12 +13,15 @@ type ProductReviewsProps = {
 
 function Rating({ value }: { value: number }) {
   return (
-    <div className="flex items-center gap-1 text-warning" aria-label={`${value} stars`}>
+    <div
+      className="flex items-center gap-1 text-warning"
+      aria-label={`${value} sao`}
+    >
       {Array.from({ length: 5 }, (_, index) => (
         <Star
           key={index}
           size={15}
-          className={index < value ? 'fill-warning' : ''}
+          className={index < value ? "fill-warning" : ""}
           aria-hidden="true"
         />
       ))}
@@ -44,8 +47,8 @@ export function ProductReviews({
   if (isError) {
     return (
       <ErrorState
-        title="Cannot load reviews"
-        message="Refresh the product page or check the backend service."
+        title="Không thể tải đánh giá"
+        message="Vui lòng tải lại trang sản phẩm hoặc thử lại sau."
       />
     );
   }
@@ -53,8 +56,8 @@ export function ProductReviews({
   if (reviews.length === 0) {
     return (
       <EmptyState
-        title="No reviews yet"
-        description="Published customer reviews will appear here after orders are completed."
+        title="Chưa có đánh giá"
+        description="Đánh giá của khách hàng sẽ xuất hiện sau khi đơn hàng hoàn tất."
       />
     );
   }
@@ -68,8 +71,12 @@ export function ProductReviews({
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="font-medium text-ink">{review.reviewer.displayName}</p>
-              <p className="mt-1 text-xs text-muted">{formatDate(review.createdAt)}</p>
+              <p className="font-medium text-ink">
+                {review.reviewer.displayName}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {formatDate(review.createdAt)}
+              </p>
             </div>
             <Rating value={review.rating} />
           </div>
@@ -85,7 +92,7 @@ export function ProductReviews({
           ) : null}
           {review.productVariant ? (
             <p className="mt-3 text-xs text-muted">
-              Variant: {review.productVariant.variantName}
+              Phân loại: {review.productVariant.variantName}
             </p>
           ) : null}
         </article>

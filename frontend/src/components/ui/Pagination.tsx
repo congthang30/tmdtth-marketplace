@@ -1,5 +1,5 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from './Button';
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "./Button";
 
 type PaginationProps = {
   page: number;
@@ -14,7 +14,7 @@ export function Pagination({
   totalPages,
   onPageChange,
   disabled = false,
-  className = '',
+  className = "",
 }: PaginationProps) {
   const safePage = Math.max(1, page);
   const safeTotal = Math.max(1, totalPages);
@@ -24,12 +24,12 @@ export function Pagination({
   return (
     <div
       className={[
-        'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
         className,
-      ].join(' ')}
+      ].join(" ")}
     >
       <p className="text-sm text-muted">
-        Page <span className="font-medium text-ink">{safePage}</span> of{' '}
+        Trang <span className="font-medium text-ink">{safePage}</span> /{" "}
         <span className="font-medium text-ink">{safeTotal}</span>
       </p>
       <div className="flex items-center gap-2">
@@ -40,7 +40,7 @@ export function Pagination({
           onClick={() => onPageChange(safePage - 1)}
         >
           <ChevronLeft size={16} aria-hidden="true" />
-          Previous
+          Trước
         </Button>
         <Button
           type="button"
@@ -48,7 +48,7 @@ export function Pagination({
           disabled={!canGoNext}
           onClick={() => onPageChange(safePage + 1)}
         >
-          Next
+          Tiếp
           <ChevronRight size={16} aria-hidden="true" />
         </Button>
       </div>

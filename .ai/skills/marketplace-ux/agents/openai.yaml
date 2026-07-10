@@ -1,0 +1,4 @@
+interface:
+  display_name: "Marketplace UX"
+  short_description: "Improve discovery trust and conversion"
+  default_prompt: "Use $marketplace-ux to review and improve a marketplace user flow in this project."

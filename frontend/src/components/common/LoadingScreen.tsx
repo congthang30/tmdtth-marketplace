@@ -2,7 +2,7 @@ type LoadingScreenProps = {
   label?: string;
 };
 
-export function LoadingScreen({ label = 'Loading...' }: LoadingScreenProps) {
+export function LoadingScreen({ label = "Đang tải..." }: LoadingScreenProps) {
   return (
     <div className="grid min-h-[240px] place-items-center rounded-lg border border-border bg-white p-8 text-center shadow-panel">
       <div>

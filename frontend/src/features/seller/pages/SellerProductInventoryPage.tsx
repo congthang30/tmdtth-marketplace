@@ -1,25 +1,33 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Warehouse } from 'lucide-react';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { useParams } from 'react-router-dom';
-import { z } from 'zod';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { TextInput } from '@/components/ui/TextInput';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatDateTime } from '@/utils/format';
-import { sellerProductsApi } from '../api';
-import type { SellerVariant } from '../types';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Save, Warehouse } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { useParams } from "react-router-dom";
+import { z } from "zod";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { TextInput } from "@/components/ui/TextInput";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatDateTime } from "@/utils/format";
+import { sellerProductsApi } from "../api";
+import type { SellerVariant } from "../types";
 
 const inventorySchema = z.object({
-  quantityOnHand: z.coerce.number().int().min(0).max(100000000),
-  lowStockThreshold: z.coerce.number().int().min(0).max(1000000),
+  quantityOnHand: z.coerce
+    .number()
+    .int("Số lượng phải là số nguyên")
+    .min(0, "Số lượng không được âm")
+    .max(100000000, "Số lượng vượt giới hạn"),
+  lowStockThreshold: z.coerce
+    .number()
+    .int("Ngưỡng tồn kho phải là số nguyên")
+    .min(0, "Ngưỡng tồn kho không được âm")
+    .max(1000000, "Ngưỡng tồn kho vượt giới hạn"),
 });
 
 type InventoryFormInput = z.input<typeof inventorySchema>;
@@ -42,7 +50,7 @@ function InventoryEditor({
     },
   });
   const inventoryQuery = useQuery({
-    queryKey: ['seller', 'products', productId, 'inventory', variant.id],
+    queryKey: ["seller", "products", productId, "inventory", variant.id],
     queryFn: () => sellerProductsApi.getInventory(productId, variant.id),
   });
   const mutation = useMutation({
@@ -51,14 +59,14 @@ function InventoryEditor({
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ['seller', 'products', productId, 'inventory', variant.id],
+          queryKey: ["seller", "products", productId, "inventory", variant.id],
         }),
         queryClient.invalidateQueries({
-          queryKey: ['seller', 'products', productId, 'variants'],
+          queryKey: ["seller", "products", productId, "variants"],
         }),
-        queryClient.invalidateQueries({ queryKey: ['seller', 'products'] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
       ]);
-      pushToast({ tone: 'success', title: 'Inventory updated' });
+      pushToast({ tone: "success", title: "Đã cập nhật tồn kho" });
     },
   });
 
@@ -79,11 +87,14 @@ function InventoryEditor({
           <p className="text-sm text-muted">{variant.variantName}</p>
         </div>
         <p className="text-sm text-muted">
-          Available: {inventoryQuery.data?.quantityAvailable ?? variant.quantityAvailable}
+          Có thể bán:{" "}
+          {inventoryQuery.data?.quantityAvailable ?? variant.quantityAvailable}
         </p>
       </div>
 
-      {inventoryQuery.isLoading ? <Skeleton className="mt-4 h-24 w-full" /> : null}
+      {inventoryQuery.isLoading ? (
+        <Skeleton className="mt-4 h-24 w-full" />
+      ) : null}
       {inventoryQuery.isError ? (
         <Alert tone="danger" className="mt-4">
           {getErrorMessage(inventoryQuery.error)}
@@ -101,30 +112,30 @@ function InventoryEditor({
           onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
         >
           <TextInput
-            label="On hand"
+            label="Số lượng thực tế"
             type="number"
             min={0}
             error={form.formState.errors.quantityOnHand?.message}
-            {...form.register('quantityOnHand')}
+            {...form.register("quantityOnHand")}
           />
           <TextInput
-            label="Low stock threshold"
+            label="Ngưỡng sắp hết hàng"
             type="number"
             min={0}
             error={form.formState.errors.lowStockThreshold?.message}
-            {...form.register('lowStockThreshold')}
+            {...form.register("lowStockThreshold")}
           />
           <div className="flex items-end">
             <Button type="submit" disabled={mutation.isPending}>
               <Save size={16} aria-hidden="true" />
-              {mutation.isPending ? 'Saving...' : 'Save'}
+              {mutation.isPending ? "Đang lưu..." : "Lưu"}
             </Button>
           </div>
         </form>
       ) : null}
 
       <p className="mt-3 text-xs text-muted">
-        Reserved: {inventoryQuery.data?.quantityReserved ?? 0} | Updated:{' '}
+        Đã giữ: {inventoryQuery.data?.quantityReserved ?? 0} | Cập nhật:{" "}
         {formatDateTime(inventoryQuery.data?.updatedAt)}
       </p>
     </article>
@@ -133,9 +144,9 @@ function InventoryEditor({
 
 export function SellerProductInventoryPage() {
   const { id } = useParams<{ id: string }>();
-  const productId = id ?? '';
+  const productId = id ?? "";
   const variantsQuery = useQuery({
-    queryKey: ['seller', 'products', productId, 'variants'],
+    queryKey: ["seller", "products", productId, "variants"],
     queryFn: () => sellerProductsApi.listVariants(productId),
     enabled: Boolean(productId),
   });
@@ -145,16 +156,16 @@ export function SellerProductInventoryPage() {
     <div className="space-y-5">
       <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-          Seller products
+          Sản phẩm của gian hàng
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">Inventory</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Tồn kho</h1>
       </section>
 
       {variantsQuery.isLoading ? <Skeleton className="h-80 w-full" /> : null}
       {variantsQuery.isError ? (
         <ErrorState
-          title="Cannot load variants"
-          message="Inventory is managed per product variant."
+          title="Không thể tải phân loại"
+          message="Tồn kho được quản lý riêng theo từng phân loại sản phẩm."
         />
       ) : null}
       {!variantsQuery.isLoading && !variantsQuery.isError ? (
@@ -170,12 +181,12 @@ export function SellerProductInventoryPage() {
           </div>
         ) : (
           <EmptyState
-            title="No variants"
-            description="Create variants before setting inventory."
+            title="Chưa có phân loại"
+            description="Hãy tạo phân loại trước khi thiết lập tồn kho."
             action={
               <Button type="button" variant="secondary">
                 <Warehouse size={16} aria-hidden="true" />
-                Inventory unavailable
+                Chưa thể quản lý tồn kho
               </Button>
             }
           />

@@ -72,11 +72,40 @@ type CheckoutCartItemEntity = {
     sku: string;
     variantName: string;
     price: Prisma.Decimal;
+    weightGram: number;
     variantStatus: string;
     inventoryRecords: Array<{
       id: bigint;
       quantityAvailable: number;
     }>;
+  };
+};
+
+type ShippingQuoteEntity = {
+  id: bigint;
+  shopId: bigint;
+  shippingCompanyId: bigint;
+  shippingServiceId: bigint;
+  destinationProvince: string;
+  destinationDistrict: string | null;
+  totalWeightGram: number;
+  quotedFee: Prisma.Decimal;
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+  expiresAt: Date;
+  createdAt: Date;
+  shippingCompany: {
+    id: bigint;
+    companyName: string;
+    slug: string;
+    companyStatus: string;
+    isDeleted: boolean;
+  };
+  shippingService: {
+    id: bigint;
+    serviceCode: string;
+    serviceName: string;
+    isActive: boolean;
   };
 };
 
@@ -96,6 +125,9 @@ type PrismaMock = {
   };
   cart: {
     findFirst: jest.Mock<Promise<CheckoutCartEntity | null>, [unknown]>;
+  };
+  shippingQuote: {
+    findUnique: jest.Mock<Promise<ShippingQuoteEntity | null>, [unknown]>;
   };
 };
 
@@ -188,6 +220,7 @@ function createCartItem(
       sku: `SKU-${variantId.toString()}`,
       variantName: `Variant ${variantId.toString()}`,
       price: new Prisma.Decimal('160000'),
+      weightGram: 450,
       variantStatus: 'Active',
       inventoryRecords: [
         {
@@ -195,6 +228,39 @@ function createCartItem(
           quantityAvailable: 8,
         },
       ],
+    },
+    ...overrides,
+  };
+}
+
+function createShippingQuote(
+  overrides: Partial<ShippingQuoteEntity> = {},
+): ShippingQuoteEntity {
+  return {
+    id: 30n,
+    shopId: 100n,
+    shippingCompanyId: 10n,
+    shippingServiceId: 20n,
+    destinationProvince: 'TP.HCM',
+    destinationDistrict: 'District 1',
+    totalWeightGram: 900,
+    quotedFee: new Prisma.Decimal('35000'),
+    estimatedMinDays: 2,
+    estimatedMaxDays: 5,
+    expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    createdAt: new Date('2026-07-03T00:00:00.000Z'),
+    shippingCompany: {
+      id: 10n,
+      companyName: 'Fast Ship',
+      slug: 'fast-ship',
+      companyStatus: 'Approved',
+      isDeleted: false,
+    },
+    shippingService: {
+      id: 20n,
+      serviceCode: 'STD',
+      serviceName: 'Standard Delivery',
+      isActive: true,
     },
     ...overrides,
   };
@@ -224,6 +290,9 @@ describe('OrdersService checkout preview', () => {
       cart: {
         findFirst: jest.fn<Promise<CheckoutCartEntity | null>, [unknown]>(),
       },
+      shippingQuote: {
+        findUnique: jest.fn<Promise<ShippingQuoteEntity | null>, [unknown]>(),
+      },
     };
     service = new OrdersService(prisma as unknown as PrismaService);
   });
@@ -242,6 +311,7 @@ describe('OrdersService checkout preview', () => {
         sku: 'SKU-251',
         variantName: 'Variant 251',
         price: new Prisma.Decimal('250000'),
+        weightGram: 800,
         variantStatus: 'Active',
         inventoryRecords: [{ id: 301n, quantityAvailable: 3 }],
       },
@@ -280,6 +350,44 @@ describe('OrdersService checkout preview', () => {
     expect(result.selectedItemCount).toBe(3);
     expect(result.subtotalAmount).toBe('570000');
     expect(result.totalAmount).toBe('570000');
+  });
+
+  it('applies selected shipping quotes to shop group and order totals', async () => {
+    prisma.address.findUnique.mockResolvedValue(createAddress());
+    prisma.paymentMethod.findUnique.mockResolvedValue(createPaymentMethod());
+    prisma.cart.findFirst.mockResolvedValue(createCart([createCartItem()]));
+    prisma.shippingQuote.findUnique.mockResolvedValue(createShippingQuote());
+
+    const result = await service.checkoutPreview(customerUser, {
+      addressId: '10',
+      paymentMethodId: '20',
+      shippingSelections: [
+        {
+          shopId: '100',
+          shippingServiceId: '20',
+          shippingQuoteId: '30',
+        },
+      ],
+    });
+
+    expect(result.shopGroups).toHaveLength(1);
+    expect(result.shopGroups[0].shippingFeeAmount).toBe('35000');
+    expect(result.shopGroups[0].totalAmount).toBe('355000');
+    expect(result.shopGroups[0].shippingSelection).toMatchObject({
+      shippingQuoteId: '30',
+      quotedFee: '35000',
+      shippingService: {
+        id: '20',
+        serviceCode: 'STD',
+      },
+    });
+    expect(result.shippingFeeAmount).toBe('35000');
+    expect(result.totalAmount).toBe('355000');
+    expect(prisma.shippingQuote.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 30n },
+      }),
+    );
   });
 
   it('rejects checkout preview for an address owned by another user', async () => {
@@ -321,6 +429,7 @@ describe('OrdersService checkout preview', () => {
             sku: 'SKU-250',
             variantName: 'Variant 250',
             price: new Prisma.Decimal('160000'),
+            weightGram: 450,
             variantStatus: 'Active',
             inventoryRecords: [{ id: 300n, quantityAvailable: 1 }],
           },

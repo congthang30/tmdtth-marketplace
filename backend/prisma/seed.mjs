@@ -187,7 +187,7 @@ const productSeeds = [
     weightGram: 1500,
     images: [
       {
-        imageUrl: '/uploads/demo/noi-inox-3-lop.jpg',
+        imageUrl: 'https://htmediagroup.vn/wp-content/uploads/2026/02/Anh-xoong-noi-1.jpg',
         altText: 'Nồi inox 3 lớp',
         sortOrder: 1,
         isThumbnail: true,

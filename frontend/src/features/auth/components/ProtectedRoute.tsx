@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { LoadingScreen } from '@/components/common/LoadingScreen';
-import { useAuthStore } from '@/stores/auth.store';
+import type { ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { useAuthStore } from "@/stores/auth.store";
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -17,7 +17,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (isSessionLoading) {
-    return <LoadingScreen label="Loading your session..." />;
+    return <LoadingScreen label="Đang tải phiên đăng nhập..." />;
   }
 
   return <>{children}</>;

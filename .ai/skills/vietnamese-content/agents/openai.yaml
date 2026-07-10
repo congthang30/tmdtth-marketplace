@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vietnamese Content"
+  short_description: "Write natural Vietnamese interface content"
+  default_prompt: "Use $vietnamese-content to write or review Vietnamese interface content for this project."

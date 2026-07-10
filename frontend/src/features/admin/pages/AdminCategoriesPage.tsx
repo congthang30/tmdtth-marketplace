@@ -1,17 +1,17 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit, FolderPlus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
-import { SelectInput } from '@/components/ui/SelectInput';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit, FolderPlus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { SelectInput } from "@/components/ui/SelectInput";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -19,42 +19,52 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-} from '@/components/ui/Table';
-import { TextInput } from '@/components/ui/TextInput';
-import { Textarea } from '@/components/ui/Textarea';
-import { getErrorMessage } from '@/services/errors';
-import { useToastStore } from '@/stores/toast.store';
-import { formatStatus } from '@/utils/format';
-import { adminCategoriesApi } from '../api';
-import type { AdminCategory, CategoryRequest } from '../types';
+} from "@/components/ui/Table";
+import { TextInput } from "@/components/ui/TextInput";
+import { Textarea } from "@/components/ui/Textarea";
+import { getErrorMessage } from "@/services/errors";
+import { useToastStore } from "@/stores/toast.store";
+import { formatStatus } from "@/utils/format";
+import { adminCategoriesApi } from "../api";
+import type { AdminCategory, CategoryRequest } from "../types";
 
 const categorySchema = z.object({
-  categoryName: z.string().trim().min(2).max(150),
+  categoryName: z
+    .string()
+    .trim()
+    .min(2, "Tên danh mục phải có ít nhất 2 ký tự")
+    .max(150, "Tên danh mục quá dài"),
   slug: z
     .string()
     .trim()
-    .min(2)
-    .max(180)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  description: z.string().trim().max(500).optional(),
+    .min(2, "Slug phải có ít nhất 2 ký tự")
+    .max(180, "Slug quá dài")
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "Slug chỉ gồm chữ thường, số và dấu gạch ngang",
+    ),
+  description: z.string().trim().max(500, "Mô tả quá dài").optional(),
   parentCategoryId: z.string().optional(),
-  sortOrder: z.string().regex(/^\d*$/).optional(),
+  sortOrder: z
+    .string()
+    .regex(/^\d*$/, "Thứ tự phải là số nguyên không âm")
+    .optional(),
   isActive: z.boolean().optional(),
 });
 
 type CategoryFormValues = z.infer<typeof categorySchema>;
 
 const defaultValues: CategoryFormValues = {
-  categoryName: '',
-  slug: '',
-  description: '',
-  parentCategoryId: '',
-  sortOrder: '0',
+  categoryName: "",
+  slug: "",
+  description: "",
+  parentCategoryId: "",
+  sortOrder: "0",
   isActive: true,
 };
 
 const optionalString = (value: string | undefined) => {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
@@ -70,14 +80,16 @@ const toRequest = (values: CategoryFormValues): CategoryRequest => ({
 const toFormValues = (category: AdminCategory): CategoryFormValues => ({
   categoryName: category.categoryName,
   slug: category.slug,
-  description: category.description ?? '',
-  parentCategoryId: category.parentCategoryId ?? '',
+  description: category.description ?? "",
+  parentCategoryId: category.parentCategoryId ?? "",
   sortOrder: String(category.sortOrder),
   isActive: category.isActive,
 });
 
 export function AdminCategoriesPage() {
-  const [editingCategory, setEditingCategory] = useState<AdminCategory | null>(null);
+  const [editingCategory, setEditingCategory] = useState<AdminCategory | null>(
+    null,
+  );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminCategory | null>(null);
   const queryClient = useQueryClient();
@@ -87,12 +99,12 @@ export function AdminCategoriesPage() {
     defaultValues,
   });
   const categoriesQuery = useQuery({
-    queryKey: ['admin', 'categories'],
+    queryKey: ["admin", "categories"],
     queryFn: adminCategoriesApi.list,
   });
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "categories"] });
 
   const saveMutation = useMutation({
     mutationFn: (values: CategoryFormValues) =>
@@ -101,7 +113,7 @@ export function AdminCategoriesPage() {
         : adminCategoriesApi.create(toRequest(values)),
     onSuccess: async () => {
       await invalidate();
-      pushToast({ tone: 'success', title: 'Category saved' });
+      pushToast({ tone: "success", title: "Đã lưu danh mục" });
       setEditingCategory(null);
       setIsCreateOpen(false);
       form.reset(defaultValues);
@@ -109,10 +121,11 @@ export function AdminCategoriesPage() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (categoryId: string) => adminCategoriesApi.deactivate(categoryId),
+    mutationFn: (categoryId: string) =>
+      adminCategoriesApi.deactivate(categoryId),
     onSuccess: async () => {
       await invalidate();
-      pushToast({ tone: 'success', title: 'Category deactivated' });
+      pushToast({ tone: "success", title: "Đã ngừng sử dụng danh mục" });
       setDeleteTarget(null);
     },
   });
@@ -134,40 +147,49 @@ export function AdminCategoriesPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Admin catalog
+              Quản trị danh mục
             </p>
-            <h1 className="mt-2 text-2xl font-semibold">Categories</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Danh mục</h1>
           </div>
           <Button type="button" onClick={() => setIsCreateOpen(true)}>
             <FolderPlus size={16} aria-hidden="true" />
-            New category
+            Thêm danh mục
           </Button>
         </div>
       </section>
 
       {categoriesQuery.isLoading ? <Skeleton className="h-96 w-full" /> : null}
       {categoriesQuery.isError ? (
-        <ErrorState title="Cannot load categories" message="Admin category API failed." />
+        <ErrorState
+          title="Không thể tải danh mục"
+          message="Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại."
+        />
       ) : null}
       {!categoriesQuery.isLoading && !categoriesQuery.isError ? (
         categories.length > 0 ? (
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeaderCell>Name</TableHeaderCell>
+                <TableHeaderCell>Tên danh mục</TableHeaderCell>
                 <TableHeaderCell>Slug</TableHeaderCell>
-                <TableHeaderCell>Status</TableHeaderCell>
-                <TableHeaderCell>Sort</TableHeaderCell>
-                <TableHeaderCell className="text-right">Actions</TableHeaderCell>
+                <TableHeaderCell>Trạng thái</TableHeaderCell>
+                <TableHeaderCell>Thứ tự</TableHeaderCell>
+                <TableHeaderCell className="text-right">
+                  Thao tác
+                </TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {categories.map((category) => (
                 <TableRow key={category.id}>
-                  <TableCell className="font-medium">{category.categoryName}</TableCell>
+                  <TableCell className="font-medium">
+                    {category.categoryName}
+                  </TableCell>
                   <TableCell>{category.slug}</TableCell>
                   <TableCell>
-                    <Badge>{formatStatus(category.isActive ? 'Active' : 'Inactive')}</Badge>
+                    <Badge>
+                      {formatStatus(category.isActive ? "Active" : "Inactive")}
+                    </Badge>
                   </TableCell>
                   <TableCell>{category.sortOrder}</TableCell>
                   <TableCell>
@@ -178,7 +200,7 @@ export function AdminCategoriesPage() {
                         onClick={() => setEditingCategory(category)}
                       >
                         <Edit size={15} aria-hidden="true" />
-                        Edit
+                        Chỉnh sửa
                       </Button>
                       <Button
                         type="button"
@@ -186,7 +208,7 @@ export function AdminCategoriesPage() {
                         onClick={() => setDeleteTarget(category)}
                       >
                         <Trash2 size={15} aria-hidden="true" />
-                        Deactivate
+                        Ngừng sử dụng
                       </Button>
                     </div>
                   </TableCell>
@@ -195,13 +217,16 @@ export function AdminCategoriesPage() {
             </TableBody>
           </Table>
         ) : (
-          <EmptyState title="No categories" description="Create the first category." />
+          <EmptyState
+            title="Chưa có danh mục"
+            description="Hãy tạo danh mục đầu tiên."
+          />
         )
       ) : null}
 
       <Modal
         open={isModalOpen}
-        title={editingCategory ? 'Edit category' : 'Create category'}
+        title={editingCategory ? "Chỉnh sửa danh mục" : "Tạo danh mục"}
         onClose={() => {
           setEditingCategory(null);
           setIsCreateOpen(false);
@@ -216,10 +241,14 @@ export function AdminCategoriesPage() {
                 setIsCreateOpen(false);
               }}
             >
-              Cancel
+              Hủy
             </Button>
-            <Button type="submit" form="category-form" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : 'Save'}
+            <Button
+              type="submit"
+              form="category-form"
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
             </Button>
           </>
         }
@@ -235,21 +264,21 @@ export function AdminCategoriesPage() {
           onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
         >
           <TextInput
-            label="Category name"
+            label="Tên danh mục"
             error={form.formState.errors.categoryName?.message}
-            {...form.register('categoryName')}
+            {...form.register("categoryName")}
           />
           <TextInput
             label="Slug"
             error={form.formState.errors.slug?.message}
-            {...form.register('slug')}
+            {...form.register("slug")}
           />
           <SelectInput
-            label="Parent"
+            label="Danh mục cha"
             error={form.formState.errors.parentCategoryId?.message}
-            {...form.register('parentCategoryId')}
+            {...form.register("parentCategoryId")}
           >
-            <option value="">No parent</option>
+            <option value="">Không có danh mục cha</option>
             {categories
               .filter((category) => category.id !== editingCategory?.id)
               .map((category) => (
@@ -259,27 +288,27 @@ export function AdminCategoriesPage() {
               ))}
           </SelectInput>
           <TextInput
-            label="Sort order"
+            label="Thứ tự hiển thị"
             inputMode="numeric"
             error={form.formState.errors.sortOrder?.message}
-            {...form.register('sortOrder')}
+            {...form.register("sortOrder")}
           />
           <Textarea
-            label="Description"
+            label="Mô tả"
             rows={3}
             error={form.formState.errors.description?.message}
-            {...form.register('description')}
+            {...form.register("description")}
           />
           <label className="flex items-center gap-2 text-sm font-medium text-ink">
-            <input type="checkbox" {...form.register('isActive')} />
-            Active
+            <input type="checkbox" {...form.register("isActive")} />
+            Đang hoạt động
           </label>
         </form>
       </Modal>
 
       <Modal
         open={Boolean(deleteTarget)}
-        title="Deactivate category"
+        title="Ngừng sử dụng danh mục"
         onClose={() => setDeleteTarget(null)}
         footer={
           <>
@@ -288,15 +317,17 @@ export function AdminCategoriesPage() {
               variant="secondary"
               onClick={() => setDeleteTarget(null)}
             >
-              Cancel
+              Hủy
             </Button>
             <Button
               type="button"
               variant="danger"
               disabled={deactivateMutation.isPending}
-              onClick={() => deleteTarget && deactivateMutation.mutate(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget && deactivateMutation.mutate(deleteTarget.id)
+              }
             >
-              {deactivateMutation.isPending ? 'Deactivating...' : 'Deactivate'}
+              {deactivateMutation.isPending ? "Đang xử lý..." : "Ngừng sử dụng"}
             </Button>
           </>
         }
@@ -304,7 +335,7 @@ export function AdminCategoriesPage() {
         <p className="text-sm text-muted">
           {deactivateMutation.isError
             ? getErrorMessage(deactivateMutation.error)
-            : `Deactivate ${deleteTarget?.categoryName ?? 'this category'}?`}
+            : `Bạn có muốn ngừng sử dụng danh mục ${deleteTarget?.categoryName ?? "này"} không?`}
         </p>
       </Modal>
     </div>

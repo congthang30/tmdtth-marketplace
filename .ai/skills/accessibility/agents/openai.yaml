@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accessibility"
+  short_description: "Audit and implement accessible interfaces"
+  default_prompt: "Use $accessibility to audit and improve accessibility for this project interface."

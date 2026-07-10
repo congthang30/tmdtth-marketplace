@@ -1,4 +1,4 @@
-import { Transform, TransformFnParams } from 'class-transformer';
+import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -7,10 +7,36 @@ import {
   IsString,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
+}
+
+function normalizeStringInput(value: unknown): unknown {
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  return typeof value === 'string' ? value.trim() : value;
+}
+
+export class CheckoutShippingSelectionDto {
+  @Transform(({ value }) => normalizeStringInput(value))
+  @IsString()
+  @Matches(/^\d+$/)
+  shopId!: string;
+
+  @Transform(({ value }) => normalizeStringInput(value))
+  @IsString()
+  @Matches(/^\d+$/)
+  shippingServiceId!: string;
+
+  @Transform(({ value }) => normalizeStringInput(value))
+  @IsString()
+  @Matches(/^\d+$/)
+  shippingQuoteId!: string;
 }
 
 export class CheckoutPreviewDto {
@@ -37,4 +63,11 @@ export class CheckoutPreviewDto {
   @IsString()
   @MaxLength(50)
   voucherCode?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => CheckoutShippingSelectionDto)
+  shippingSelections?: CheckoutShippingSelectionDto[];
 }
