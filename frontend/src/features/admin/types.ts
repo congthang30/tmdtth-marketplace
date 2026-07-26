@@ -28,41 +28,26 @@ export type AdminShopListResponse = {
   meta?: ApiMeta;
 };
 
-export type ShippingCompany = {
+/**
+ * Read-only view of the fixed carrier registry (currently GHN only) as
+ * returned by GET /admin/shipping-providers. Carriers are static
+ * platform-level entities; there is no create/update/delete here since
+ * providers can no longer be registered by end users.
+ */
+export type CarrierProvider = {
   id: string;
   idString: string;
-  ownerUserId: string;
-  ownerUserIdString: string;
+  provider: string;
   code: string;
   companyName: string;
   slug: string;
-  email: string | null;
-  phoneNumber: string | null;
-  taxCode: string | null;
-  addressText: string | null;
   companyStatus: string;
-  approvedByUserId: string | null;
-  approvedByUserIdString: string | null;
-  approvedAt: string | null;
-  isDeleted: boolean;
-  createdAt: string;
-  updatedAt: string | null;
-  deletedAt: string | null;
+  isConfigured: boolean;
 };
 
-export type ShippingCompanyRequest = {
-  companyName?: string;
-  slug?: string;
-  email?: string;
-  phoneNumber?: string;
-  taxCode?: string;
-  addressText?: string;
-  companyStatus?: 'PendingApproval' | 'Approved' | 'Rejected' | 'Suspended' | 'Inactive';
-};
-
-export type ShippingCompanyListResponse = {
-  items: ShippingCompany[];
-  meta?: ApiMeta;
+export type CarrierProviderListResponse = {
+  message: string;
+  data: CarrierProvider[];
 };
 
 export type ShippingService = {
@@ -72,8 +57,7 @@ export type ShippingService = {
   shippingCompanyIdString: string;
   serviceCode: string;
   serviceName: string;
-  baseFee: string;
-  feePerKg: string;
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
@@ -81,18 +65,8 @@ export type ShippingService = {
   updatedAt: string | null;
 };
 
-export type ShippingServiceRequest = {
-  shippingCompanyId?: string;
-  serviceCode?: string;
-  serviceName?: string;
-  baseFee?: string;
-  feePerKg?: string;
-  estimatedMinDays?: number;
-  estimatedMaxDays?: number;
-  isActive?: boolean;
-};
-
 export type ShippingServiceListResponse = {
   items: ShippingService[];
   meta?: ApiMeta;
 };
+

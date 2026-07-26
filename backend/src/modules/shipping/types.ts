@@ -1,8 +1,7 @@
 export type ShippingCompanyResponse = {
   id: string;
   idString: string;
-  ownerUserId: string;
-  ownerUserIdString: string;
+  provider: string;
   code: string;
   companyName: string;
   slug: string;
@@ -11,18 +10,11 @@ export type ShippingCompanyResponse = {
   taxCode: string | null;
   addressText: string | null;
   companyStatus: string;
-  approvedByUserId: string | null;
-  approvedByUserIdString: string | null;
-  approvedAt: Date | null;
+  isConfigured: boolean;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;
   deletedAt: Date | null;
-};
-
-export type DeleteShippingCompanyResponse = {
-  id: string;
-  deleted: true;
 };
 
 export type ShippingServiceResponse = {
@@ -32,18 +24,12 @@ export type ShippingServiceResponse = {
   shippingCompanyIdString: string;
   serviceCode: string;
   serviceName: string;
-  baseFee: string;
-  feePerKg: string;
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date | null;
-};
-
-export type DeactivateShippingServiceResponse = {
-  id: string;
-  deactivated: true;
 };
 
 export type ShippingQuoteResponse = {
@@ -68,6 +54,7 @@ export type ShippingQuoteResponse = {
     serviceName: string;
   };
   destinationProvince: string;
+  destinationWard: string;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;
@@ -92,6 +79,8 @@ export type ShipmentResponse = {
   shopOrderIdString: string;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
   codAmount: string;
@@ -107,6 +96,7 @@ export type ShipmentResponse = {
     idString: string;
     companyName: string;
     slug: string;
+    provider: string;
   };
   shippingService: {
     id: string;

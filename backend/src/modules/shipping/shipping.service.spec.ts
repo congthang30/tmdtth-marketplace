@@ -1,16 +1,14 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
+import { CarrierRegistry } from './carriers/carrier.registry';
+import { CarrierClient, CarrierQuoteResult } from './carriers/carrier.types';
 import { ShippingService } from './shipping.service';
 
 type ShippingCompanyEntity = {
   id: bigint;
-  ownerUserId: bigint;
+  provider: string;
   code: string;
   companyName: string;
   slug: string;
@@ -19,8 +17,6 @@ type ShippingCompanyEntity = {
   taxCode: string | null;
   addressText: string | null;
   companyStatus: string;
-  approvedByUserId: bigint | null;
-  approvedAt: Date | null;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;
@@ -32,8 +28,7 @@ type ShippingServiceEntity = {
   shippingCompanyId: bigint;
   serviceCode: string;
   serviceName: string;
-  baseFee: { toString(): string };
-  feePerKg: { toString(): string };
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
@@ -47,6 +42,9 @@ type ShippingQuoteShopEntity = {
   slug: string;
   shopStatus: string;
   isDeleted: boolean;
+  province: string | null;
+  ward: string | null;
+  streetAddress: string | null;
 };
 
 type ShippingServiceWithCompanyEntity = ShippingServiceEntity & {
@@ -76,6 +74,9 @@ type CreateShipmentShopOrderEntity = {
     id: bigint;
     ownerUserId: bigint;
     isDeleted: boolean;
+    province: string | null;
+    ward: string | null;
+    streetAddress: string | null;
   };
   order: {
     id: bigint;
@@ -102,6 +103,8 @@ type ShipmentEntity = {
   shippingServiceId: bigint;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: { toString(): string };
   codAmount: { toString(): string };
@@ -128,8 +131,6 @@ type ShippingCompanyDelegateMock = {
   findMany: jest.Mock<Promise<ShippingCompanyEntity[]>, [unknown]>;
   count: jest.Mock<Promise<number>, [unknown]>;
   findUnique: jest.Mock<Promise<ShippingCompanyEntity | null>, [unknown]>;
-  create: jest.Mock<Promise<ShippingCompanyEntity>, [unknown]>;
-  update: jest.Mock<Promise<ShippingCompanyEntity>, [unknown]>;
 };
 
 type ShippingServiceDelegateMock = {
@@ -139,8 +140,6 @@ type ShippingServiceDelegateMock = {
     Promise<ShippingServiceEntity | ShippingServiceWithCompanyEntity | null>,
     [unknown]
   >;
-  create: jest.Mock<Promise<ShippingServiceEntity>, [unknown]>;
-  update: jest.Mock<Promise<ShippingServiceEntity>, [unknown]>;
 };
 
 type ShopDelegateMock = {
@@ -157,6 +156,10 @@ type ShopOrderDelegateMock = {
     Promise<CreateShipmentShopOrderEntity | null>,
     [unknown]
   >;
+  findUniqueOrThrow: jest.Mock<
+    Promise<CreateShipmentShopOrderEntity>,
+    [unknown]
+  >;
   count: jest.Mock<Promise<number>, [unknown]>;
   update: jest.Mock<Promise<unknown>, [unknown]>;
 };
@@ -165,6 +168,10 @@ type ShipmentDelegateMock = {
   count: jest.Mock<Promise<number>, [unknown]>;
   create: jest.Mock<Promise<ShipmentEntity>, [unknown]>;
   findFirst: jest.Mock<Promise<UpdateShipmentTrackingEntity | null>, [unknown]>;
+  findUniqueOrThrow: jest.Mock<
+    Promise<UpdateShipmentTrackingEntity>,
+    [unknown]
+  >;
   update: jest.Mock<Promise<UpdateShipmentTrackingEntity>, [unknown]>;
 };
 
@@ -239,7 +246,8 @@ type PrismaMock = {
 
 type UpdateShipmentTrackingEntity = ShipmentEntity & {
   shopOrder: CreateShipmentShopOrderEntity;
-  shippingService: ShippingServiceWithCompanyEntity;
+  shippingService: ShippingServiceEntity;
+  shippingCompany: ShippingCompanyEntity;
   items: ShipmentItemEntity[];
 };
 
@@ -260,17 +268,15 @@ function createShippingCompanyEntity(
 
   return {
     id: 10n,
-    ownerUserId: adminUser.id,
+    provider: 'GHN',
     code: '11111111-1111-4111-8111-111111111111',
-    companyName: 'Fast Ship',
-    slug: 'fast-ship',
-    email: 'ops@fast-ship.test',
+    companyName: 'Giao Hàng Nhanh',
+    slug: 'ghn',
+    email: 'ops@ghn.test',
     phoneNumber: '0900000001',
     taxCode: 'TAX001',
     addressText: '10 Logistics',
     companyStatus: 'Approved',
-    approvedByUserId: adminUser.id,
-    approvedAt: now,
     isDeleted: false,
     createdAt: now,
     updatedAt: now,
@@ -289,8 +295,7 @@ function createShippingServiceEntity(
     shippingCompanyId: 10n,
     serviceCode: 'STD',
     serviceName: 'Standard Delivery',
-    baseFee: { toString: () => '25000' },
-    feePerKg: { toString: () => '5000' },
+    carrierServiceCode: '53320',
     estimatedMinDays: 2,
     estimatedMaxDays: 5,
     isActive: true,
@@ -319,6 +324,9 @@ function createShippingQuoteShopEntity(
     slug: 'seller-home',
     shopStatus: 'Approved',
     isDeleted: false,
+    province: 'TP.HCM',
+    ward: 'Phường Bến Nghé',
+    streetAddress: '5 Kho Hàng',
     ...overrides,
   };
 }
@@ -356,6 +364,9 @@ function createShipmentShopOrderEntity(
       id: 100n,
       ownerUserId: adminUser.id,
       isDeleted: false,
+      province: 'TP.HCM',
+      ward: 'Phường Bến Nghé',
+      streetAddress: '5 Kho Hàng',
     },
     order: {
       id: 900n,
@@ -391,11 +402,13 @@ function createShipmentEntity(
     shippingServiceId: 20n,
     shipmentCode: 'SHP-20260703000000-DEMO',
     trackingNumber: 'TRACK-001',
+    carrierOrderCode: null,
+    carrierStatus: null,
     shipmentStatus: 'Pending',
     shippingFee: { toString: () => '35000' },
     codAmount: { toString: () => '0' },
     pickupAddress: 'Seller warehouse',
-    deliveryAddress: '10 Demo, Phường Bến Nghé, Quận 1, TP.HCM',
+    deliveryAddress: '10 Demo, Phường Bến Nghé, TP.HCM',
     recipientName: 'Customer Demo',
     recipientPhone: '0900000003',
     expectedDeliveryAt: new Date('2026-07-05T00:00:00.000Z'),
@@ -426,14 +439,36 @@ function createUpdateShipmentTrackingEntity(
   return {
     ...createShipmentEntity(),
     shopOrder: createShipmentShopOrderEntity({ orderStatus: 'Shipping' }),
-    shippingService: createShippingServiceWithCompanyEntity(),
+    shippingService: createShippingServiceEntity(),
+    shippingCompany: createShippingCompanyEntity(),
     items: [createShipmentItemEntity()],
     ...overrides,
   };
 }
 
-describe('ShippingService admin shipping companies', () => {
+function createFakeCarrierClient(
+  overrides: Partial<CarrierClient> = {},
+): CarrierClient {
+  return {
+    provider: 'GHN',
+    isConfigured: jest.fn().mockReturnValue(false),
+    healthCheck: jest.fn().mockResolvedValue(false),
+    getQuote: jest.fn<Promise<CarrierQuoteResult>, [unknown]>().mockResolvedValue({
+      feeAmount: 35000,
+      estimatedMinDays: 2,
+      estimatedMaxDays: 5,
+      raw: {},
+    }),
+    createOrder: jest.fn(),
+    getOrderStatus: jest.fn(),
+    ...overrides,
+  };
+}
+
+describe('ShippingService', () => {
   let prisma: PrismaMock;
+  let carrierRegistry: CarrierRegistry;
+  let fakeCarrierClient: CarrierClient;
   let service: ShippingService;
 
   beforeEach(() => {
@@ -442,8 +477,6 @@ describe('ShippingService admin shipping companies', () => {
         findMany: jest.fn<Promise<ShippingCompanyEntity[]>, [unknown]>(),
         count: jest.fn<Promise<number>, [unknown]>(),
         findUnique: jest.fn<Promise<ShippingCompanyEntity | null>, [unknown]>(),
-        create: jest.fn<Promise<ShippingCompanyEntity>, [unknown]>(),
-        update: jest.fn<Promise<ShippingCompanyEntity>, [unknown]>(),
       },
       shippingService: {
         findMany: jest.fn<Promise<ShippingServiceEntity[]>, [unknown]>(),
@@ -454,8 +487,6 @@ describe('ShippingService admin shipping companies', () => {
           >,
           [unknown]
         >(),
-        create: jest.fn<Promise<ShippingServiceEntity>, [unknown]>(),
-        update: jest.fn<Promise<ShippingServiceEntity>, [unknown]>(),
       },
       shop: {
         findUnique: jest.fn<
@@ -472,6 +503,10 @@ describe('ShippingService admin shipping companies', () => {
           Promise<CreateShipmentShopOrderEntity | null>,
           [unknown]
         >(),
+        findUniqueOrThrow: jest.fn<
+          Promise<CreateShipmentShopOrderEntity>,
+          [unknown]
+        >(),
         count: jest.fn<Promise<number>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
@@ -480,6 +515,10 @@ describe('ShippingService admin shipping companies', () => {
         create: jest.fn<Promise<ShipmentEntity>, [unknown]>(),
         findFirst: jest.fn<
           Promise<UpdateShipmentTrackingEntity | null>,
+          [unknown]
+        >(),
+        findUniqueOrThrow: jest.fn<
+          Promise<UpdateShipmentTrackingEntity>,
           [unknown]
         >(),
         update: jest.fn<Promise<UpdateShipmentTrackingEntity>, [unknown]>(),
@@ -521,174 +560,34 @@ describe('ShippingService admin shipping companies', () => {
         [(client: PrismaMock) => Promise<unknown>]
       >((callback) => callback(prisma)),
     };
-    service = new ShippingService(prisma as unknown as PrismaService);
+
+    fakeCarrierClient = createFakeCarrierClient();
+    carrierRegistry = {
+      getClient: jest.fn().mockReturnValue(fakeCarrierClient),
+      getAllClients: jest.fn().mockReturnValue([fakeCarrierClient]),
+    } as unknown as CarrierRegistry;
+
+    service = new ShippingService(
+      prisma as unknown as PrismaService,
+      carrierRegistry,
+    );
   });
 
-  it('lists non-deleted shipping companies with pagination', async () => {
+  it('lists the carrier registry with live configuration status', async () => {
     prisma.shippingCompany.findMany.mockResolvedValue([
       createShippingCompanyEntity(),
     ]);
-    prisma.shippingCompany.count.mockResolvedValue(1);
 
-    const result = await service.listShippingCompanies({ page: 2, limit: 5 });
-    const findArgs = prisma.shippingCompany.findMany.mock.calls[0][0] as {
-      where: { isDeleted: boolean };
-      skip: number;
-      take: number;
-    };
+    const result = await service.listCarrierProviders();
 
-    expect(findArgs.where).toEqual({ isDeleted: false });
-    expect(findArgs.skip).toBe(5);
-    expect(findArgs.take).toBe(5);
-    expect(result.meta).toEqual({
-      page: 2,
-      limit: 5,
-      total: 1,
-      totalPages: 1,
+    expect(result.data[0]).toMatchObject({
+      provider: 'GHN',
+      slug: 'ghn',
+      isConfigured: false,
     });
-    expect(result.items[0].slug).toBe('fast-ship');
   });
 
-  it('creates an approved company owned by the current admin', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(null);
-    prisma.shippingCompany.create.mockResolvedValue(
-      createShippingCompanyEntity(),
-    );
-
-    const result = await service.createShippingCompany(adminUser, {
-      companyName: 'Fast Ship',
-      slug: 'fast-ship',
-      email: 'ops@fast-ship.test',
-      phoneNumber: '0900000001',
-      taxCode: 'TAX001',
-      addressText: '10 Logistics',
-    });
-    const createArgs = prisma.shippingCompany.create.mock.calls[0][0] as {
-      data: {
-        ownerUserId: bigint;
-        companyStatus: string;
-        approvedByUserId: bigint;
-        approvedAt: Date;
-      };
-    };
-
-    expect(createArgs.data.ownerUserId).toBe(adminUser.id);
-    expect(createArgs.data.companyStatus).toBe('Approved');
-    expect(createArgs.data.approvedByUserId).toBe(adminUser.id);
-    expect(createArgs.data.approvedAt).toBeInstanceOf(Date);
-    expect(result.companyStatus).toBe('Approved');
-  });
-
-  it('rejects duplicate shipping company slug', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity(),
-    );
-
-    await expect(
-      service.createShippingCompany(adminUser, {
-        companyName: 'Fast Ship',
-        slug: 'fast-ship',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.shippingCompany.create).not.toHaveBeenCalled();
-  });
-
-  it('updates company status to approved with approver metadata', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity({
-        companyStatus: 'PendingApproval',
-        approvedByUserId: null,
-        approvedAt: null,
-      }),
-    );
-    prisma.shippingCompany.update.mockResolvedValue(
-      createShippingCompanyEntity({ companyStatus: 'Approved' }),
-    );
-
-    const result = await service.updateShippingCompany(adminUser, '10', {
-      companyStatus: 'Approved',
-    });
-    const updateArgs = prisma.shippingCompany.update.mock.calls[0][0] as {
-      data: {
-        companyStatus: string;
-        approvedByUserId: bigint;
-        approvedAt: Date;
-        updatedAt: Date;
-      };
-    };
-
-    expect(updateArgs.data.companyStatus).toBe('Approved');
-    expect(updateArgs.data.approvedByUserId).toBe(adminUser.id);
-    expect(updateArgs.data.approvedAt).toBeInstanceOf(Date);
-    expect(updateArgs.data.updatedAt).toBeInstanceOf(Date);
-    expect(result.companyStatus).toBe('Approved');
-  });
-
-  it('soft deletes a shipping company', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity(),
-    );
-    prisma.shippingCompany.update.mockResolvedValue(
-      createShippingCompanyEntity({
-        companyStatus: 'Inactive',
-        isDeleted: true,
-        deletedAt: new Date('2026-07-03T01:00:00.000Z'),
-      }),
-    );
-
-    const result = await service.deleteShippingCompany('10');
-    const updateArgs = prisma.shippingCompany.update.mock.calls[0][0] as {
-      where: { id: bigint };
-      data: {
-        companyStatus: string;
-        isDeleted: boolean;
-        deletedAt: Date;
-      };
-    };
-
-    expect(updateArgs.where.id).toBe(10n);
-    expect(updateArgs.data.companyStatus).toBe('Inactive');
-    expect(updateArgs.data.isDeleted).toBe(true);
-    expect(updateArgs.data.deletedAt).toBeInstanceOf(Date);
-    expect(result).toEqual({ id: '10', deleted: true });
-  });
-
-  it('does not return deleted companies by id', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity({ isDeleted: true }),
-    );
-
-    await expect(service.getShippingCompany('10')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-  });
-
-  it('lists shipping services filtered by company with pagination', async () => {
-    prisma.shippingService.findMany.mockResolvedValue([
-      createShippingServiceEntity(),
-    ]);
-    prisma.shippingService.count.mockResolvedValue(1);
-
-    const result = await service.listShippingServices({
-      page: 2,
-      limit: 5,
-      shippingCompanyId: '10',
-    });
-    const findArgs = prisma.shippingService.findMany.mock.calls[0][0] as {
-      where: { shippingCompanyId: bigint };
-      skip: number;
-      take: number;
-    };
-
-    expect(findArgs.where).toEqual({ shippingCompanyId: 10n });
-    expect(findArgs.skip).toBe(5);
-    expect(findArgs.take).toBe(5);
-    expect(result.meta.total).toBe(1);
-    expect(result.items[0].serviceCode).toBe('STD');
-  });
-
-  it('lists active shipping services for an approved shop', async () => {
-    prisma.shop.findUnique.mockResolvedValue(createShippingQuoteShopEntity());
+  it('lists active shipping services with pagination', async () => {
     prisma.shippingService.findMany.mockResolvedValue([
       createShippingServiceWithCompanyEntity(),
     ]);
@@ -696,142 +595,14 @@ describe('ShippingService admin shipping companies', () => {
 
     const result = await service.listActiveShippingServices({
       page: 1,
-      limit: 10,
-      shopId: '100',
+      limit: 20,
     });
-    const serviceFindArgs = prisma.shippingService.findMany.mock
-      .calls[0][0] as {
-      where: {
-        isActive: boolean;
-        shippingCompany: { companyStatus: string; isDeleted: boolean };
-      };
-      skip: number;
-      take: number;
-    };
 
-    expect(serviceFindArgs.where).toEqual({
-      isActive: true,
-      shippingCompany: {
-        companyStatus: 'Approved',
-        isDeleted: false,
-      },
-    });
-    expect(serviceFindArgs.skip).toBe(0);
-    expect(serviceFindArgs.take).toBe(10);
     expect(result.items[0].serviceCode).toBe('STD');
+    expect(result.meta.total).toBe(1);
   });
 
-  it('creates a shipping service for an approved company', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity(),
-    );
-    prisma.shippingService.findUnique.mockResolvedValue(null);
-    prisma.shippingService.create.mockResolvedValue(
-      createShippingServiceEntity(),
-    );
-
-    const result = await service.createShippingService({
-      shippingCompanyId: '10',
-      serviceCode: 'STD',
-      serviceName: 'Standard Delivery',
-      baseFee: '25000',
-      feePerKg: '5000',
-      estimatedMinDays: 2,
-      estimatedMaxDays: 5,
-    });
-    const createArgs = prisma.shippingService.create.mock.calls[0][0] as {
-      data: {
-        shippingCompanyId: bigint;
-        serviceCode: string;
-        baseFee: string;
-        feePerKg: string;
-        estimatedMinDays: number;
-        estimatedMaxDays: number;
-        isActive: boolean;
-      };
-    };
-
-    expect(createArgs.data.shippingCompanyId).toBe(10n);
-    expect(createArgs.data.serviceCode).toBe('STD');
-    expect(createArgs.data.baseFee).toBe('25000');
-    expect(createArgs.data.feePerKg).toBe('5000');
-    expect(createArgs.data.estimatedMinDays).toBe(2);
-    expect(createArgs.data.estimatedMaxDays).toBe(5);
-    expect(createArgs.data.isActive).toBe(true);
-    expect(result.baseFee).toBe('25000');
-  });
-
-  it('rejects duplicate shipping service code in the same company', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity(),
-    );
-    prisma.shippingService.findUnique.mockResolvedValue(
-      createShippingServiceEntity(),
-    );
-
-    await expect(
-      service.createShippingService({
-        shippingCompanyId: '10',
-        serviceCode: 'STD',
-        serviceName: 'Standard Delivery',
-        baseFee: '25000',
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.shippingService.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects creating service for a non-approved company', async () => {
-    prisma.shippingCompany.findUnique.mockResolvedValue(
-      createShippingCompanyEntity({ companyStatus: 'PendingApproval' }),
-    );
-
-    await expect(
-      service.createShippingService({
-        shippingCompanyId: '10',
-        serviceCode: 'STD',
-        serviceName: 'Standard Delivery',
-        baseFee: '25000',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.shippingService.findUnique).not.toHaveBeenCalled();
-    expect(prisma.shippingService.create).not.toHaveBeenCalled();
-  });
-
-  it('updates a shipping service and validates estimated day range', async () => {
-    prisma.shippingService.findUnique.mockResolvedValue(
-      createShippingServiceEntity(),
-    );
-
-    await expect(
-      service.updateShippingService('20', {
-        estimatedMinDays: 7,
-        estimatedMaxDays: 3,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.shippingService.update).not.toHaveBeenCalled();
-  });
-
-  it('deactivates a shipping service', async () => {
-    prisma.shippingService.findUnique.mockResolvedValue(
-      createShippingServiceEntity(),
-    );
-    prisma.shippingService.update.mockResolvedValue(
-      createShippingServiceEntity({ isActive: false }),
-    );
-
-    const result = await service.deactivateShippingService('20');
-    const updateArgs = prisma.shippingService.update.mock.calls[0][0] as {
-      where: { id: bigint };
-      data: { isActive: boolean; updatedAt: Date };
-    };
-
-    expect(updateArgs.where.id).toBe(20n);
-    expect(updateArgs.data.isActive).toBe(false);
-    expect(updateArgs.data.updatedAt).toBeInstanceOf(Date);
-    expect(result).toEqual({ id: '20', deactivated: true });
-  });
-
-  it('creates a shipping quote using service fee rules', async () => {
+  it('creates a shipping quote using the resolved carrier client', async () => {
     prisma.shop.findUnique.mockResolvedValue(createShippingQuoteShopEntity());
     prisma.shippingService.findUnique.mockResolvedValue(
       createShippingServiceWithCompanyEntity(),
@@ -842,15 +613,21 @@ describe('ShippingService admin shipping companies', () => {
       shopId: '100',
       shippingServiceId: '20',
       destinationProvince: 'TP.HCM',
+      destinationWard: 'Phường Bến Nghé',
       totalWeightGram: 1500,
     });
+
+    expect(fakeCarrierClient.getQuote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        carrierServiceCode: '53320',
+        weightGram: 1500,
+      }),
+    );
     const createArgs = prisma.shippingQuote.create.mock.calls[0][0] as {
       data: {
         shopId: bigint;
         shippingCompanyId: bigint;
         shippingServiceId: bigint;
-        destinationProvince: string;
-        totalWeightGram: number;
         quotedFee: { toString(): string };
         estimatedMinDays: number;
         estimatedMaxDays: number;
@@ -863,14 +640,12 @@ describe('ShippingService admin shipping companies', () => {
     expect(createArgs.data.shippingCompanyId).toBe(10n);
     expect(createArgs.data.shippingServiceId).toBe(20n);
     expect(createArgs.data.quotedFee.toString()).toBe('35000');
-    expect(createArgs.data.estimatedMinDays).toBe(2);
-    expect(createArgs.data.estimatedMaxDays).toBe(5);
     expect(
       createArgs.data.expiresAt.getTime() - createArgs.data.createdAt.getTime(),
     ).toBe(30 * 60 * 1000);
     expect(result.quotedFee).toBe('35000');
     expect(result.shop.slug).toBe('seller-home');
-    expect(result.shippingCompany.slug).toBe('fast-ship');
+    expect(result.shippingCompany.slug).toBe('ghn');
   });
 
   it('rejects quote for a non-approved shop', async () => {
@@ -886,6 +661,7 @@ describe('ShippingService admin shipping companies', () => {
         shopId: '100',
         shippingServiceId: '20',
         destinationProvince: 'TP.HCM',
+        destinationWard: 'Phường Bến Nghé',
         totalWeightGram: 1000,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -903,6 +679,7 @@ describe('ShippingService admin shipping companies', () => {
         shopId: '100',
         shippingServiceId: '20',
         destinationProvince: 'TP.HCM',
+        destinationWard: 'Phường Bến Nghé',
         totalWeightGram: 1000,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -997,6 +774,9 @@ describe('ShippingService admin shipping companies', () => {
         updatedAt: expect.any(Date) as Date,
       },
     });
+    // Carrier is unconfigured in tests (isConfigured() -> false), so
+    // createOrder should never actually be called; shipment stays local.
+    expect(fakeCarrierClient.createOrder).not.toHaveBeenCalled();
     expect(result.shipmentStatus).toBe('Pending');
     expect(result.shippingFee).toBe('35000');
     expect(result.items).toHaveLength(1);

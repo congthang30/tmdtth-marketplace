@@ -175,8 +175,7 @@ export type ShippingServiceOption = {
   shippingCompanyIdString: string;
   serviceCode: string;
   serviceName: string;
-  baseFee: string;
-  feePerKg: string;
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;

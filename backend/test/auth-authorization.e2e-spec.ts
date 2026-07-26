@@ -25,8 +25,7 @@ import { SellerProductsController } from '../src/modules/products/seller-product
 import { ProductsService } from '../src/modules/products/products.service';
 import { ReviewsController } from '../src/modules/reviews/reviews.controller';
 import { ReviewsService } from '../src/modules/reviews/reviews.service';
-import { AdminShippingServicesController } from '../src/modules/shipping/admin-shipping-services.controller';
-import { AdminShippingCompaniesController } from '../src/modules/shipping/admin-shipping-companies.controller';
+import { AdminShippingProvidersController } from '../src/modules/shipping/admin-shipping-providers.controller';
 import { SellerShipmentsController } from '../src/modules/shipping/seller-shipments.controller';
 import { ShippingController } from '../src/modules/shipping/shipping.controller';
 import { ShippingService } from '../src/modules/shipping/shipping.service';
@@ -139,20 +138,7 @@ const protectedRoutes: SecuredRoute[] = [
   ['seller order detail', 'get', '/api/seller/orders/1'],
   ['seller order confirm', 'patch', '/api/seller/orders/1/confirm'],
   ['seller order prepare', 'patch', '/api/seller/orders/1/prepare'],
-  ['admin shipping company list', 'get', '/api/admin/shipping-companies'],
-  ['admin shipping company detail', 'get', '/api/admin/shipping-companies/1'],
-  ['admin shipping company create', 'post', '/api/admin/shipping-companies'],
-  ['admin shipping company update', 'patch', '/api/admin/shipping-companies/1'],
-  [
-    'admin shipping company delete',
-    'delete',
-    '/api/admin/shipping-companies/1',
-  ],
-  ['admin shipping service list', 'get', '/api/admin/shipping-services'],
-  ['admin shipping service detail', 'get', '/api/admin/shipping-services/1'],
-  ['admin shipping service create', 'post', '/api/admin/shipping-services'],
-  ['admin shipping service update', 'patch', '/api/admin/shipping-services/1'],
-  ['admin shipping service delete', 'delete', '/api/admin/shipping-services/1'],
+  ['admin shipping provider list', 'get', '/api/admin/shipping-providers'],
   ['shipping quote create', 'post', '/api/shipping/quotes'],
   ['seller shipment create', 'post', '/api/seller/orders/1/shipments'],
   [
@@ -229,9 +215,8 @@ describe('Authentication and role authorization (e2e)', () => {
       meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
     });
     shippingCompanyList = jest.fn().mockResolvedValue({
-      items: [],
-      message: 'Shipping companies retrieved successfully',
-      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      data: [],
+      message: 'Carrier providers retrieved successfully',
     });
     createReview = jest.fn().mockResolvedValue({
       id: '100',
@@ -255,8 +240,7 @@ describe('Authentication and role authorization (e2e)', () => {
         AdminSellerVerificationController,
         SellerProductsController,
         SellerOrdersController,
-        AdminShippingCompaniesController,
-        AdminShippingServicesController,
+        AdminShippingProvidersController,
         ShippingController,
         SellerShipmentsController,
         ReviewsController,
@@ -287,7 +271,7 @@ describe('Authentication and role authorization (e2e)', () => {
         {
           provide: ShippingService,
           useValue: {
-            listShippingCompanies: shippingCompanyList,
+            listCarrierProviders: shippingCompanyList,
             createShippingQuote: jest.fn(),
           },
         },
@@ -466,7 +450,7 @@ describe('Authentication and role authorization (e2e)', () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     await request(server)
-      .get('/api/admin/shipping-companies')
+      .get('/api/admin/shipping-providers')
       .set('Authorization', 'Bearer seller-token')
       .expect(403);
 
@@ -477,13 +461,11 @@ describe('Authentication and role authorization (e2e)', () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     await request(server)
-      .get('/api/admin/shipping-companies')
+      .get('/api/admin/shipping-providers')
       .set('Authorization', 'Bearer admin-token')
       .expect(200);
 
-    expect(shippingCompanyList).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, limit: 20 }),
-    );
+    expect(shippingCompanyList).toHaveBeenCalledWith();
   });
 
   it('returns 403 before DTO validation when a seller calls a customer route', async () => {

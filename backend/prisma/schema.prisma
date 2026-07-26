@@ -107,8 +107,6 @@ model User {
   orderNotesCreated               OrderNote[]                  @relation("OrderNoteCreatedBy")
   orderCancellationsRequested     OrderCancellation[]          @relation("OrderCancellationRequestedBy")
   orderCancellationsApproved      OrderCancellation[]          @relation("OrderCancellationApprovedBy")
-  ownedShippingCompanies          ShippingCompany[]            @relation("ShippingCompanyOwner")
-  approvedShippingCompanies       ShippingCompany[]            @relation("ShippingCompanyApprover")
   shipmentTrackingHistoriesEdited ShipmentTrackingHistory[]    @relation("ShipmentTrackingUpdatedBy")
   returnRequests                  ReturnRequest[]              @relation("ReturnRequestUser")
   reviewedReturnRequests          ReturnRequest[]              @relation("ReturnRequestReviewer")
@@ -785,25 +783,20 @@ model OrderCancellation {
 }
 
 model ShippingCompany {
-  id               BigInt    @id @default(autoincrement()) @map("ShippingCompanyID")
-  ownerUserId      BigInt    @map("OwnerUserID")
-  code             String    @unique @default(uuid()) @map("CompanyCode") @db.Uuid
-  companyName      String    @map("CompanyName") @db.VarChar(150)
-  slug             String    @unique @map("Slug") @db.VarChar(180)
-  email            String?   @map("Email") @db.VarChar(255)
-  phoneNumber      String?   @map("PhoneNumber") @db.VarChar(20)
-  taxCode          String?   @map("TaxCode") @db.VarChar(50)
-  addressText      String?   @map("AddressText") @db.VarChar(500)
-  companyStatus    String    @default("PendingApproval") @map("CompanyStatus") @db.VarChar(50)
-  approvedByUserId BigInt?   @map("ApprovedByUserID")
-  approvedAt       DateTime? @map("ApprovedAt") @db.Timestamp(3)
-  isDeleted        Boolean   @default(false) @map("IsDeleted")
-  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
-  deletedAt        DateTime? @map("DeletedAt") @db.Timestamp(3)
-
-  ownerUser      User  @relation("ShippingCompanyOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approvedByUser User? @relation("ShippingCompanyApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id            BigInt    @id @default(autoincrement()) @map("ShippingCompanyID")
+  provider      String    @unique @map("Provider") @db.VarChar(20)
+  code          String    @unique @default(uuid()) @map("CompanyCode") @db.Uuid
+  companyName   String    @map("CompanyName") @db.VarChar(150)
+  slug          String    @unique @map("Slug") @db.VarChar(180)
+  email         String?   @map("Email") @db.VarChar(255)
+  phoneNumber   String?   @map("PhoneNumber") @db.VarChar(20)
+  taxCode       String?   @map("TaxCode") @db.VarChar(50)
+  addressText   String?   @map("AddressText") @db.VarChar(500)
+  companyStatus String    @default("Approved") @map("CompanyStatus") @db.VarChar(50)
+  isDeleted     Boolean   @default(false) @map("IsDeleted")
+  createdAt     DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt     DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt     DateTime? @map("DeletedAt") @db.Timestamp(3)
 
   services        ShippingService[]
   quotes          ShippingQuote[]
@@ -812,22 +805,22 @@ model ShippingCompany {
   shippingReviews ShippingReview[]
   complaints      Complaint[]       @relation("ComplaintAgainstShippingCompany")
 
-  @@index([ownerUserId])
   @@map("ShippingCompanies")
 }
 
 model ShippingService {
-  id                BigInt    @id @default(autoincrement()) @map("ShippingServiceID")
-  shippingCompanyId BigInt    @map("ShippingCompanyID")
-  serviceCode       String    @map("ServiceCode") @db.VarChar(50)
-  serviceName       String    @map("ServiceName") @db.VarChar(150)
-  baseFee           Decimal   @map("BaseFee") @db.Decimal(18, 2)
-  feePerKg          Decimal   @default(0) @map("FeePerKg") @db.Decimal(18, 2)
-  estimatedMinDays  Int       @default(1) @map("EstimatedMinDays")
-  estimatedMaxDays  Int       @default(3) @map("EstimatedMaxDays")
-  isActive          Boolean   @default(true) @map("IsActive")
-  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  id                 BigInt    @id @default(autoincrement()) @map("ShippingServiceID")
+  shippingCompanyId  BigInt    @map("ShippingCompanyID")
+  serviceCode        String    @map("ServiceCode") @db.VarChar(50)
+  serviceName        String    @map("ServiceName") @db.VarChar(150)
+  carrierServiceCode String    @map("CarrierServiceCode") @db.VarChar(50)
+  baseFee            Decimal   @default(0) @map("BaseFee") @db.Decimal(18, 2)
+  feePerKg           Decimal   @default(0) @map("FeePerKg") @db.Decimal(18, 2)
+  estimatedMinDays   Int       @default(1) @map("EstimatedMinDays")
+  estimatedMaxDays   Int       @default(3) @map("EstimatedMaxDays")
+  isActive           Boolean   @default(true) @map("IsActive")
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
   shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   quotes          ShippingQuote[]
@@ -849,6 +842,7 @@ model ShippingQuote {
   quotedFee           Decimal  @map("QuotedFee") @db.Decimal(18, 2)
   estimatedMinDays    Int      @map("EstimatedMinDays")
   estimatedMaxDays    Int      @map("EstimatedMaxDays")
+  carrierFeeRaw       String?  @map("CarrierFeeRaw") @db.Text
   expiresAt           DateTime @map("ExpiresAt") @db.Timestamp(3)
   createdAt           DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
 
@@ -870,6 +864,8 @@ model Shipment {
   shippingServiceId  BigInt    @map("ShippingServiceID")
   shipmentCode       String    @unique @map("ShipmentCode") @db.VarChar(80)
   trackingNumber     String?   @map("TrackingNumber") @db.VarChar(100)
+  carrierOrderCode   String?   @map("CarrierOrderCode") @db.VarChar(100)
+  carrierStatus      String?   @map("CarrierStatus") @db.VarChar(50)
   shipmentStatus     String    @default("Pending") @map("ShipmentStatus") @db.VarChar(50)
   shippingFee        Decimal   @default(0) @map("ShippingFee") @db.Decimal(18, 2)
   codAmount          Decimal   @default(0) @map("CODAmount") @db.Decimal(18, 2)

@@ -74,11 +74,6 @@ const users = [
     phoneNumber: '0900000003',
     fullName: 'Customer Demo',
   },
-  {
-    email: 'shipper@example.com',
-    phoneNumber: '0900000004',
-    fullName: 'Shipping Owner Demo',
-  },
 ];
 
 const categoryTree = [
@@ -178,48 +173,33 @@ const attributeSeeds = [
   },
 ];
 
+// Carriers are a fixed registry (not user-owned): GHN (Giao Hang Nhanh) via
+// its real sandbox/test API. serviceCode is our internal identifier;
+// carrierServiceCode is what gets sent to the carrier API (GHN
+// service_type_id).
 const shippingCompanySeeds = [
   {
-    companyName: 'Giao Hàng Demo',
-    slug: 'giao-hang-demo',
-    email: 'contact@giaohangdemo.test',
-    phoneNumber: '19001001',
-    taxCode: 'GHDEMO001',
-    addressText: '1 Đường Demo, Quận 1, TP.HCM',
+    provider: 'GHN',
+    companyName: 'Giao Hàng Nhanh (GHN)',
+    slug: 'ghn',
+    email: 'api@ghn.vn',
+    phoneNumber: '19001234',
+    taxCode: null,
+    addressText: null,
     services: [
       {
-        serviceCode: 'STANDARD',
-        serviceName: 'Standard',
-        baseFee: '20000',
-        feePerKg: '5000',
-        estimatedMinDays: 2,
-        estimatedMaxDays: 5,
-      },
-      {
-        serviceCode: 'EXPRESS',
-        serviceName: 'Express',
-        baseFee: '35000',
-        feePerKg: '8000',
-        estimatedMinDays: 1,
-        estimatedMaxDays: 2,
-      },
-    ],
-  },
-  {
-    companyName: 'Nhanh Express Demo',
-    slug: 'nhanh-express-demo',
-    email: 'contact@nhanhexpressdemo.test',
-    phoneNumber: '19001002',
-    taxCode: 'NXDEMO001',
-    addressText: '2 Đường Demo, Quận 3, TP.HCM',
-    services: [
-      {
-        serviceCode: 'STANDARD',
-        serviceName: 'Standard',
-        baseFee: '22000',
-        feePerKg: '5500',
+        serviceCode: 'GHN_STANDARD',
+        serviceName: 'GHN Chuẩn',
+        carrierServiceCode: '2',
         estimatedMinDays: 2,
         estimatedMaxDays: 4,
+      },
+      {
+        serviceCode: 'GHN_EXPRESS',
+        serviceName: 'GHN Nhanh',
+        carrierServiceCode: '5',
+        estimatedMinDays: 1,
+        estimatedMaxDays: 2,
       },
     ],
   },
@@ -480,30 +460,26 @@ async function seedAttributes(categoryBySlug) {
   return attributeByCategoryAndName;
 }
 
-async function seedShipping(seededUsers) {
-  const admin = seededUsers['admin@example.com'];
-  const shipper = seededUsers['shipper@example.com'];
+async function seedShipping() {
   const companies = {};
 
   for (const companySeed of shippingCompanySeeds) {
     const company = await prisma.shippingCompany.upsert({
       where: { slug: companySeed.slug },
       update: {
-        ownerUserId: shipper.id,
+        provider: companySeed.provider,
         companyName: companySeed.companyName,
         email: companySeed.email,
         phoneNumber: companySeed.phoneNumber,
         taxCode: companySeed.taxCode,
         addressText: companySeed.addressText,
         companyStatus: 'Approved',
-        approvedByUserId: admin.id,
-        approvedAt: now(),
         isDeleted: false,
         deletedAt: null,
         updatedAt: now(),
       },
       create: {
-        ownerUserId: shipper.id,
+        provider: companySeed.provider,
         companyName: companySeed.companyName,
         slug: companySeed.slug,
         email: companySeed.email,
@@ -511,8 +487,6 @@ async function seedShipping(seededUsers) {
         taxCode: companySeed.taxCode,
         addressText: companySeed.addressText,
         companyStatus: 'Approved',
-        approvedByUserId: admin.id,
-        approvedAt: now(),
       },
     });
 
@@ -526,8 +500,7 @@ async function seedShipping(seededUsers) {
         },
         update: {
           serviceName: serviceSeed.serviceName,
-          baseFee: serviceSeed.baseFee,
-          feePerKg: serviceSeed.feePerKg,
+          carrierServiceCode: serviceSeed.carrierServiceCode,
           estimatedMinDays: serviceSeed.estimatedMinDays,
           estimatedMaxDays: serviceSeed.estimatedMaxDays,
           isActive: true,
@@ -537,8 +510,7 @@ async function seedShipping(seededUsers) {
           shippingCompanyId: company.id,
           serviceCode: serviceSeed.serviceCode,
           serviceName: serviceSeed.serviceName,
-          baseFee: serviceSeed.baseFee,
-          feePerKg: serviceSeed.feePerKg,
+          carrierServiceCode: serviceSeed.carrierServiceCode,
           estimatedMinDays: serviceSeed.estimatedMinDays,
           estimatedMaxDays: serviceSeed.estimatedMaxDays,
           isActive: true,
@@ -935,7 +907,7 @@ async function main() {
   await seedPaymentMethods();
   const categoryBySlug = await seedCategories();
   const attributeByCategoryAndName = await seedAttributes(categoryBySlug);
-  await seedShipping(seededUsers);
+  await seedShipping();
   const shop = await seedDemoShop(seededUsers);
   await seedSellerVerification({ seededUsers, shop });
   await seedProducts({

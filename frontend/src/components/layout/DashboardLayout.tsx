@@ -1,5 +1,4 @@
 import {
-  ClipboardList,
   FolderTree,
   LayoutDashboard,
   PackagePlus,
@@ -59,15 +58,9 @@ const navItems = [
     roles: ["Admin"],
   },
   {
-    to: "/admin/shipping/companies",
-    label: "Đơn vị vận chuyển",
+    to: "/admin/shipping/providers",
+    label: "Đối tác vận chuyển",
     icon: Truck,
-    roles: ["Admin"],
-  },
-  {
-    to: "/admin/shipping/services",
-    label: "Dịch vụ vận chuyển",
-    icon: ClipboardList,
     roles: ["Admin"],
   },
 ] satisfies Array<{

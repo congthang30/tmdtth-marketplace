@@ -45,4 +45,23 @@ export class SellerShipmentsController {
       dto,
     );
   }
+
+  /**
+   * Retries registering the shipment with its carrier (GHN/GHTK) when the
+   * initial createSellerShipment call succeeded locally but the carrier
+   * order-creation call failed (e.g. carrier API was down). Also refreshes
+   * the cached carrier status when the shipment is already registered.
+   */
+  @Post(':shipmentId/sync')
+  syncSellerShipment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('shopOrderId') shopOrderId: string,
+    @Param('shipmentId') shipmentId: string,
+  ) {
+    return this.shippingService.syncSellerShipment(
+      user,
+      shopOrderId,
+      shipmentId,
+    );
+  }
 }

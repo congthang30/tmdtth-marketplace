@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { FolderTree, ShieldCheck, Store, Truck } from "lucide-react";
+import { FolderTree, Store, Truck } from "lucide-react";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   adminCategoriesApi,
-  adminShippingCompaniesApi,
-  adminShippingServicesApi,
+  adminShippingProvidersApi,
   adminShopsApi,
 } from "../api";
 
@@ -18,24 +17,22 @@ export function AdminDashboardPage() {
     queryKey: ["admin", "shops", 1, "PendingApproval"],
     queryFn: () => adminShopsApi.list(1, 5, "PendingApproval"),
   });
-  const companiesQuery = useQuery({
-    queryKey: ["admin", "shipping-companies", 1],
-    queryFn: () => adminShippingCompaniesApi.list(1, 5),
-  });
-  const servicesQuery = useQuery({
-    queryKey: ["admin", "shipping-services", 1],
-    queryFn: () => adminShippingServicesApi.list(1, 5),
+  const providersQuery = useQuery({
+    queryKey: ["admin", "shipping-providers"],
+    queryFn: () => adminShippingProvidersApi.list(),
   });
 
   const isLoading =
-    categoriesQuery.isLoading ||
-    shopsQuery.isLoading ||
-    companiesQuery.isLoading ||
-    servicesQuery.isLoading;
+    categoriesQuery.isLoading || shopsQuery.isLoading || providersQuery.isLoading;
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
+
+  const configuredProviders =
+    providersQuery.data?.filter((provider) => provider.isConfigured).length ??
+    0;
+  const totalProviders = providersQuery.data?.length ?? 0;
 
   const stats = [
     {
@@ -51,16 +48,10 @@ export function AdminDashboardPage() {
       to: "/admin/shops",
     },
     {
-      label: "Đơn vị vận chuyển",
-      value: companiesQuery.data?.meta?.total ?? 0,
+      label: "Đối tác vận chuyển đã kết nối",
+      value: `${configuredProviders}/${totalProviders}`,
       icon: Truck,
-      to: "/admin/shipping/companies",
-    },
-    {
-      label: "Dịch vụ vận chuyển",
-      value: servicesQuery.data?.meta?.total ?? 0,
-      icon: ShieldCheck,
-      to: "/admin/shipping/services",
+      to: "/admin/shipping/providers",
     },
   ];
 

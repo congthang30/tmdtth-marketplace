@@ -127,8 +127,7 @@ export type ShippingServiceOption = {
   shippingCompanyIdString: string;
   serviceCode: string;
   serviceName: string;
-  baseFee: string;
-  feePerKg: string;
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
@@ -143,6 +142,7 @@ export type ShippingQuoteRequest = {
   shopId: string;
   shippingServiceId: string;
   destinationProvince: string;
+  destinationWard: string;
   totalWeightGram: number;
 };
 
@@ -153,6 +153,7 @@ export type ShippingQuote = {
   shippingCompany: CheckoutShippingSelection['shippingCompany'];
   shippingService: CheckoutShippingSelection['shippingService'];
   destinationProvince: string;
+  destinationWard: string;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;

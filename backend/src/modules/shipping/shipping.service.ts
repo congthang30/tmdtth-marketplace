@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,19 +9,14 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { createPaginatedResult } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { CarrierRegistry } from './carriers/carrier.registry';
+import { CarrierApiError } from './carriers/carrier.types';
 import { ActiveShippingServiceQueryDto } from './dto/active-shipping-service-query.dto';
-import { CreateShippingCompanyDto } from './dto/create-shipping-company.dto';
 import { CreateShippingQuoteDto } from './dto/create-shipping-quote.dto';
-import { CreateShippingServiceDto } from './dto/create-shipping-service.dto';
 import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { ShippingServiceQueryDto } from './dto/shipping-service-query.dto';
-import { UpdateShippingCompanyDto } from './dto/update-shipping-company.dto';
-import { UpdateShippingServiceDto } from './dto/update-shipping-service.dto';
 import { UpdateShipmentTrackingDto } from './dto/update-shipment-tracking.dto';
 import {
-  DeactivateShippingServiceResponse,
-  DeleteShippingCompanyResponse,
-  ShippingCompanyResponse,
   ShippingQuoteResponse,
   ShippingServiceResponse,
   ShipmentItemResponse,
@@ -30,7 +24,6 @@ import {
 } from './types';
 
 const SHIPPING_COMPANY_STATUS_APPROVED = 'Approved';
-const SHIPPING_COMPANY_STATUS_INACTIVE = 'Inactive';
 const PUBLIC_SHOP_STATUS_APPROVED = 'Approved';
 const SHIPPING_QUOTE_TTL_MS = 30 * 60 * 1000;
 const SHOP_ORDER_STATUS_PREPARED = 'Prepared';
@@ -44,6 +37,8 @@ const SHIPMENT_STATUS_PENDING = 'Pending';
 const SHIPMENT_STATUS_PICKED_UP = 'PickedUp';
 const SHIPMENT_STATUS_IN_TRANSIT = 'InTransit';
 const SHIPMENT_STATUS_DELIVERED = 'Delivered';
+const SHIPMENT_STATUS_FAILED = 'Failed';
+const SHIPMENT_STATUS_CANCELLED = 'Cancelled';
 const PARENT_ORDER_PRE_SHIPPING_STATUSES = [
   'Created',
   'WaitingForSeller',
@@ -61,20 +56,32 @@ const SHIPMENT_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   [SHIPMENT_STATUS_PENDING]: [
     SHIPMENT_STATUS_PICKED_UP,
     SHIPMENT_STATUS_IN_TRANSIT,
+    SHIPMENT_STATUS_FAILED,
+    SHIPMENT_STATUS_CANCELLED,
   ],
   [SHIPMENT_STATUS_PICKED_UP]: [
     SHIPMENT_STATUS_IN_TRANSIT,
     SHIPMENT_STATUS_DELIVERED,
+    SHIPMENT_STATUS_FAILED,
   ],
-  [SHIPMENT_STATUS_IN_TRANSIT]: [SHIPMENT_STATUS_DELIVERED],
+  [SHIPMENT_STATUS_IN_TRANSIT]: [
+    SHIPMENT_STATUS_DELIVERED,
+    SHIPMENT_STATUS_FAILED,
+  ],
   [SHIPMENT_STATUS_DELIVERED]: [],
+  [SHIPMENT_STATUS_FAILED]: [],
+  [SHIPMENT_STATUS_CANCELLED]: [],
 };
 const INVENTORY_TRANSACTION_COMPLETE_ORDER = 'COMPLETE_ORDER';
 const INVENTORY_REFERENCE_TYPE_ORDER_ITEM = 'ORDER_ITEM';
+/** Default pickup location used when a shop has not set its own address. */
+const PLATFORM_PICKUP_PROVINCE = 'Thành phố Hà Nội';
+const PLATFORM_PICKUP_WARD = 'Phường Hoàn Kiếm';
+const PLATFORM_PICKUP_STREET = '1 Đường Điện Biên Phủ';
 
 type ShippingCompanyEntity = {
   id: bigint;
-  ownerUserId: bigint;
+  provider: string;
   code: string;
   companyName: string;
   slug: string;
@@ -83,8 +90,6 @@ type ShippingCompanyEntity = {
   taxCode: string | null;
   addressText: string | null;
   companyStatus: string;
-  approvedByUserId: bigint | null;
-  approvedAt: Date | null;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;
@@ -96,8 +101,7 @@ type ShippingServiceEntity = {
   shippingCompanyId: bigint;
   serviceCode: string;
   serviceName: string;
-  baseFee: { toString(): string };
-  feePerKg: { toString(): string };
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
@@ -111,6 +115,9 @@ type ShippingQuoteShopEntity = {
   slug: string;
   shopStatus: string;
   isDeleted: boolean;
+  province: string | null;
+  ward: string | null;
+  streetAddress: string | null;
 };
 
 type ShippingServiceWithCompanyEntity = ShippingServiceEntity & {
@@ -137,6 +144,9 @@ const createShipmentShopOrderInclude = {
       id: true,
       ownerUserId: true,
       isDeleted: true,
+      province: true,
+      ward: true,
+      streetAddress: true,
     },
   },
   order: {
@@ -184,11 +194,8 @@ const updateShipmentTrackingInclude = {
       },
     },
   },
-  shippingService: {
-    include: {
-      shippingCompany: true,
-    },
-  },
+  shippingCompany: true,
+  shippingService: true,
   items: {
     orderBy: [{ createdAt: 'asc' }],
   },
@@ -205,6 +212,8 @@ type ShipmentEntity = {
   shippingServiceId: bigint;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: { toString(): string };
   codAmount: { toString(): string };
@@ -229,121 +238,43 @@ type ShipmentItemEntity = {
 
 @Injectable()
 export class ShippingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly carrierRegistry: CarrierRegistry,
+  ) {}
 
-  async listShippingCompanies(query: PaginationQueryDto) {
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-    const skip = (page - 1) * limit;
-    const where = { isDeleted: false };
+  /**
+   * Public read-only listing of the fixed carrier registry (GHN/GHTK),
+   * including each carrier's live health-check status, for admins to
+   * monitor connectivity and for the checkout flow to filter available
+   * carriers.
+   */
+  async listCarrierProviders() {
+    const companies = await this.prisma.shippingCompany.findMany({
+      where: { isDeleted: false },
+      orderBy: [{ companyName: 'asc' }],
+    });
 
-    const [companies, total] = await Promise.all([
-      this.prisma.shippingCompany.findMany({
-        where,
-        orderBy: [{ createdAt: 'desc' }, { companyName: 'asc' }],
-        skip,
-        take: limit,
+    const withHealth = await Promise.all(
+      companies.map(async (company) => {
+        const client = this.carrierRegistry.getClient(company.provider);
+        const isConfigured = client.isConfigured();
+        return {
+          id: company.id.toString(),
+          idString: company.id.toString(),
+          provider: company.provider,
+          code: company.code,
+          companyName: company.companyName,
+          slug: company.slug,
+          companyStatus: company.companyStatus,
+          isConfigured,
+        };
       }),
-      this.prisma.shippingCompany.count({ where }),
-    ]);
-
-    return createPaginatedResult({
-      items: companies.map((company) =>
-        this.toShippingCompanyResponse(company),
-      ),
-      page,
-      limit,
-      total,
-      message: 'Shipping companies retrieved successfully',
-    });
-  }
-
-  async getShippingCompany(
-    shippingCompanyId: string,
-  ): Promise<ShippingCompanyResponse> {
-    const id = this.parseShippingCompanyId(shippingCompanyId);
-    const company = await this.requireShippingCompany(id);
-
-    return this.toShippingCompanyResponse(company);
-  }
-
-  async createShippingCompany(
-    user: AuthenticatedUser,
-    dto: CreateShippingCompanyDto,
-  ): Promise<ShippingCompanyResponse> {
-    await this.ensureSlugAvailable(dto.slug);
-
-    const now = new Date();
-    const companyStatus = dto.companyStatus ?? SHIPPING_COMPANY_STATUS_APPROVED;
-    const approvedByUserId =
-      companyStatus === SHIPPING_COMPANY_STATUS_APPROVED ? user.id : null;
-    const approvedAt =
-      companyStatus === SHIPPING_COMPANY_STATUS_APPROVED ? now : null;
-    const company = await this.prisma.shippingCompany.create({
-      data: {
-        ownerUserId: user.id,
-        companyName: dto.companyName,
-        slug: dto.slug,
-        email: this.normalizeNullableText(dto.email),
-        phoneNumber: this.normalizeNullableText(dto.phoneNumber),
-        taxCode: this.normalizeNullableText(dto.taxCode),
-        addressText: this.normalizeNullableText(dto.addressText),
-        companyStatus,
-        approvedByUserId,
-        approvedAt,
-        isDeleted: false,
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-
-    return this.toShippingCompanyResponse(company);
-  }
-
-  async updateShippingCompany(
-    user: AuthenticatedUser,
-    shippingCompanyId: string,
-    dto: UpdateShippingCompanyDto,
-  ): Promise<ShippingCompanyResponse> {
-    const id = this.parseShippingCompanyId(shippingCompanyId);
-    const company = await this.requireShippingCompany(id);
-    const data = await this.buildUpdateData(user, company, dto);
-
-    if (Object.keys(data).length === 0) {
-      return this.toShippingCompanyResponse(company);
-    }
-
-    const updatedCompany = await this.prisma.shippingCompany.update({
-      where: { id },
-      data: {
-        ...data,
-        updatedAt: new Date(),
-      },
-    });
-
-    return this.toShippingCompanyResponse(updatedCompany);
-  }
-
-  async deleteShippingCompany(
-    shippingCompanyId: string,
-  ): Promise<DeleteShippingCompanyResponse> {
-    const id = this.parseShippingCompanyId(shippingCompanyId);
-    await this.requireShippingCompany(id);
-
-    const now = new Date();
-    await this.prisma.shippingCompany.update({
-      where: { id },
-      data: {
-        companyStatus: SHIPPING_COMPANY_STATUS_INACTIVE,
-        isDeleted: true,
-        deletedAt: now,
-        updatedAt: now,
-      },
-    });
+    );
 
     return {
-      id: id.toString(),
-      deleted: true,
+      message: 'Carrier providers retrieved successfully',
+      data: withHealth,
     };
   }
 
@@ -413,90 +344,6 @@ export class ShippingService {
     });
   }
 
-  async getShippingService(
-    shippingServiceId: string,
-  ): Promise<ShippingServiceResponse> {
-    const id = this.parseShippingServiceId(shippingServiceId);
-    const service = await this.requireShippingService(id);
-
-    return this.toShippingServiceResponse(service);
-  }
-
-  async createShippingService(
-    dto: CreateShippingServiceDto,
-  ): Promise<ShippingServiceResponse> {
-    const shippingCompanyId = this.parseShippingCompanyId(
-      dto.shippingCompanyId,
-    );
-    await this.requireApprovedShippingCompany(shippingCompanyId);
-    await this.ensureServiceCodeAvailable(shippingCompanyId, dto.serviceCode);
-
-    const estimatedMinDays = dto.estimatedMinDays ?? 1;
-    const estimatedMaxDays = dto.estimatedMaxDays ?? 3;
-    this.ensureValidEstimatedDays(estimatedMinDays, estimatedMaxDays);
-
-    const now = new Date();
-    const service = await this.prisma.shippingService.create({
-      data: {
-        shippingCompanyId,
-        serviceCode: dto.serviceCode,
-        serviceName: dto.serviceName,
-        baseFee: dto.baseFee,
-        feePerKg: dto.feePerKg ?? '0',
-        estimatedMinDays,
-        estimatedMaxDays,
-        isActive: dto.isActive ?? true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-
-    return this.toShippingServiceResponse(service);
-  }
-
-  async updateShippingService(
-    shippingServiceId: string,
-    dto: UpdateShippingServiceDto,
-  ): Promise<ShippingServiceResponse> {
-    const id = this.parseShippingServiceId(shippingServiceId);
-    const service = await this.requireShippingService(id);
-    const data = await this.buildShippingServiceUpdateData(service, dto);
-
-    if (Object.keys(data).length === 0) {
-      return this.toShippingServiceResponse(service);
-    }
-
-    const updatedService = await this.prisma.shippingService.update({
-      where: { id },
-      data: {
-        ...data,
-        updatedAt: new Date(),
-      },
-    });
-
-    return this.toShippingServiceResponse(updatedService);
-  }
-
-  async deactivateShippingService(
-    shippingServiceId: string,
-  ): Promise<DeactivateShippingServiceResponse> {
-    const id = this.parseShippingServiceId(shippingServiceId);
-    await this.requireShippingService(id);
-
-    await this.prisma.shippingService.update({
-      where: { id },
-      data: {
-        isActive: false,
-        updatedAt: new Date(),
-      },
-    });
-
-    return {
-      id: id.toString(),
-      deactivated: true,
-    };
-  }
-
   async createShippingQuote(
     dto: CreateShippingQuoteDto,
   ): Promise<ShippingQuoteResponse> {
@@ -508,7 +355,42 @@ export class ShippingService {
       this.requireQuotableShop(shopId),
       this.requireQuotableShippingService(shippingServiceId),
     ]);
-    const quotedFee = this.calculateShippingFee(service, dto.totalWeightGram);
+
+    const client = this.carrierRegistry.getClient(
+      service.shippingCompany.provider,
+    );
+
+    let feeAmount: number;
+    let estimatedMinDays = service.estimatedMinDays;
+    let estimatedMaxDays = service.estimatedMaxDays;
+    let carrierFeeRaw: string | null = null;
+
+    try {
+      const quote = await client.getQuote({
+        carrierServiceCode: service.carrierServiceCode,
+        from: this.resolvePlatformPickupAddress(shop),
+        to: {
+          provinceName: dto.destinationProvince,
+          wardName: dto.destinationWard,
+          streetAddress: '',
+        },
+        weightGram: dto.totalWeightGram,
+      });
+      feeAmount = quote.feeAmount;
+      estimatedMinDays = quote.estimatedMinDays;
+      estimatedMaxDays = quote.estimatedMaxDays;
+      carrierFeeRaw = JSON.stringify(quote.raw);
+    } catch (error) {
+      if (error instanceof CarrierApiError) {
+        throw new BadRequestException({
+          code: 'CARRIER_QUOTE_FAILED',
+          message: error.message,
+          details: [{ provider: error.provider }],
+        });
+      }
+      throw error;
+    }
+
     const now = new Date();
     const quote = await this.prisma.shippingQuote.create({
       data: {
@@ -517,15 +399,21 @@ export class ShippingService {
         shippingServiceId: service.id,
         destinationProvince: dto.destinationProvince,
         totalWeightGram: dto.totalWeightGram,
-        quotedFee,
-        estimatedMinDays: service.estimatedMinDays,
-        estimatedMaxDays: service.estimatedMaxDays,
+        quotedFee: new Prisma.Decimal(feeAmount),
+        estimatedMinDays,
+        estimatedMaxDays,
+        carrierFeeRaw,
         expiresAt: new Date(now.getTime() + SHIPPING_QUOTE_TTL_MS),
         createdAt: now,
       },
     });
 
-    return this.toShippingQuoteResponse(quote, shop, service);
+    return this.toShippingQuoteResponse(
+      quote,
+      shop,
+      service,
+      dto.destinationWard,
+    );
   }
 
   async createSellerShipment(
@@ -541,155 +429,307 @@ export class ShippingService {
       ? this.parseShippingQuoteId(dto.shippingQuoteId)
       : null;
 
-    return this.prisma.$transaction(async (tx) => {
-      const shopOrder = await tx.shopOrder.findFirst({
-        where: {
-          id,
-          shop: {
-            ownerUserId: user.id,
-            isDeleted: false,
-          },
-        },
-        include: createShipmentShopOrderInclude,
-      });
-
-      if (!shopOrder) {
-        throw new NotFoundException({
-          code: 'SHOP_ORDER_NOT_FOUND',
-          message: 'Shop order not found',
-          details: [{ field: 'shopOrderId' }],
-        });
-      }
-
-      if (shopOrder.orderStatus !== SHOP_ORDER_STATUS_PREPARED) {
-        throw new BadRequestException({
-          code: 'SHOP_ORDER_INVALID_STATUS',
-          message: 'Only prepared shop orders can create shipments',
-          details: [
-            {
-              field: 'orderStatus',
-              currentStatus: shopOrder.orderStatus,
-              allowedStatus: SHOP_ORDER_STATUS_PREPARED,
+    const { shipment, service, shipmentItems, shopOrder } =
+      await this.prisma.$transaction(async (tx) => {
+        const shopOrder = await tx.shopOrder.findFirst({
+          where: {
+            id,
+            shop: {
+              ownerUserId: user.id,
+              isDeleted: false,
             },
-          ],
+          },
+          include: createShipmentShopOrderInclude,
         });
-      }
 
-      if (shopOrder.items.length === 0) {
-        throw new BadRequestException({
-          code: 'SHOP_ORDER_HAS_NO_ITEMS',
-          message: 'Shop order has no items to ship',
-          details: [{ field: 'shopOrderId' }],
+        if (!shopOrder) {
+          throw new NotFoundException({
+            code: 'SHOP_ORDER_NOT_FOUND',
+            message: 'Shop order not found',
+            details: [{ field: 'shopOrderId' }],
+          });
+        }
+
+        if (shopOrder.orderStatus !== SHOP_ORDER_STATUS_PREPARED) {
+          throw new BadRequestException({
+            code: 'SHOP_ORDER_INVALID_STATUS',
+            message: 'Only prepared shop orders can create shipments',
+            details: [
+              {
+                field: 'orderStatus',
+                currentStatus: shopOrder.orderStatus,
+                allowedStatus: SHOP_ORDER_STATUS_PREPARED,
+              },
+            ],
+          });
+        }
+
+        if (shopOrder.items.length === 0) {
+          throw new BadRequestException({
+            code: 'SHOP_ORDER_HAS_NO_ITEMS',
+            message: 'Shop order has no items to ship',
+            details: [{ field: 'shopOrderId' }],
+          });
+        }
+
+        const existingShipmentCount = await tx.shipment.count({
+          where: { shopOrderId: shopOrder.id },
         });
-      }
 
-      const existingShipmentCount = await tx.shipment.count({
-        where: { shopOrderId: shopOrder.id },
-      });
+        if (existingShipmentCount > 0) {
+          throw new BadRequestException({
+            code: 'SHOP_ORDER_SHIPMENT_EXISTS',
+            message: 'Shipment already exists for this shop order',
+            details: [{ field: 'shopOrderId' }],
+          });
+        }
 
-      if (existingShipmentCount > 0) {
-        throw new BadRequestException({
-          code: 'SHOP_ORDER_SHIPMENT_EXISTS',
-          message: 'Shipment already exists for this shop order',
-          details: [{ field: 'shopOrderId' }],
+        const service = await this.requireShipmentShippingService(
+          tx,
+          shippingServiceId,
+        );
+        const now = new Date();
+        const weightGram = this.calculateShopOrderWeightGram(shopOrder);
+        const shippingFee = shippingQuoteId
+          ? await this.requireShipmentQuoteFee(
+              tx,
+              shippingQuoteId,
+              shopOrder,
+              service,
+              now,
+            )
+          : null;
+
+        const shipment = await tx.shipment.create({
+          data: {
+            shopOrderId: shopOrder.id,
+            shippingCompanyId: service.shippingCompanyId,
+            shippingServiceId: service.id,
+            shipmentCode: this.createBusinessCode('SHP', now),
+            trackingNumber: this.normalizeNullableText(dto.trackingNumber),
+            shipmentStatus: SHIPMENT_STATUS_PENDING,
+            shippingFee: shippingFee ?? new Prisma.Decimal(0),
+            codAmount: new Prisma.Decimal(0),
+            pickupAddress: this.normalizeNullableText(dto.pickupAddress),
+            deliveryAddress: this.buildDeliveryAddress(shopOrder),
+            recipientName: shopOrder.order.receiverName,
+            recipientPhone: shopOrder.order.receiverPhone,
+            expectedDeliveryAt: dto.expectedDeliveryAt
+              ? new Date(dto.expectedDeliveryAt)
+              : null,
+            createdAt: now,
+            updatedAt: now,
+          },
         });
-      }
+        const shipmentItems: ShipmentItemEntity[] = [];
 
-      const service = await this.requireShipmentShippingService(
-        tx,
-        shippingServiceId,
-      );
-      const now = new Date();
-      const shippingFee = shippingQuoteId
-        ? await this.requireShipmentQuoteFee(
-            tx,
-            shippingQuoteId,
-            shopOrder,
-            service,
-            now,
-          )
-        : this.calculateShippingFee(
-            service,
-            this.calculateShopOrderWeightGram(shopOrder),
-          );
-      const shipment = await tx.shipment.create({
-        data: {
-          shopOrderId: shopOrder.id,
-          shippingCompanyId: service.shippingCompanyId,
-          shippingServiceId: service.id,
-          shipmentCode: this.createBusinessCode('SHP', now),
-          trackingNumber: this.normalizeNullableText(dto.trackingNumber),
-          shipmentStatus: SHIPMENT_STATUS_PENDING,
-          shippingFee,
-          codAmount: new Prisma.Decimal(0),
-          pickupAddress: this.normalizeNullableText(dto.pickupAddress),
-          deliveryAddress: this.buildDeliveryAddress(shopOrder),
-          recipientName: shopOrder.order.receiverName,
-          recipientPhone: shopOrder.order.receiverPhone,
-          expectedDeliveryAt: dto.expectedDeliveryAt
-            ? new Date(dto.expectedDeliveryAt)
-            : null,
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-      const shipmentItems: ShipmentItemEntity[] = [];
+        for (const item of shopOrder.items) {
+          const shipmentItem = await tx.shipmentItem.create({
+            data: {
+              shipmentId: shipment.id,
+              orderItemId: item.id,
+              quantity: item.quantity,
+              createdAt: now,
+            },
+          });
+          shipmentItems.push(shipmentItem);
+        }
 
-      for (const item of shopOrder.items) {
-        const shipmentItem = await tx.shipmentItem.create({
+        await tx.shipmentTrackingHistory.create({
           data: {
             shipmentId: shipment.id,
-            orderItemId: item.id,
-            quantity: item.quantity,
+            fromStatus: null,
+            toStatus: SHIPMENT_STATUS_PENDING,
+            note: this.normalizeNullableText(dto.note) ?? 'Shipment created',
+            updatedByUserId: user.id,
             createdAt: now,
           },
         });
-        shipmentItems.push(shipmentItem);
-      }
 
-      await tx.shipmentTrackingHistory.create({
-        data: {
-          shipmentId: shipment.id,
-          fromStatus: null,
-          toStatus: SHIPMENT_STATUS_PENDING,
-          note: this.normalizeNullableText(dto.note) ?? 'Shipment created',
-          updatedByUserId: user.id,
-          createdAt: now,
-        },
+        await tx.shopOrder.update({
+          where: { id: shopOrder.id },
+          data: {
+            shippingCompanyId: service.shippingCompanyId,
+            shippingServiceId: service.id,
+            shippingQuoteId,
+            shippingFeeAmount: shippingFee ?? new Prisma.Decimal(0),
+            orderStatus: SHOP_ORDER_STATUS_SHIPPING,
+            updatedAt: now,
+          },
+        });
+
+        await tx.orderStatusHistory.create({
+          data: {
+            shopOrderId: shopOrder.id,
+            fromStatus: shopOrder.orderStatus,
+            toStatus: SHOP_ORDER_STATUS_SHIPPING,
+            changedByUserId: user.id,
+            reason: 'Shipment created',
+            createdAt: now,
+          },
+        });
+
+        await this.updateParentOrderStatusAfterShipmentCreate(
+          tx,
+          user,
+          shopOrder.orderId,
+          now,
+        );
+
+        return { shipment, service, shipmentItems, shopOrder, weightGram };
       });
 
-      await tx.shopOrder.update({
-        where: { id: shopOrder.id },
-        data: {
-          shippingCompanyId: service.shippingCompanyId,
-          shippingServiceId: service.id,
-          shippingQuoteId,
-          shippingFeeAmount: shippingFee,
-          orderStatus: SHOP_ORDER_STATUS_SHIPPING,
-          updatedAt: now,
+    // Create the order with the carrier outside of the DB transaction, since
+    // it's a slow external network call. If it fails, the shipment already
+    // exists locally with shipmentStatus=Pending; the seller can retry
+    // syncing to the carrier via syncShipmentWithCarrier.
+    await this.trySyncShipmentToCarrier(shipment, service, shopOrder);
+
+    return this.toShipmentResponse(shipment, service, shipmentItems);
+  }
+
+  /**
+   * Attempts to register the shipment with its carrier (GHN/GHTK). Failures
+   * are swallowed (shipment stays in local "Pending" state, retriable via
+   * `syncShipmentWithCarrier`) since checkout/order creation must not fail
+   * just because the 3PL is temporarily unavailable.
+   */
+  private async trySyncShipmentToCarrier(
+    shipment: ShipmentEntity,
+    service: ShippingServiceWithCompanyEntity,
+    shopOrder: CreateShipmentShopOrderEntity,
+  ): Promise<void> {
+    const client = this.carrierRegistry.getClient(
+      service.shippingCompany.provider,
+    );
+
+    if (!client.isConfigured()) {
+      return;
+    }
+
+    try {
+      const from = this.resolvePlatformPickupAddress(shopOrder.shop);
+      const order = await client.createOrder({
+        carrierServiceCode: service.carrierServiceCode,
+        clientOrderCode: shipment.shipmentCode,
+        from,
+        to: {
+          provinceName: shopOrder.order.shippingProvince,
+          wardName: shopOrder.order.shippingWard,
+          streetAddress: shopOrder.order.shippingStreetAddress,
         },
+        recipientName: shopOrder.order.receiverName,
+        recipientPhone: shopOrder.order.receiverPhone,
+        weightGram: this.calculateShopOrderWeightGram(shopOrder),
+        codAmount: 0,
+        note: null,
       });
 
-      await tx.orderStatusHistory.create({
+      await this.prisma.shipment.update({
+        where: { id: shipment.id },
         data: {
-          shopOrderId: shopOrder.id,
-          fromStatus: shopOrder.orderStatus,
-          toStatus: SHOP_ORDER_STATUS_SHIPPING,
-          changedByUserId: user.id,
-          reason: 'Shipment created',
-          createdAt: now,
+          carrierOrderCode: order.carrierOrderCode,
+          carrierStatus: 'ready_to_pick',
+          expectedDeliveryAt: order.expectedDeliveryAt,
+          updatedAt: new Date(),
         },
       });
+    } catch {
+      // Intentionally swallowed: shipment remains locally pending and can
+      // be retried via the seller sync endpoint.
+    }
+  }
 
-      await this.updateParentOrderStatusAfterShipmentCreate(
-        tx,
-        user,
-        shopOrder.orderId,
-        now,
-      );
+  /**
+   * Re-attempts carrier order creation for a shipment that was created
+   * locally but never successfully registered with the carrier (e.g. the
+   * carrier API was down at shipment-creation time).
+   */
+  async syncSellerShipment(
+    user: AuthenticatedUser,
+    shopOrderId: string,
+    shipmentId: string,
+  ): Promise<ShipmentResponse> {
+    const parsedShopOrderId = this.parseShopOrderId(shopOrderId);
+    const parsedShipmentId = this.parseShipmentId(shipmentId);
 
-      return this.toShipmentResponse(shipment, service, shipmentItems);
+    const shipment = await this.prisma.shipment.findFirst({
+      where: {
+        id: parsedShipmentId,
+        shopOrderId: parsedShopOrderId,
+        shopOrder: {
+          shop: { ownerUserId: user.id, isDeleted: false },
+        },
+      },
+      include: updateShipmentTrackingInclude,
     });
+
+    if (!shipment) {
+      throw new NotFoundException({
+        code: 'SHIPMENT_NOT_FOUND',
+        message: 'Shipment not found',
+        details: [{ field: 'shipmentId' }],
+      });
+    }
+
+    if (!shipment.carrierOrderCode) {
+      const shopOrder = await this.prisma.shopOrder.findUniqueOrThrow({
+        where: { id: shipment.shopOrderId },
+        include: createShipmentShopOrderInclude,
+      });
+      const serviceWithCompany: ShippingServiceWithCompanyEntity = {
+        ...shipment.shippingService,
+        shippingCompany: shipment.shippingCompany,
+      };
+      await this.trySyncShipmentToCarrier(
+        shipment,
+        serviceWithCompany,
+        shopOrder,
+      );
+    } else {
+      await this.refreshShipmentCarrierStatus(shipment);
+    }
+
+    const refreshed = await this.prisma.shipment.findUniqueOrThrow({
+      where: { id: shipment.id },
+      include: updateShipmentTrackingInclude,
+    });
+
+    return this.toShipmentResponse(
+      refreshed,
+      { ...refreshed.shippingService, shippingCompany: refreshed.shippingCompany },
+      refreshed.items,
+    );
+  }
+
+  private async refreshShipmentCarrierStatus(
+    shipment: UpdateShipmentTrackingEntity,
+  ): Promise<void> {
+    if (!shipment.carrierOrderCode) {
+      return;
+    }
+
+    const client = this.carrierRegistry.getClient(
+      shipment.shippingCompany.provider,
+    );
+
+    if (!client.isConfigured()) {
+      return;
+    }
+
+    try {
+      const tracking = await client.getOrderStatus(shipment.carrierOrderCode);
+      await this.prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          carrierStatus: tracking.carrierStatusRaw,
+          updatedAt: new Date(),
+        },
+      });
+    } catch {
+      // Swallow transient carrier polling errors; status will be retried
+      // on the next sync/webhook.
+    }
   }
 
   async updateSellerShipmentTracking(
@@ -785,230 +825,31 @@ export class ShippingService {
 
       return this.toShipmentResponse(
         updatedShipment,
-        updatedShipment.shippingService,
+        {
+          ...updatedShipment.shippingService,
+          shippingCompany: updatedShipment.shippingCompany,
+        },
         updatedShipment.items,
       );
     });
   }
 
-  private async buildUpdateData(
-    user: AuthenticatedUser,
-    company: ShippingCompanyEntity,
-    dto: UpdateShippingCompanyDto,
-  ) {
-    const data: {
-      companyName?: string;
-      slug?: string;
-      email?: string | null;
-      phoneNumber?: string | null;
-      taxCode?: string | null;
-      addressText?: string | null;
-      companyStatus?: string;
-      approvedByUserId?: bigint | null;
-      approvedAt?: Date | null;
-    } = {};
-
-    if (dto.companyName !== undefined) {
-      data.companyName = dto.companyName;
-    }
-
-    if (dto.slug !== undefined) {
-      await this.ensureSlugAvailable(dto.slug, company.id);
-      data.slug = dto.slug;
-    }
-
-    if (dto.email !== undefined) {
-      data.email = this.normalizeNullableText(dto.email);
-    }
-
-    if (dto.phoneNumber !== undefined) {
-      data.phoneNumber = this.normalizeNullableText(dto.phoneNumber);
-    }
-
-    if (dto.taxCode !== undefined) {
-      data.taxCode = this.normalizeNullableText(dto.taxCode);
-    }
-
-    if (dto.addressText !== undefined) {
-      data.addressText = this.normalizeNullableText(dto.addressText);
-    }
-
-    if (dto.companyStatus !== undefined) {
-      data.companyStatus = dto.companyStatus;
-
-      if (
-        dto.companyStatus === SHIPPING_COMPANY_STATUS_APPROVED &&
-        company.companyStatus !== SHIPPING_COMPANY_STATUS_APPROVED
-      ) {
-        data.approvedByUserId = user.id;
-        data.approvedAt = new Date();
-      }
-    }
-
-    return data;
-  }
-
-  private async ensureSlugAvailable(
-    slug: string,
-    currentShippingCompanyId?: bigint,
-  ): Promise<void> {
-    const existingCompany = await this.prisma.shippingCompany.findUnique({
-      where: { slug },
-    });
-
-    if (existingCompany && existingCompany.id !== currentShippingCompanyId) {
-      throw new ConflictException({
-        code: 'SHIPPING_COMPANY_SLUG_EXISTS',
-        message: 'Shipping company slug already exists',
-        details: [{ field: 'slug' }],
-      });
-    }
-  }
-
-  private async buildShippingServiceUpdateData(
-    service: ShippingServiceEntity,
-    dto: UpdateShippingServiceDto,
-  ) {
-    const data: {
-      shippingCompanyId?: bigint;
-      serviceCode?: string;
-      serviceName?: string;
-      baseFee?: string;
-      feePerKg?: string;
-      estimatedMinDays?: number;
-      estimatedMaxDays?: number;
-      isActive?: boolean;
-    } = {};
-    const shippingCompanyId =
-      dto.shippingCompanyId !== undefined
-        ? this.parseShippingCompanyId(dto.shippingCompanyId)
-        : service.shippingCompanyId;
-    const serviceCode = dto.serviceCode ?? service.serviceCode;
-
-    if (dto.shippingCompanyId !== undefined) {
-      await this.requireApprovedShippingCompany(shippingCompanyId);
-      data.shippingCompanyId = shippingCompanyId;
-    }
-
-    if (
-      dto.shippingCompanyId !== undefined ||
-      (dto.serviceCode !== undefined && dto.serviceCode !== service.serviceCode)
-    ) {
-      await this.ensureServiceCodeAvailable(
-        shippingCompanyId,
-        serviceCode,
-        service.id,
-      );
-    }
-
-    if (dto.serviceCode !== undefined) {
-      data.serviceCode = dto.serviceCode;
-    }
-
-    if (dto.serviceName !== undefined) {
-      data.serviceName = dto.serviceName;
-    }
-
-    if (dto.baseFee !== undefined) {
-      data.baseFee = dto.baseFee;
-    }
-
-    if (dto.feePerKg !== undefined) {
-      data.feePerKg = dto.feePerKg;
-    }
-
-    const estimatedMinDays = dto.estimatedMinDays ?? service.estimatedMinDays;
-    const estimatedMaxDays = dto.estimatedMaxDays ?? service.estimatedMaxDays;
-    this.ensureValidEstimatedDays(estimatedMinDays, estimatedMaxDays);
-
-    if (dto.estimatedMinDays !== undefined) {
-      data.estimatedMinDays = dto.estimatedMinDays;
-    }
-
-    if (dto.estimatedMaxDays !== undefined) {
-      data.estimatedMaxDays = dto.estimatedMaxDays;
-    }
-
-    if (dto.isActive !== undefined) {
-      data.isActive = dto.isActive;
-    }
-
-    return data;
-  }
-
-  private async ensureServiceCodeAvailable(
-    shippingCompanyId: bigint,
-    serviceCode: string,
-    currentShippingServiceId?: bigint,
-  ): Promise<void> {
-    const existingService = await this.prisma.shippingService.findUnique({
-      where: {
-        shippingCompanyId_serviceCode: {
-          shippingCompanyId,
-          serviceCode,
-        },
-      },
-    });
-
-    if (existingService && existingService.id !== currentShippingServiceId) {
-      throw new ConflictException({
-        code: 'SHIPPING_SERVICE_CODE_EXISTS',
-        message: 'Shipping service code already exists for this company',
-        details: [{ field: 'serviceCode' }],
-      });
-    }
-  }
-
-  private async requireApprovedShippingCompany(
-    shippingCompanyId: bigint,
-  ): Promise<ShippingCompanyEntity> {
-    const company = await this.requireShippingCompany(shippingCompanyId);
-
-    if (company.companyStatus !== SHIPPING_COMPANY_STATUS_APPROVED) {
-      throw new BadRequestException({
-        code: 'SHIPPING_COMPANY_NOT_APPROVED',
-        message: 'Shipping company must be approved',
-        details: [{ field: 'shippingCompanyId' }],
-      });
-    }
-
-    return company;
-  }
-
-  private async requireShippingCompany(
-    shippingCompanyId: bigint,
-  ): Promise<ShippingCompanyEntity> {
-    const company = await this.prisma.shippingCompany.findUnique({
-      where: { id: shippingCompanyId },
-    });
-
-    if (!company || company.isDeleted) {
-      throw new NotFoundException({
-        code: 'SHIPPING_COMPANY_NOT_FOUND',
-        message: 'Shipping company not found',
-        details: [{ field: 'shippingCompanyId' }],
-      });
-    }
-
-    return company;
-  }
-
-  private async requireShippingService(
-    shippingServiceId: bigint,
-  ): Promise<ShippingServiceEntity> {
-    const service = await this.prisma.shippingService.findUnique({
-      where: { id: shippingServiceId },
-    });
-
-    if (!service) {
-      throw new NotFoundException({
-        code: 'SHIPPING_SERVICE_NOT_FOUND',
-        message: 'Shipping service not found',
-        details: [{ field: 'shippingServiceId' }],
-      });
-    }
-
-    return service;
+  /**
+   * Resolves the pickup address to send to the carrier for a given shop.
+   * Falls back to a platform-level default pickup address when the shop
+   * has not configured its own address (province/ward/streetAddress are
+   * all optional on the Shop model).
+   */
+  private resolvePlatformPickupAddress(shop: {
+    province: string | null;
+    ward: string | null;
+    streetAddress: string | null;
+  }) {
+    return {
+      provinceName: shop.province ?? PLATFORM_PICKUP_PROVINCE,
+      wardName: shop.ward ?? PLATFORM_PICKUP_WARD,
+      streetAddress: shop.streetAddress ?? PLATFORM_PICKUP_STREET,
+    };
   }
 
   private async requireQuotableShop(
@@ -1022,6 +863,9 @@ export class ShippingService {
         slug: true,
         shopStatus: true,
         isDeleted: true,
+        province: true,
+        ward: true,
+        streetAddress: true,
       },
     });
 
@@ -1269,30 +1113,6 @@ export class ShippingService {
         ],
       });
     }
-  }
-
-  private ensureValidEstimatedDays(
-    estimatedMinDays: number,
-    estimatedMaxDays: number,
-  ): void {
-    if (estimatedMinDays > estimatedMaxDays) {
-      throw new BadRequestException({
-        code: 'SHIPPING_SERVICE_INVALID_ESTIMATE',
-        message: 'Minimum estimated days cannot exceed maximum estimated days',
-        details: [{ field: 'estimatedMinDays' }, { field: 'estimatedMaxDays' }],
-      });
-    }
-  }
-
-  private calculateShippingFee(
-    service: ShippingServiceEntity,
-    totalWeightGram: number,
-  ): Prisma.Decimal {
-    const weightKgUnits = Math.max(1, Math.ceil(totalWeightGram / 1000));
-
-    return new Prisma.Decimal(service.baseFee.toString()).add(
-      new Prisma.Decimal(service.feePerKg.toString()).mul(weightKgUnits),
-    );
   }
 
   private calculateShopOrderWeightGram(
@@ -1654,32 +1474,6 @@ export class ShippingService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
-  private toShippingCompanyResponse(
-    company: ShippingCompanyEntity,
-  ): ShippingCompanyResponse {
-    return {
-      id: company.id.toString(),
-      idString: company.id.toString(),
-      ownerUserId: company.ownerUserId.toString(),
-      ownerUserIdString: company.ownerUserId.toString(),
-      code: company.code,
-      companyName: company.companyName,
-      slug: company.slug,
-      email: company.email,
-      phoneNumber: company.phoneNumber,
-      taxCode: company.taxCode,
-      addressText: company.addressText,
-      companyStatus: company.companyStatus,
-      approvedByUserId: company.approvedByUserId?.toString() ?? null,
-      approvedByUserIdString: company.approvedByUserId?.toString() ?? null,
-      approvedAt: company.approvedAt,
-      isDeleted: company.isDeleted,
-      createdAt: company.createdAt,
-      updatedAt: company.updatedAt,
-      deletedAt: company.deletedAt,
-    };
-  }
-
   private toShippingServiceResponse(
     service: ShippingServiceEntity,
   ): ShippingServiceResponse {
@@ -1690,8 +1484,7 @@ export class ShippingService {
       shippingCompanyIdString: service.shippingCompanyId.toString(),
       serviceCode: service.serviceCode,
       serviceName: service.serviceName,
-      baseFee: service.baseFee.toString(),
-      feePerKg: service.feePerKg.toString(),
+      carrierServiceCode: service.carrierServiceCode,
       estimatedMinDays: service.estimatedMinDays,
       estimatedMaxDays: service.estimatedMaxDays,
       isActive: service.isActive,
@@ -1704,6 +1497,7 @@ export class ShippingService {
     quote: ShippingQuoteEntity,
     shop: ShippingQuoteShopEntity,
     service: ShippingServiceWithCompanyEntity,
+    destinationWard: string,
   ): ShippingQuoteResponse {
     return {
       id: quote.id.toString(),
@@ -1727,6 +1521,7 @@ export class ShippingService {
         serviceName: service.serviceName,
       },
       destinationProvince: quote.destinationProvince,
+      destinationWard,
       totalWeightGram: quote.totalWeightGram,
       quotedFee: quote.quotedFee.toString(),
       estimatedMinDays: quote.estimatedMinDays,
@@ -1748,6 +1543,8 @@ export class ShippingService {
       shopOrderIdString: shipment.shopOrderId.toString(),
       shipmentCode: shipment.shipmentCode,
       trackingNumber: shipment.trackingNumber,
+      carrierOrderCode: shipment.carrierOrderCode,
+      carrierStatus: shipment.carrierStatus,
       shipmentStatus: shipment.shipmentStatus,
       shippingFee: shipment.shippingFee.toString(),
       codAmount: shipment.codAmount.toString(),
@@ -1763,6 +1560,7 @@ export class ShippingService {
         idString: service.shippingCompany.id.toString(),
         companyName: service.shippingCompany.companyName,
         slug: service.shippingCompany.slug,
+        provider: service.shippingCompany.provider,
       },
       shippingService: {
         id: service.id.toString(),

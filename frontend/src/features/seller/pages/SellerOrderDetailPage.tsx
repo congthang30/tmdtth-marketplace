@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, PackageCheck, Truck } from "lucide-react";
+import { CheckCircle2, PackageCheck, RefreshCw, Truck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useParams } from "react-router-dom";
@@ -185,6 +185,15 @@ export function SellerOrderDetailPage() {
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: (shipmentId: string) =>
+      sellerOrdersApi.syncShipment(shopOrderId, shipmentId),
+    onSuccess: async () => {
+      await invalidate();
+      pushToast({ tone: "success", title: "Đã đồng bộ trạng thái vận đơn" });
+    },
+  });
+
   useEffect(() => {
     if (trackingShipment) {
       trackingForm.reset({
@@ -291,6 +300,11 @@ export function SellerOrderDetailPage() {
 
           <article className="rounded-lg border border-border bg-white p-5 shadow-panel">
             <h2 className="text-lg font-semibold">Vận đơn</h2>
+            {syncMutation.isError ? (
+              <Alert tone="danger" className="mt-3">
+                {getErrorMessage(syncMutation.error)}
+              </Alert>
+            ) : null}
             <div className="mt-4 space-y-3">
               {shipments.length > 0 ? (
                 shipments.map((shipment) => (
@@ -304,12 +318,40 @@ export function SellerOrderDetailPage() {
                           {shipment.shipmentCode}
                         </p>
                         <p className="mt-1 text-muted">
-                          {shipment.shippingService.serviceName} |{" "}
-                          {shipment.trackingNumber ?? "Chưa có mã vận đơn"}
+                          {shipment.shippingCompany.provider} ·{" "}
+                          {shipment.shippingService.serviceName}
                         </p>
+                        <p className="mt-1 text-muted">
+                          Mã vận đơn hãng:{" "}
+                          {shipment.carrierOrderCode ??
+                            shipment.trackingNumber ??
+                            "Chưa có mã vận đơn"}
+                        </p>
+                        {shipment.carrierStatus ? (
+                          <p className="mt-1 text-xs text-muted">
+                            Trạng thái từ hãng: {shipment.carrierStatus}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge>{formatStatus(shipment.shipmentStatus)}</Badge>
+                        {shipment.shipmentStatus !== "Delivered" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={
+                              syncMutation.isPending &&
+                              syncMutation.variables === shipment.id
+                            }
+                            onClick={() => syncMutation.mutate(shipment.id)}
+                          >
+                            <RefreshCw size={14} aria-hidden="true" />
+                            {syncMutation.isPending &&
+                            syncMutation.variables === shipment.id
+                              ? "Đang đồng bộ..."
+                              : "Đồng bộ trạng thái"}
+                          </Button>
+                        ) : null}
                         {shipment.shipmentStatus !== "Delivered" ? (
                           <Button
                             type="button"
@@ -467,7 +509,8 @@ export function SellerOrderDetailPage() {
             <option value="">Chọn dịch vụ</option>
             {services.map((service) => (
               <option key={service.id} value={service.id}>
-                {service.serviceName} - {formatMoney(service.baseFee)}
+                {service.serviceName} - {service.estimatedMinDays}-
+                {service.estimatedMaxDays} ngày
               </option>
             ))}
           </SelectInput>

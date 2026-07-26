@@ -26,8 +26,7 @@ import { SellerOrderDetailPage } from "@/features/seller/pages/SellerOrderDetail
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage";
 import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage";
 import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
-import { AdminShippingCompaniesPage } from "@/features/admin/pages/AdminShippingCompaniesPage";
-import { AdminShippingServicesPage } from "@/features/admin/pages/AdminShippingServicesPage";
+import { AdminShippingProvidersPage } from "@/features/admin/pages/AdminShippingProvidersPage";
 import { AdminSellerVerificationsPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationsPage";
 import { AdminSellerVerificationDetailPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationDetailPage";
 
@@ -240,10 +239,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "admin/shipping/companies",
+        path: "admin/shipping/providers",
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
-            <AdminShippingCompaniesPage />
+            <AdminShippingProvidersPage />
           </RoleRoute>
         ),
       },
@@ -263,14 +262,7 @@ export const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      {
-        path: "admin/shipping/services",
-        element: (
-          <RoleRoute allowedRoles={["Admin"]}>
-            <AdminShippingServicesPage />
-          </RoleRoute>
-        ),
-      },
+
     ],
   },
   {

@@ -36,6 +36,8 @@ export type OrderShipment = {
   idString: string;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
   shippingCompany: {
@@ -43,6 +45,7 @@ export type OrderShipment = {
     idString: string;
     companyName: string;
     slug: string;
+    provider: string;
   };
   shippingService: {
     id: string;

@@ -24,8 +24,7 @@ import { SellerProductsController } from '../src/modules/products/seller-product
 import { PublicProductReviewsController } from '../src/modules/reviews/public-product-reviews.controller';
 import { ReviewsController } from '../src/modules/reviews/reviews.controller';
 import { ReviewsService } from '../src/modules/reviews/reviews.service';
-import { AdminShippingCompaniesController } from '../src/modules/shipping/admin-shipping-companies.controller';
-import { AdminShippingServicesController } from '../src/modules/shipping/admin-shipping-services.controller';
+import { AdminShippingProvidersController } from '../src/modules/shipping/admin-shipping-providers.controller';
 import { SellerShipmentsController } from '../src/modules/shipping/seller-shipments.controller';
 import { ShippingController } from '../src/modules/shipping/shipping.controller';
 import { ShippingService } from '../src/modules/shipping/shipping.service';
@@ -446,31 +445,15 @@ type SellerShopOrderE2eResponse = {
   updatedAt: string | null;
 };
 
-type ShippingCompanyE2eResponse = {
+type CarrierProviderE2eResponse = {
   id: string;
   idString: string;
-  ownerUserId: string;
-  ownerUserIdString: string;
+  provider: string;
   code: string;
   companyName: string;
   slug: string;
-  email: string | null;
-  phoneNumber: string | null;
-  taxCode: string | null;
-  addressText: string | null;
   companyStatus: string;
-  approvedByUserId: string | null;
-  approvedByUserIdString: string | null;
-  approvedAt: string | null;
-  isDeleted: boolean;
-  createdAt: string;
-  updatedAt: string | null;
-  deletedAt: string | null;
-};
-
-type DeleteShippingCompanyE2eResponse = {
-  id: string;
-  deleted: true;
+  isConfigured: boolean;
 };
 
 type ShippingServiceE2eResponse = {
@@ -480,18 +463,12 @@ type ShippingServiceE2eResponse = {
   shippingCompanyIdString: string;
   serviceCode: string;
   serviceName: string;
-  baseFee: string;
-  feePerKg: string;
+  carrierServiceCode: string;
   estimatedMinDays: number;
   estimatedMaxDays: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string | null;
-};
-
-type DeactivateShippingServiceE2eResponse = {
-  id: string;
-  deactivated: true;
 };
 
 type ShippingQuoteE2eResponse = {
@@ -516,6 +493,7 @@ type ShippingQuoteE2eResponse = {
     serviceName: string;
   };
   destinationProvince: string;
+  destinationWard: string;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;
@@ -531,6 +509,8 @@ type ShipmentE2eResponse = {
   shopOrderIdString: string;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
   codAmount: string;
@@ -546,6 +526,7 @@ type ShipmentE2eResponse = {
     idString: string;
     companyName: string;
     slug: string;
+    provider: string;
   };
   shippingService: {
     id: string;
@@ -773,39 +754,13 @@ type PaymentsServiceMock = {
 };
 
 type ShippingServiceMock = {
-  listShippingCompanies: jest.Mock<
-    Promise<PaginatedE2eResponse<ShippingCompanyE2eResponse>>,
-    [unknown]
+  listCarrierProviders: jest.Mock<
+    Promise<{ message: string; data: CarrierProviderE2eResponse[] }>,
+    []
   >;
-  getShippingCompany: jest.Mock<Promise<ShippingCompanyE2eResponse>, [string]>;
-  createShippingCompany: jest.Mock<
-    Promise<ShippingCompanyE2eResponse>,
-    [AuthenticatedUser, unknown]
-  >;
-  updateShippingCompany: jest.Mock<
-    Promise<ShippingCompanyE2eResponse>,
-    [AuthenticatedUser, string, unknown]
-  >;
-  deleteShippingCompany: jest.Mock<
-    Promise<DeleteShippingCompanyE2eResponse>,
-    [string]
-  >;
-  listShippingServices: jest.Mock<
+  listActiveShippingServices: jest.Mock<
     Promise<PaginatedE2eResponse<ShippingServiceE2eResponse>>,
     [unknown]
-  >;
-  getShippingService: jest.Mock<Promise<ShippingServiceE2eResponse>, [string]>;
-  createShippingService: jest.Mock<
-    Promise<ShippingServiceE2eResponse>,
-    [unknown]
-  >;
-  updateShippingService: jest.Mock<
-    Promise<ShippingServiceE2eResponse>,
-    [string, unknown]
-  >;
-  deactivateShippingService: jest.Mock<
-    Promise<DeactivateShippingServiceE2eResponse>,
-    [string]
   >;
   createShippingQuote: jest.Mock<Promise<ShippingQuoteE2eResponse>, [unknown]>;
   createSellerShipment: jest.Mock<
@@ -815,6 +770,10 @@ type ShippingServiceMock = {
   updateSellerShipmentTracking: jest.Mock<
     Promise<ShipmentE2eResponse>,
     [AuthenticatedUser, string, string, unknown]
+  >;
+  syncSellerShipment: jest.Mock<
+    Promise<ShipmentE2eResponse>,
+    [AuthenticatedUser, string, string]
   >;
 };
 
@@ -1347,26 +1306,15 @@ const fakePaidPaymentResponse: OrderPaymentE2eResponse = {
   updatedAt: '2026-07-03T01:00:00.000Z',
 };
 
-const shippingCompanyResponse: ShippingCompanyE2eResponse = {
+const carrierProviderResponse: CarrierProviderE2eResponse = {
   id: '10',
   idString: '10',
-  ownerUserId: '7',
-  ownerUserIdString: '7',
+  provider: 'GHN',
   code: '11111111-1111-4111-8111-111111111111',
-  companyName: 'Fast Ship',
-  slug: 'fast-ship',
-  email: 'ops@fast-ship.test',
-  phoneNumber: '0900000001',
-  taxCode: 'TAX001',
-  addressText: '10 Logistics',
+  companyName: 'Giao Hàng Nhanh',
+  slug: 'ghn',
   companyStatus: 'Approved',
-  approvedByUserId: '7',
-  approvedByUserIdString: '7',
-  approvedAt: '2026-07-03T00:00:00.000Z',
-  isDeleted: false,
-  createdAt: '2026-07-03T00:00:00.000Z',
-  updatedAt: '2026-07-03T00:00:00.000Z',
-  deletedAt: null,
+  isConfigured: false,
 };
 
 const shippingServiceResponse: ShippingServiceE2eResponse = {
@@ -1376,8 +1324,7 @@ const shippingServiceResponse: ShippingServiceE2eResponse = {
   shippingCompanyIdString: '10',
   serviceCode: 'STD',
   serviceName: 'Standard Delivery',
-  baseFee: '25000',
-  feePerKg: '5000',
+  carrierServiceCode: '53320',
   estimatedMinDays: 2,
   estimatedMaxDays: 5,
   isActive: true,
@@ -1397,8 +1344,8 @@ const shippingQuoteResponse: ShippingQuoteE2eResponse = {
   shippingCompany: {
     id: '10',
     idString: '10',
-    companyName: 'Fast Ship',
-    slug: 'fast-ship',
+    companyName: 'Giao Hàng Nhanh',
+    slug: 'ghn',
   },
   shippingService: {
     id: '20',
@@ -1407,6 +1354,7 @@ const shippingQuoteResponse: ShippingQuoteE2eResponse = {
     serviceName: 'Standard Delivery',
   },
   destinationProvince: 'TP.HCM',
+  destinationWard: 'Phường Bến Nghé',
   totalWeightGram: 1500,
   quotedFee: '35000',
   estimatedMinDays: 2,
@@ -1422,11 +1370,13 @@ const shipmentResponse: ShipmentE2eResponse = {
   shopOrderIdString: '501',
   shipmentCode: 'SHP-20260703000000-DEMO',
   trackingNumber: 'TRACK-001',
+  carrierOrderCode: null,
+  carrierStatus: null,
   shipmentStatus: 'Pending',
   shippingFee: '35000',
   codAmount: '0',
   pickupAddress: 'Seller warehouse',
-  deliveryAddress: '10 Demo, PhÆ°á»ng Báº¿n NghÃ©, Quáº­n 1, TP.HCM',
+  deliveryAddress: '10 Demo, PhÆ°á»ng Báº¿n NghÃ©, Quáº­n 1, TP.HCM',
   recipientName: 'Customer Demo',
   recipientPhone: '0900000003',
   expectedDeliveryAt: '2026-07-05T00:00:00.000Z',
@@ -1435,8 +1385,9 @@ const shipmentResponse: ShipmentE2eResponse = {
   shippingCompany: {
     id: '10',
     idString: '10',
-    companyName: 'Fast Ship',
-    slug: 'fast-ship',
+    companyName: 'Giao Hàng Nhanh',
+    slug: 'ghn',
+    provider: 'GHN',
   },
   shippingService: {
     id: '20',
@@ -1649,45 +1600,13 @@ describe('App API (e2e)', () => {
       >(),
     };
     shippingService = {
-      listShippingCompanies: jest.fn<
-        Promise<PaginatedE2eResponse<ShippingCompanyE2eResponse>>,
-        [unknown]
+      listCarrierProviders: jest.fn<
+        Promise<{ message: string; data: CarrierProviderE2eResponse[] }>,
+        []
       >(),
-      getShippingCompany: jest.fn<
-        Promise<ShippingCompanyE2eResponse>,
-        [string]
-      >(),
-      createShippingCompany: jest.fn<
-        Promise<ShippingCompanyE2eResponse>,
-        [AuthenticatedUser, unknown]
-      >(),
-      updateShippingCompany: jest.fn<
-        Promise<ShippingCompanyE2eResponse>,
-        [AuthenticatedUser, string, unknown]
-      >(),
-      deleteShippingCompany: jest.fn<
-        Promise<DeleteShippingCompanyE2eResponse>,
-        [string]
-      >(),
-      listShippingServices: jest.fn<
+      listActiveShippingServices: jest.fn<
         Promise<PaginatedE2eResponse<ShippingServiceE2eResponse>>,
         [unknown]
-      >(),
-      getShippingService: jest.fn<
-        Promise<ShippingServiceE2eResponse>,
-        [string]
-      >(),
-      createShippingService: jest.fn<
-        Promise<ShippingServiceE2eResponse>,
-        [unknown]
-      >(),
-      updateShippingService: jest.fn<
-        Promise<ShippingServiceE2eResponse>,
-        [string, unknown]
-      >(),
-      deactivateShippingService: jest.fn<
-        Promise<DeactivateShippingServiceE2eResponse>,
-        [string]
       >(),
       createShippingQuote: jest.fn<
         Promise<ShippingQuoteE2eResponse>,
@@ -1700,6 +1619,10 @@ describe('App API (e2e)', () => {
       updateSellerShipmentTracking: jest.fn<
         Promise<ShipmentE2eResponse>,
         [AuthenticatedUser, string, string, unknown]
+      >(),
+      syncSellerShipment: jest.fn<
+        Promise<ShipmentE2eResponse>,
+        [AuthenticatedUser, string, string]
       >(),
     };
     reviewsService = {
@@ -1738,8 +1661,7 @@ describe('App API (e2e)', () => {
         ReviewsController,
         ShippingController,
         SellerShipmentsController,
-        AdminShippingCompaniesController,
-        AdminShippingServicesController,
+        AdminShippingProvidersController,
       ],
       providers: [
         {
@@ -1819,19 +1741,12 @@ describe('App API (e2e)', () => {
     ordersService.prepareSellerShopOrder.mockReset();
     paymentsService.markFakeSuccess.mockReset();
     paymentsService.listActiveMethods.mockReset();
-    shippingService.listShippingCompanies.mockReset();
-    shippingService.getShippingCompany.mockReset();
-    shippingService.createShippingCompany.mockReset();
-    shippingService.updateShippingCompany.mockReset();
-    shippingService.deleteShippingCompany.mockReset();
-    shippingService.listShippingServices.mockReset();
-    shippingService.getShippingService.mockReset();
-    shippingService.createShippingService.mockReset();
-    shippingService.updateShippingService.mockReset();
-    shippingService.deactivateShippingService.mockReset();
+    shippingService.listCarrierProviders.mockReset();
+    shippingService.listActiveShippingServices.mockReset();
     shippingService.createShippingQuote.mockReset();
     shippingService.createSellerShipment.mockReset();
     shippingService.updateSellerShipmentTracking.mockReset();
+    shippingService.syncSellerShipment.mockReset();
     reviewsService.createProductReview.mockReset();
     reviewsService.listPublicProductReviews.mockReset();
   });
@@ -3053,161 +2968,36 @@ describe('App API (e2e)', () => {
     expect(ordersService.prepareSellerShopOrder).not.toHaveBeenCalled();
   });
 
-  it('GET /api/admin/shipping-companies lists shipping companies', async () => {
+  it('GET /api/admin/shipping-providers lists the carrier registry', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
-    shippingService.listShippingCompanies.mockResolvedValue({
-      items: [shippingCompanyResponse],
-      message: 'Shipping companies retrieved successfully',
-      meta: {
-        page: 1,
-        limit: 20,
-        total: 1,
-        totalPages: 1,
-      },
+    shippingService.listCarrierProviders.mockResolvedValue({
+      message: 'Carrier providers retrieved successfully',
+      data: [carrierProviderResponse],
     });
 
     await request(server)
-      .get('/api/admin/shipping-companies?page=1&limit=20')
+      .get('/api/admin/shipping-providers')
       .expect(200)
       .expect((response) => {
-        const body = response.body as SuccessBody<
-          ShippingCompanyE2eResponse[]
-        > & {
-          meta: PaginatedE2eResponse<ShippingCompanyE2eResponse>['meta'];
-        };
+        const body = response.body as SuccessBody<{
+          message: string;
+          data: CarrierProviderE2eResponse[];
+        }>;
 
         expect(body.success).toBe(true);
-        expect(body.data).toHaveLength(1);
-        expect(body.data[0].slug).toBe('fast-ship');
-        expect(body.meta.total).toBe(1);
+        expect(body.data.data).toHaveLength(1);
+        expect(body.data.data[0].provider).toBe('GHN');
+        expect(body.data.data[0].isConfigured).toBe(false);
       });
 
-    const [queryArg] = shippingService.listShippingCompanies.mock.calls[0];
-    const query = queryArg as { page: number; limit: number };
-
-    expect(query.page).toBe(1);
-    expect(query.limit).toBe(20);
+    expect(shippingService.listCarrierProviders).toHaveBeenCalledWith();
   });
 
-  it('POST /api/admin/shipping-companies creates a shipping company', async () => {
+  it('GET /api/shipping/services lists active shipping services', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
-    shippingService.createShippingCompany.mockResolvedValue(
-      shippingCompanyResponse,
-    );
-
-    await request(server)
-      .post('/api/admin/shipping-companies')
-      .send({
-        companyName: 'Fast Ship',
-        slug: 'fast-ship',
-        email: 'ops@fast-ship.test',
-        phoneNumber: '0900000001',
-        taxCode: 'TAX001',
-        addressText: '10 Logistics',
-      })
-      .expect(201)
-      .expect((response) => {
-        const body = response.body as SuccessBody<ShippingCompanyE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.companyStatus).toBe('Approved');
-        expect(body.data.companyName).toBe('Fast Ship');
-      });
-
-    const [userArg, dtoArg] =
-      shippingService.createShippingCompany.mock.calls[0];
-    const dto = dtoArg as { companyName: string; slug: string };
-
-    expect(userArg).toBe(sellerUser);
-    expect(dto.companyName).toBe('Fast Ship');
-    expect(dto.slug).toBe('fast-ship');
-  });
-
-  it('POST /api/admin/shipping-companies rejects invalid slug', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    await request(server)
-      .post('/api/admin/shipping-companies')
-      .send({
-        companyName: 'Fast Ship',
-        slug: 'Bad Slug',
-      })
-      .expect(400)
-      .expect((response) => {
-        const body = response.body as ErrorBody;
-
-        expect(body.success).toBe(false);
-        expect(body.error.code).toBe('VALIDATION_ERROR');
-      });
-
-    expect(shippingService.createShippingCompany).not.toHaveBeenCalled();
-  });
-
-  it('PATCH /api/admin/shipping-companies/:id updates a shipping company', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-    const updatedCompany = {
-      ...shippingCompanyResponse,
-      companyName: 'Fast Ship Express',
-      companyStatus: 'Suspended',
-    };
-
-    shippingService.updateShippingCompany.mockResolvedValue(updatedCompany);
-
-    await request(server)
-      .patch('/api/admin/shipping-companies/10')
-      .send({
-        companyName: 'Fast Ship Express',
-        companyStatus: 'Suspended',
-      })
-      .expect(200)
-      .expect((response) => {
-        const body = response.body as SuccessBody<ShippingCompanyE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.companyName).toBe('Fast Ship Express');
-        expect(body.data.companyStatus).toBe('Suspended');
-      });
-
-    const [userArg, companyIdArg, dtoArg] =
-      shippingService.updateShippingCompany.mock.calls[0];
-    const dto = dtoArg as { companyName: string; companyStatus: string };
-
-    expect(userArg).toBe(sellerUser);
-    expect(companyIdArg).toBe('10');
-    expect(dto.companyName).toBe('Fast Ship Express');
-    expect(dto.companyStatus).toBe('Suspended');
-  });
-
-  it('DELETE /api/admin/shipping-companies/:id soft deletes a shipping company', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    shippingService.deleteShippingCompany.mockResolvedValue({
-      id: '10',
-      deleted: true,
-    });
-
-    await request(server)
-      .delete('/api/admin/shipping-companies/10')
-      .expect(200)
-      .expect((response) => {
-        const body =
-          response.body as SuccessBody<DeleteShippingCompanyE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data).toEqual({ id: '10', deleted: true });
-      });
-
-    const [companyIdArg] = shippingService.deleteShippingCompany.mock.calls[0];
-
-    expect(companyIdArg).toBe('10');
-  });
-
-  it('GET /api/admin/shipping-services lists shipping services', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    shippingService.listShippingServices.mockResolvedValue({
+    shippingService.listActiveShippingServices.mockResolvedValue({
       items: [shippingServiceResponse],
       message: 'Shipping services retrieved successfully',
       meta: {
@@ -3219,7 +3009,7 @@ describe('App API (e2e)', () => {
     });
 
     await request(server)
-      .get('/api/admin/shipping-services?shippingCompanyId=10&page=1&limit=20')
+      .get('/api/shipping/services?page=1&limit=20')
       .expect(200)
       .expect((response) => {
         const body = response.body as SuccessBody<
@@ -3234,136 +3024,11 @@ describe('App API (e2e)', () => {
         expect(body.meta.total).toBe(1);
       });
 
-    const [queryArg] = shippingService.listShippingServices.mock.calls[0];
-    const query = queryArg as {
-      shippingCompanyId: string;
-      page: number;
-      limit: number;
-    };
+    const [queryArg] = shippingService.listActiveShippingServices.mock.calls[0];
+    const query = queryArg as { page: number; limit: number };
 
-    expect(query.shippingCompanyId).toBe('10');
     expect(query.page).toBe(1);
     expect(query.limit).toBe(20);
-  });
-
-  it('POST /api/admin/shipping-services creates a shipping service', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    shippingService.createShippingService.mockResolvedValue(
-      shippingServiceResponse,
-    );
-
-    await request(server)
-      .post('/api/admin/shipping-services')
-      .send({
-        shippingCompanyId: '10',
-        serviceCode: 'STD',
-        serviceName: 'Standard Delivery',
-        baseFee: '25000',
-        feePerKg: '5000',
-        estimatedMinDays: 2,
-        estimatedMaxDays: 5,
-      })
-      .expect(201)
-      .expect((response) => {
-        const body = response.body as SuccessBody<ShippingServiceE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.serviceCode).toBe('STD');
-        expect(body.data.baseFee).toBe('25000');
-      });
-
-    const [dtoArg] = shippingService.createShippingService.mock.calls[0];
-    const dto = dtoArg as {
-      shippingCompanyId: string;
-      serviceCode: string;
-      baseFee: string;
-    };
-
-    expect(dto.shippingCompanyId).toBe('10');
-    expect(dto.serviceCode).toBe('STD');
-    expect(dto.baseFee).toBe('25000');
-  });
-
-  it('POST /api/admin/shipping-services rejects invalid fee', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    await request(server)
-      .post('/api/admin/shipping-services')
-      .send({
-        shippingCompanyId: '10',
-        serviceCode: 'STD',
-        serviceName: 'Standard Delivery',
-        baseFee: '-1',
-      })
-      .expect(400)
-      .expect((response) => {
-        const body = response.body as ErrorBody;
-
-        expect(body.success).toBe(false);
-        expect(body.error.code).toBe('VALIDATION_ERROR');
-      });
-
-    expect(shippingService.createShippingService).not.toHaveBeenCalled();
-  });
-
-  it('PATCH /api/admin/shipping-services/:id updates a shipping service', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-    const updatedService = {
-      ...shippingServiceResponse,
-      serviceName: 'Express Delivery',
-      baseFee: '45000',
-    };
-
-    shippingService.updateShippingService.mockResolvedValue(updatedService);
-
-    await request(server)
-      .patch('/api/admin/shipping-services/20')
-      .send({
-        serviceName: 'Express Delivery',
-        baseFee: '45000',
-      })
-      .expect(200)
-      .expect((response) => {
-        const body = response.body as SuccessBody<ShippingServiceE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.serviceName).toBe('Express Delivery');
-        expect(body.data.baseFee).toBe('45000');
-      });
-
-    const [serviceIdArg, dtoArg] =
-      shippingService.updateShippingService.mock.calls[0];
-    const dto = dtoArg as { serviceName: string; baseFee: string };
-
-    expect(serviceIdArg).toBe('20');
-    expect(dto.serviceName).toBe('Express Delivery');
-    expect(dto.baseFee).toBe('45000');
-  });
-
-  it('DELETE /api/admin/shipping-services/:id deactivates a shipping service', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    shippingService.deactivateShippingService.mockResolvedValue({
-      id: '20',
-      deactivated: true,
-    });
-
-    await request(server)
-      .delete('/api/admin/shipping-services/20')
-      .expect(200)
-      .expect((response) => {
-        const body =
-          response.body as SuccessBody<DeactivateShippingServiceE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data).toEqual({ id: '20', deactivated: true });
-      });
-
-    const [serviceIdArg] =
-      shippingService.deactivateShippingService.mock.calls[0];
-
-    expect(serviceIdArg).toBe('20');
   });
 
   it('POST /api/shipping/quotes creates a shipping quote', async () => {
@@ -3379,6 +3044,7 @@ describe('App API (e2e)', () => {
         shopId: '1',
         shippingServiceId: '20',
         destinationProvince: 'TP.HCM',
+        destinationWard: 'Phường Bến Nghé',
         totalWeightGram: 1500,
       })
       .expect(201)
@@ -3395,12 +3061,36 @@ describe('App API (e2e)', () => {
     const dto = dtoArg as {
       shopId: string;
       shippingServiceId: string;
+      destinationWard: string;
       totalWeightGram: number;
     };
 
     expect(dto.shopId).toBe('1');
     expect(dto.shippingServiceId).toBe('20');
+    expect(dto.destinationWard).toBe('Phường Bến Nghé');
     expect(dto.totalWeightGram).toBe(1500);
+  });
+
+  it('POST /api/shipping/quotes rejects missing destinationWard', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+
+    await request(server)
+      .post('/api/shipping/quotes')
+      .send({
+        shopId: '1',
+        shippingServiceId: '20',
+        destinationProvince: 'TP.HCM',
+        totalWeightGram: 1500,
+      })
+      .expect(400)
+      .expect((response) => {
+        const body = response.body as ErrorBody;
+
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+      });
+
+    expect(shippingService.createShippingQuote).not.toHaveBeenCalled();
   });
 
   it('POST /api/shipping/quotes rejects invalid weight', async () => {
@@ -3412,6 +3102,7 @@ describe('App API (e2e)', () => {
         shopId: '1',
         shippingServiceId: '20',
         destinationProvince: 'TP.HCM',
+        destinationWard: 'Phường Bến Nghé',
         totalWeightGram: 0,
       })
       .expect(400)
@@ -3423,6 +3114,34 @@ describe('App API (e2e)', () => {
       });
 
     expect(shippingService.createShippingQuote).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/seller/orders/:shopOrderId/shipments/:shipmentId/sync retries carrier registration', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+    const syncedShipment = {
+      ...shipmentResponse,
+      carrierOrderCode: 'GHN-123456',
+      carrierStatus: 'ready_to_pick',
+    };
+
+    shippingService.syncSellerShipment.mockResolvedValue(syncedShipment);
+
+    await request(server)
+      .post('/api/seller/orders/501/shipments/800/sync')
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as SuccessBody<ShipmentE2eResponse>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.carrierOrderCode).toBe('GHN-123456');
+      });
+
+    const [userArg, shopOrderIdArg, shipmentIdArg] =
+      shippingService.syncSellerShipment.mock.calls[0];
+
+    expect(userArg).toBe(sellerUser);
+    expect(shopOrderIdArg).toBe('501');
+    expect(shipmentIdArg).toBe('800');
   });
 
   it('POST /api/seller/orders/:shopOrderId/shipments creates a shipment', async () => {

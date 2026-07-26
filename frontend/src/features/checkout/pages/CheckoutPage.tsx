@@ -196,6 +196,7 @@ export function CheckoutPage() {
         shopId: group.shop.id,
         shippingServiceId,
         destinationProvince: previewQuery.data?.address.province ?? "",
+        destinationWard: previewQuery.data?.address.ward ?? "",
         totalWeightGram: getGroupWeightGram(group),
       }),
     onSuccess: (quote) => {
@@ -455,8 +456,8 @@ export function CheckoutPage() {
                         <option value="">Chọn dịch vụ vận chuyển</option>
                         {shippingServices.map((service) => (
                           <option key={service.id} value={service.id}>
-                            {service.serviceName} -{" "}
-                            {formatMoney(service.baseFee)}
+                            {service.serviceName} - {service.estimatedMinDays}-
+                            {service.estimatedMaxDays} ngày
                           </option>
                         ))}
                       </SelectInput>

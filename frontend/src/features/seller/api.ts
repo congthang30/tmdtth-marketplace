@@ -162,6 +162,16 @@ export const sellerOrdersApi = {
       body,
     );
   },
+  /**
+   * Retries registering the shipment with its carrier (GHN) when the
+   * initial order-creation call failed, or refreshes the cached
+   * carrierStatus/shipmentStatus by polling the carrier API.
+   */
+  syncShipment(shopOrderId: string, shipmentId: string) {
+    return apiPost<OrderShipment>(
+      `/seller/orders/${shopOrderId}/shipments/${shipmentId}/sync`,
+    );
+  },
 };
 
 export const sellerShippingApi = {
