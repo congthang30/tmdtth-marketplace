@@ -25,7 +25,8 @@ const imageSchema = z.object({
   imageUrl: z
     .string()
     .trim()
-    .regex(/^(\/uploads\/\S+|https?:\/\/\S+)$/, "URL hình ảnh không hợp lệ"),
+    .url("URL hình ảnh không hợp lệ")
+    .refine((value) => value.startsWith("https://"), "URL hình ảnh phải dùng HTTPS"),
   altText: z.string().trim().max(255, "Văn bản thay thế quá dài").optional(),
   sortOrder: z
     .string()

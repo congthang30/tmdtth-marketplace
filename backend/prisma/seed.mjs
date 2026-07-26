@@ -235,7 +235,7 @@ const productSeeds = [
     weightGram: 450,
     images: [
       {
-        imageUrl: '/uploads/demo/den-ngu-cam-ung.jpg',
+        imageUrl: 'https://htmediagroup.vn/wp-content/uploads/2026/02/Anh-xoong-noi-1.jpg',
         altText: 'Đèn ngủ cảm ứng',
         sortOrder: 1,
         isThumbnail: true,

@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   CreditCard,
   MapPin,
+  Plus,
   ShoppingBag,
   Truck,
 } from "lucide-react";
@@ -271,20 +272,6 @@ export function CheckoutPage() {
     );
   }
 
-  if (addresses.length === 0) {
-    return (
-      <EmptyState
-        title="Chưa có địa chỉ giao hàng"
-        description="Vui lòng thêm địa chỉ trước khi đặt hàng."
-        action={
-          <ButtonLink to="/addresses">
-            <MapPin size={16} aria-hidden="true" />
-            Thêm địa chỉ
-          </ButtonLink>
-        }
-      />
-    );
-  }
 
   if (paymentMethods.length === 0) {
     return (
@@ -310,25 +297,54 @@ export function CheckoutPage() {
         </div>
 
         <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
-            <MapPin size={18} aria-hidden="true" />
-            Địa chỉ giao hàng
-          </h2>
-          <div className="mt-4">
-            <SelectInput
-              label="Địa chỉ"
-              value={addressId}
-              onChange={(event) => setAddressId(event.target.value)}
-            >
-              {addresses.map((address) => (
-                <option key={address.id} value={address.id}>
-                  {address.receiverName} -{" "}
-                  {address.fullAddress ??
-                    `${address.streetAddress}, ${address.ward}, ${address.district}`}
-                </option>
-              ))}
-            </SelectInput>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
+              <MapPin size={18} aria-hidden="true" />
+              Địa chỉ giao hàng
+            </h2>
+            <ButtonLink to="/addresses" variant="secondary">
+              <Plus size={16} aria-hidden="true" />
+              Thêm địa chỉ mới
+            </ButtonLink>
           </div>
+
+          {addresses.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-border bg-surface p-5 text-center">
+              <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-primary-50 text-primary-700">
+                <MapPin size={20} aria-hidden="true" />
+              </span>
+              <h3 className="mt-3 font-semibold text-ink">
+                Chưa có địa chỉ giao hàng
+              </h3>
+              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted">
+                Thêm thông tin người nhận để tiếp tục chọn vận chuyển và đặt
+                hàng.
+              </p>
+              <div className="mt-4">
+                <ButtonLink to="/addresses">
+                  <Plus size={16} aria-hidden="true" />
+                  Thêm địa chỉ
+                </ButtonLink>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <SelectInput
+                label="Địa chỉ nhận hàng"
+                value={addressId}
+                onChange={(event) => setAddressId(event.target.value)}
+              >
+                {addresses.map((address) => (
+                  <option key={address.id} value={address.id}>
+                    {address.isDefault ? "[Mặc định] " : ""}
+                    {address.receiverName} · {address.phoneNumber} ·{" "}
+                    {address.fullAddress ??
+                      `${address.streetAddress}, ${address.ward}, ${address.district}, ${address.province}`}
+                  </option>
+                ))}
+              </SelectInput>
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
@@ -381,17 +397,22 @@ export function CheckoutPage() {
             <Truck size={18} aria-hidden="true" />
             Vận chuyển
           </h2>
-          {shippingServicesQuery.isError ? (
+          {!addressId ? (
+            <Alert tone="info" className="mt-4">
+              Hãy thêm và chọn địa chỉ giao hàng trước khi chọn dịch vụ vận
+              chuyển.
+            </Alert>
+          ) : shippingServicesQuery.isError ? (
             <Alert tone="danger" className="mt-4">
               {getErrorMessage(shippingServicesQuery.error)}
             </Alert>
           ) : null}
-          {quoteMutation.isError ? (
+          {addressId && quoteMutation.isError ? (
             <Alert tone="danger" className="mt-4">
               {getErrorMessage(quoteMutation.error)}
             </Alert>
           ) : null}
-          {shippingServicesQuery.isLoading ? (
+          {!addressId ? null : shippingServicesQuery.isLoading ? (
             <div className="mt-4 space-y-3">
               <Skeleton className="h-16 w-full" />
               <Skeleton className="h-16 w-full" />

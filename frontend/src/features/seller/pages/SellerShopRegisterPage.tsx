@@ -10,6 +10,8 @@ import { TextInput } from "@/components/ui/TextInput";
 import { Textarea } from "@/components/ui/Textarea";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
+import { useAuthStore } from "@/stores/auth.store";
+import { authApi } from "@/features/auth/api";
 import { sellerShopApi } from "../api";
 
 const shopSchema = z.object({
@@ -54,6 +56,7 @@ export function SellerShopRegisterPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
+  const setUser = useAuthStore((state) => state.setUser);
   const form = useForm<ShopFormValues>({
     resolver: zodResolver(shopSchema),
     defaultValues: {
@@ -73,6 +76,8 @@ export function SellerShopRegisterPage() {
     mutationFn: sellerShopApi.createShop,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["seller", "shop"] });
+      const currentUser = await authApi.me();
+      setUser(currentUser);
       pushToast({
         tone: "success",
         title: "Đã gửi đăng ký gian hàng",

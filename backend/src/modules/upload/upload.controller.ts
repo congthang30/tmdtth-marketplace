@@ -9,13 +9,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { randomUUID } from 'crypto';
-import { extname } from 'path';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import {
   ALLOWED_IMAGE_MIME_TYPES,
-  ensureUploadRoot,
   getUploadMaxFileSizeBytes,
 } from '../../config/upload.config';
 import { AppRole } from '../auth/app-role.enum';
@@ -23,23 +20,6 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UploadService } from './upload.service';
-
-function getSafeExtension(file: Express.Multer.File): string {
-  const originalExtension = extname(file.originalname).toLowerCase();
-
-  if (originalExtension && originalExtension.length <= 10) {
-    return originalExtension;
-  }
-
-  const mimeToExtension: Record<string, string> = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/webp': '.webp',
-    'image/gif': '.gif',
-  };
-
-  return mimeToExtension[file.mimetype] ?? '';
-}
 
 @Controller('uploads')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -50,17 +30,7 @@ export class UploadController {
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          callback(null, ensureUploadRoot());
-        },
-        filename: (_request, file, callback) => {
-          callback(
-            null,
-            `${Date.now()}-${randomUUID()}${getSafeExtension(file)}`,
-          );
-        },
-      }),
+      storage: memoryStorage(),
       limits: {
         fileSize: getUploadMaxFileSizeBytes(),
       },
@@ -81,7 +51,7 @@ export class UploadController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file?: Express.Multer.File) {
+  async uploadFile(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException({
         code: 'UPLOAD_FILE_REQUIRED',
@@ -92,7 +62,7 @@ export class UploadController {
 
     this.uploadService.assertUploadedImage(file);
 
-    return this.uploadService.createUploadResponse(file);
+    return this.uploadService.upload(file);
   }
 
   @Get()

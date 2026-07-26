@@ -1,16 +1,16 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { readdirSync, readFileSync, statSync, unlinkSync } from 'fs';
-import { extname, join } from 'path';
 import {
-  buildUploadUrl,
-  ensureUploadRoot,
-  getUploadRoot,
-} from '../../config/upload.config';
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import {
   createPaginatedResult,
   getPaginationParams,
 } from '../../common/utils/pagination.util';
+import { getCloudinaryFolder } from '../../config/upload.config';
 
 export type UploadedFileResponse = {
   fileName: string;
@@ -26,6 +26,19 @@ export type StoredUploadFile = {
   createdAt: string;
   updatedAt: string;
   url: string;
+};
+
+type CloudinarySearchResource = {
+  public_id: string;
+  format?: string;
+  bytes: number;
+  created_at: string;
+  secure_url: string;
+};
+
+type CloudinarySearchResult = {
+  total_count: number;
+  resources: CloudinarySearchResource[];
 };
 
 const JPEG_SIGNATURE = [0xff, 0xd8, 0xff] as const;
@@ -52,74 +65,135 @@ export class UploadService {
       return;
     }
 
-    this.removeStoredFile(file);
-
     throw new BadRequestException({
       code: 'UPLOAD_INVALID_FILE_TYPE',
-      message: 'Only jpg, png, webp, or gif images are supported',
+      message: 'Chỉ hỗ trợ upload ảnh jpg, png, webp hoặc gif',
       details: [{ field: 'file', mimeType: file.mimetype }],
     });
   }
 
-  createUploadResponse(file: Express.Multer.File): UploadedFileResponse {
-    return {
-      fileName: file.filename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      url: buildUploadUrl(file.filename),
-    };
+  async upload(file: Express.Multer.File): Promise<UploadedFileResponse> {
+    this.assertCloudinaryConfigured();
+
+    try {
+      const result = await this.uploadBuffer(file.buffer);
+
+      return {
+        fileName: `${result.public_id}.${result.format}`,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: result.bytes,
+        url: result.secure_url,
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      throw new ServiceUnavailableException({
+        code: 'UPLOAD_PROVIDER_UNAVAILABLE',
+        message: 'Không thể tải hình ảnh lên lúc này. Vui lòng thử lại.',
+        details: [],
+      });
+    }
   }
 
-  listFiles(query: PaginationQueryDto) {
-    const uploadRoot = ensureUploadRoot();
-    const { page, limit, skip, take } = getPaginationParams(query);
-    const q = query.q?.trim().toLowerCase();
-    const files = readdirSync(uploadRoot)
-      .map((fileName) => {
-        const filePath = join(uploadRoot, fileName);
-        const stat = statSync(filePath);
+  async listFiles(query: PaginationQueryDto) {
+    this.assertCloudinaryConfigured();
+    const { page, limit, skip } = getPaginationParams(query);
+    const q = query.q?.trim();
+    const folder = getCloudinaryFolder();
+    const escapedFolder = folder.replace(/([:\\])/g, '\\$1');
+    const escapedQuery = q?.replace(/([:\\])/g, '\\$1');
+    const expression = [
+      `folder:${escapedFolder}`,
+      escapedQuery ? `public_id:*${escapedQuery}*` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' AND ');
 
-        return { fileName, filePath, stat };
-      })
-      .filter((file) => file.stat.isFile())
-      .filter((file) => (q ? file.fileName.toLowerCase().includes(q) : true))
-      .filter((file) =>
-        ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(
-          extname(file.fileName).toLowerCase(),
-        ),
-      )
-      .sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
+    try {
+      const result = (await cloudinary.search
+        .expression(expression)
+        .sort_by('created_at', 'desc')
+        .max_results(Math.min(skip + limit, 500))
+        .execute()) as CloudinarySearchResult;
+      const items: StoredUploadFile[] = result.resources
+        .slice(skip, skip + limit)
+        .map((resource) => ({
+          fileName: `${resource.public_id}.${resource.format ?? ''}`.replace(
+            /\.$/,
+            '',
+          ),
+          size: resource.bytes,
+          createdAt: resource.created_at,
+          updatedAt: resource.created_at,
+          url: resource.secure_url,
+        }));
 
-    const items: StoredUploadFile[] = files
-      .slice(skip, skip + take)
-      .map(({ fileName, stat }) => ({
-        fileName,
-        size: stat.size,
-        createdAt: stat.birthtime.toISOString(),
-        updatedAt: stat.mtime.toISOString(),
-        url: buildUploadUrl(fileName),
-      }));
+      return createPaginatedResult({
+        items,
+        page,
+        limit,
+        total: result.total_count,
+        message: 'OK',
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'UPLOAD_PROVIDER_UNAVAILABLE',
+        message: 'Không thể tải danh sách hình ảnh lúc này. Vui lòng thử lại.',
+        details: [],
+      });
+    }
+  }
 
-    return createPaginatedResult({
-      items,
-      page,
-      limit,
-      total: files.length,
-      message: 'OK',
+  private assertCloudinaryConfigured(): void {
+    if (process.env.CLOUDINARY_URL?.trim()) {
+      return;
+    }
+
+    throw new ServiceUnavailableException({
+      code: 'UPLOAD_PROVIDER_NOT_CONFIGURED',
+      message: 'Dịch vụ lưu trữ hình ảnh chưa được cấu hình.',
+      details: [],
     });
   }
 
-  getUploadRoot(): string {
-    return getUploadRoot();
+  private uploadBuffer(buffer: Buffer): Promise<UploadApiResponse> {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: getCloudinaryFolder(),
+          public_id: `${Date.now()}-${randomUUID()}`,
+          resource_type: 'image',
+          overwrite: false,
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(
+              error instanceof Error
+                ? error
+                : new Error(
+                    error?.message ?? 'Cloudinary returned no upload result.',
+                  ),
+            );
+            return;
+          }
+
+          resolve(result);
+        },
+      );
+
+      stream.end(buffer);
+    });
   }
 
   private hasValidImageContent(file: Express.Multer.File): boolean {
-    if (!file.path) {
+    const header = file.buffer?.subarray(0, 12);
+
+    if (!header) {
       return false;
     }
-
-    const header = readFileSync(file.path).subarray(0, 12);
 
     switch (file.mimetype) {
       case 'image/jpeg':
@@ -139,18 +213,6 @@ export class UploadService {
         );
       default:
         return false;
-    }
-  }
-
-  private removeStoredFile(file: Express.Multer.File): void {
-    if (!file.path) {
-      return;
-    }
-
-    try {
-      unlinkSync(file.path);
-    } catch {
-      // Best-effort cleanup; callers should still receive the upload error.
     }
   }
 }

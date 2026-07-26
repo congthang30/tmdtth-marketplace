@@ -70,6 +70,46 @@ export const router = createBrowserRouter([
         element: <RegisterPage />,
       },
       {
+        path: "profile",
+        element: (
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "addresses",
+        element: (
+          <ProtectedRoute>
+            <AddressesPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "orders",
+        element: (
+          <ProtectedRoute>
+            <OrdersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "orders/:id",
+        element: (
+          <ProtectedRoute>
+            <OrderDetailPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "seller/shop/register",
+        element: (
+          <ProtectedRoute>
+            <SellerShopRegisterPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "forbidden",
         element: (
           <PlaceholderPage
@@ -92,42 +132,20 @@ export const router = createBrowserRouter([
       {
         path: "dashboard",
         element: (
-          <PlaceholderPage
-            eyebrow="Khu vực làm việc"
-            title="Tổng quan"
-            description="Nội dung tổng quan được hiển thị theo vai trò của tài khoản."
-          />
+          <RoleRoute allowedRoles={["Seller", "Admin"]}>
+            <PlaceholderPage
+              eyebrow="Khu vực làm việc"
+              title="Tổng quan"
+              description="Nội dung tổng quan được hiển thị theo vai trò của tài khoản."
+            />
+          </RoleRoute>
         ),
-      },
-      {
-        path: "profile",
-        element: <ProfilePage />,
-      },
-      {
-        path: "addresses",
-        element: <AddressesPage />,
-      },
-      {
-        path: "orders",
-        element: <OrdersPage />,
-      },
-      {
-        path: "orders/:id",
-        element: <OrderDetailPage />,
       },
       {
         path: "seller",
         element: (
           <RoleRoute allowedRoles={["Seller"]}>
             <SellerDashboardPage />
-          </RoleRoute>
-        ),
-      },
-      {
-        path: "seller/shop/register",
-        element: (
-          <RoleRoute allowedRoles={["Seller"]}>
-            <SellerShopRegisterPage />
           </RoleRoute>
         ),
       },

@@ -10,6 +10,7 @@ import { TextInput } from "@/components/ui/TextInput";
 import { getErrorMessage } from "@/services/errors";
 import { useAuthStore } from "@/stores/auth.store";
 import { authApi } from "../api";
+import { getAuthenticatedHome } from "../navigation";
 
 const registerSchema = z.object({
   fullName: z
@@ -48,12 +49,14 @@ export function RegisterPage() {
     mutationFn: authApi.register,
     onSuccess: (data) => {
       setAuth({ accessToken: data.accessToken, user: data.user });
-      navigate("/dashboard", { replace: true });
+      navigate(getAuthenticatedHome(data.user), { replace: true });
     },
   });
 
-  if (accessToken) {
-    return <Navigate to="/dashboard" replace />;
+  const user = useAuthStore((state) => state.user);
+
+  if (accessToken && user) {
+    return <Navigate to={getAuthenticatedHome(user)} replace />;
   }
 
   return (

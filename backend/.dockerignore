@@ -4,6 +4,6 @@ coverage
 .env
 .env.local
 npm-debug.log*
-uploads
+
 Dockerfile
 docker-compose.yml

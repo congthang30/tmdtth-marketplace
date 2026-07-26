@@ -208,7 +208,7 @@ function createCartItem(
       },
       images: [
         {
-          imageUrl: `/uploads/products/${productId.toString()}.jpg`,
+          imageUrl: `https://images.example.com/products/${productId.toString()}.jpg`,
           altText: `Product ${productId.toString()}`,
           sortOrder: 1,
           isThumbnail: true,

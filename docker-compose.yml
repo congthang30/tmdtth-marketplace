@@ -4,6 +4,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tmdtth-api
+    env_file:
+      - ./backend/.env
     environment:
       NODE_ENV: development
       PORT: 3100
@@ -13,16 +15,14 @@ services:
       JWT_EXPIRES_IN: "${JWT_EXPIRES_IN:-1d}"
       ADMIN_EMAILS: "${ADMIN_EMAILS:-admin@example.com}"
       SELLER_EMAILS: "${SELLER_EMAILS:-seller@example.com}"
-      UPLOAD_DIR: uploads
-      UPLOAD_PUBLIC_PREFIX: /uploads
-      UPLOAD_MAX_FILE_SIZE_BYTES: 5242880
+      UPLOAD_MAX_FILE_SIZE_BYTES: "${UPLOAD_MAX_FILE_SIZE_BYTES:-5242880}"
+      CLOUDINARY_FOLDER: "${CLOUDINARY_FOLDER:-tmdtth/products}"
     ports:
       - "3100:3100"
     depends_on:
       db-init:
         condition: service_completed_successfully
-    volumes:
-      - api_uploads:/app/uploads
+
 
   db-init:
     build:
@@ -68,4 +68,3 @@ services:
 
 volumes:
   postgres_data:
-  api_uploads:

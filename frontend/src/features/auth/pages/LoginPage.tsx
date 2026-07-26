@@ -10,6 +10,7 @@ import { TextInput } from "@/components/ui/TextInput";
 import { getErrorMessage } from "@/services/errors";
 import { useAuthStore } from "@/stores/auth.store";
 import { authApi } from "../api";
+import { getAuthenticatedHome } from "../navigation";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Vui lòng nhập địa chỉ email hợp lệ"),
@@ -41,12 +42,14 @@ export function LoginPage() {
     onSuccess: (data) => {
       setAuth({ accessToken: data.accessToken, user: data.user });
       const state = location.state as LocationState | null;
-      navigate(state?.from ?? "/dashboard", { replace: true });
+      navigate(state?.from ?? getAuthenticatedHome(data.user), { replace: true });
     },
   });
 
-  if (accessToken) {
-    return <Navigate to="/dashboard" replace />;
+  const user = useAuthStore((state) => state.user);
+
+  if (accessToken && user) {
+    return <Navigate to={getAuthenticatedHome(user)} replace />;
   }
 
   return (

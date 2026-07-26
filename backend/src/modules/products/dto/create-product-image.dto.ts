@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -11,7 +12,6 @@ import {
 } from 'class-validator';
 
 const idPattern = /^\d+$/;
-const imageUrlPattern = /^(\/uploads\/\S+|https?:\/\/\S+)$/;
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -30,7 +30,7 @@ export class CreateProductImageDto {
 
   @Transform(({ value }) => trimString(value))
   @IsString()
-  @Matches(imageUrlPattern)
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(1000)
   imageUrl!: string;
 

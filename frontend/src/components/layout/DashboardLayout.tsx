@@ -1,9 +1,7 @@
 import {
-  Boxes,
   ClipboardList,
   FolderTree,
   LayoutDashboard,
-  MapPin,
   PackagePlus,
   UserRound,
   ShieldCheck,
@@ -18,9 +16,6 @@ import type { AppRole } from "@/types/domain";
 
 const navItems = [
   { to: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
-  { to: "/products", label: "Danh mục sản phẩm", icon: Boxes },
-  { to: "/addresses", label: "Địa chỉ", icon: MapPin },
-  { to: "/orders", label: "Đơn hàng", icon: ClipboardList },
   {
     to: "/seller",
     label: "Tổng quan người bán",

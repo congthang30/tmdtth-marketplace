@@ -1,27 +1,12 @@
 import type { CategoryTreeNode, ProductListItem } from './types';
 import { formatMoney } from '@/utils/format';
 
-const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3100/api';
-
-const getApiOrigin = () => {
-  try {
-    return new URL(apiBaseUrl, window.location.origin).origin;
-  } catch {
-    return window.location.origin;
-  }
-};
-
 export function resolveMediaUrl(url: string | null | undefined) {
-  if (!url) {
+  if (!url?.startsWith('https://')) {
     return null;
   }
 
-  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:')) {
-    return url;
-  }
-
-  return `${getApiOrigin()}${url.startsWith('/') ? url : `/${url}`}`;
+  return url;
 }
 
 export function getProductPriceLabel(product: ProductListItem) {

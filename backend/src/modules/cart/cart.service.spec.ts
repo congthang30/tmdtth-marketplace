@@ -147,7 +147,7 @@ function money(value: string): Money {
 function createProductImage(): ProductImageEntity {
   return {
     id: 300n,
-    imageUrl: '/uploads/products/den-ban-go.jpg',
+    imageUrl: 'https://images.example.com/products/den-ban-go.jpg',
     altText: 'Đèn bàn gỗ',
     sortOrder: 1,
     isThumbnail: true,

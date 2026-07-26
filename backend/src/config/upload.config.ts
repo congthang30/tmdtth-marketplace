@@ -1,6 +1,3 @@
-import { mkdirSync } from 'fs';
-import { join } from 'path';
-
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -8,23 +5,8 @@ export const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/gif',
 ]);
 const DEFAULT_UPLOAD_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-
-export function getUploadRoot(): string {
-  return process.env.UPLOAD_DIR
-    ? process.env.UPLOAD_DIR
-    : join(process.cwd(), 'uploads');
-}
-
-export function ensureUploadRoot(): string {
-  const uploadRoot = getUploadRoot();
-  mkdirSync(uploadRoot, { recursive: true });
-  return uploadRoot;
-}
-
-export function getUploadPublicPrefix(): string {
-  const prefix = process.env.UPLOAD_PUBLIC_PREFIX ?? '/uploads';
-  return prefix.startsWith('/') ? prefix : `/${prefix}`;
-}
+const DEFAULT_CLOUDINARY_FOLDER = 'tmdtth/products';
+const CLOUDINARY_FOLDER_PATTERN = /^[a-zA-Z0-9/_-]+$/;
 
 export function getUploadMaxFileSizeBytes(): number {
   const rawValue = process.env.UPLOAD_MAX_FILE_SIZE_BYTES?.trim();
@@ -42,6 +24,15 @@ export function getUploadMaxFileSizeBytes(): number {
   return value;
 }
 
-export function buildUploadUrl(fileName: string): string {
-  return `${getUploadPublicPrefix()}/${fileName}`.replace(/\/{2,}/g, '/');
+export function getCloudinaryFolder(): string {
+  const folder =
+    process.env.CLOUDINARY_FOLDER?.trim() || DEFAULT_CLOUDINARY_FOLDER;
+
+  if (!CLOUDINARY_FOLDER_PATTERN.test(folder) || folder.includes('..')) {
+    throw new Error(
+      'CLOUDINARY_FOLDER may only contain letters, numbers, slash, underscore, or hyphen.',
+    );
+  }
+
+  return folder.replace(/^\/+|\/+$/g, '');
 }
