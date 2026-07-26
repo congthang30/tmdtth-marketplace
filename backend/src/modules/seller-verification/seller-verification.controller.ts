@@ -18,10 +18,7 @@ import { Request } from 'express';
 import { memoryStorage } from 'multer';
 import { getSellerDocumentMaxFileSizeBytes } from '../../config/seller-verification.config';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { AppRole } from '../auth/app-role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/types';
 import {
   SaveSellerPayoutAccountDto,
@@ -30,9 +27,17 @@ import {
 import { UploadSellerDocumentDto } from './dto/upload-seller-document.dto';
 import { SellerVerificationService } from './seller-verification.service';
 
+// Intentionally requires only authentication (JwtAuthGuard), not the
+// Seller role. The Seller role is granted once a shop is Approved, and a
+// shop can only be Approved once its verification profile is Approved by
+// an admin (see ShopsService.approveShop). Requiring Seller here would
+// make it impossible for any new seller to ever start or complete
+// verification. Every operation below is instead scoped to the caller's
+// own shop via SellerVerificationService.findOwnedShop, which is the
+// actual authorization boundary (an authenticated user with no owned
+// shop gets 404, never another user's data).
 @Controller('shops')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(AppRole.Seller)
+@UseGuards(JwtAuthGuard)
 export class SellerVerificationController {
   constructor(private readonly service: SellerVerificationService) {}
 

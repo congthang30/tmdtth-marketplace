@@ -15,6 +15,7 @@
     "db:ensure": "node scripts/ensure-database.mjs",
     "db:embedded": "node scripts/start-embedded-postgres.mjs",
     "test:mvp": "node scripts/mvp-acceptance.mjs",
+    "test:verification": "node scripts/seller-verification-acceptance.mjs",
     "db:check": "node scripts/check-database.mjs",
     "db:seed": "prisma db seed",
     "db:seed:check": "node scripts/check-seed.mjs",

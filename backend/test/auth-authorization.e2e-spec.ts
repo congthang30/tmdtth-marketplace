@@ -126,14 +126,6 @@ const protectedRoutes: SecuredRoute[] = [
   ['payment method list', 'get', '/api/payments/methods'],
   ['fake payment success', 'post', '/api/payments/1/fake-success'],
   ['shop registration', 'post', '/api/shops'],
-  ['seller verification detail', 'get', '/api/shops/verification/me'],
-  ['seller verification create', 'post', '/api/shops/verification'],
-  ['seller verification update', 'patch', '/api/shops/verification/me'],
-  ['seller payout update', 'put', '/api/shops/payout-account/me'],
-  ['seller verification submit', 'post', '/api/shops/verification/me/submit'],
-  ['seller document upload', 'post', '/api/shops/verification/me/documents'],
-  ['seller document delete', 'delete', '/api/shops/verification/me/documents/1'],
-  ['seller document access', 'get', '/api/shops/verification/me/documents/1/access'],
   ['admin shop approve', 'patch', '/api/admin/shops/1/approve'],
   ['admin shop reject', 'patch', '/api/admin/shops/1/reject'],
   ['admin seller verification list', 'get', '/api/admin/seller-verifications'],
@@ -173,8 +165,25 @@ const protectedRoutes: SecuredRoute[] = [
   ['upload list', 'get', '/api/uploads'],
 ];
 
-const sellerRoutes: SecuredRoute[] = protectedRoutes.filter(([name]) =>
-  name.startsWith('seller '),
+// These routes are protected by authentication only (JwtAuthGuard), not
+// the Seller role: the Seller role is granted once a shop reaches
+// Approved status, which itself requires an Approved verification
+// profile. Requiring Seller here would make onboarding impossible for
+// any new seller. Authorization is instead enforced by the service layer
+// scoping every query to the caller's own shop.
+const ownerScopedVerificationRoutes: SecuredRoute[] = [
+  ['seller verification detail', 'get', '/api/shops/verification/me'],
+  ['seller verification create', 'post', '/api/shops/verification'],
+  ['seller verification update', 'patch', '/api/shops/verification/me'],
+  ['seller payout update', 'put', '/api/shops/payout-account/me'],
+  ['seller verification submit', 'post', '/api/shops/verification/me/submit'],
+  ['seller document upload', 'post', '/api/shops/verification/me/documents'],
+  ['seller document delete', 'delete', '/api/shops/verification/me/documents/1'],
+  ['seller document access', 'get', '/api/shops/verification/me/documents/1/access'],
+];
+
+const sellerRoutes: SecuredRoute[] = protectedRoutes.filter(
+  ([name]) => name.startsWith('seller ') && name !== 'shop registration',
 );
 const adminRoutes: SecuredRoute[] = protectedRoutes.filter(([name]) =>
   name.startsWith('admin '),
@@ -324,7 +333,7 @@ describe('Authentication and role authorization (e2e)', () => {
     createReview.mockClear();
   });
 
-  it.each(protectedRoutes)(
+  it.each([...protectedRoutes, ...ownerScopedVerificationRoutes])(
     'returns 401 without a token on %s',
     async (_name, method, url) => {
       const server = app.getHttpServer() as Parameters<typeof request>[0];
@@ -374,6 +383,19 @@ describe('Authentication and role authorization (e2e)', () => {
         [method](url)
         .set('Authorization', 'Bearer seller-token')
         .expect(403);
+    },
+  );
+
+  it.each(ownerScopedVerificationRoutes)(
+    'never returns 403 for an authenticated customer without a shop on %s (owner-scoped, not role-gated)',
+    async (_name, method, url) => {
+      const server = app.getHttpServer() as Parameters<typeof request>[0];
+
+      const response = await request(server)
+        [method](url)
+        .set('Authorization', 'Bearer customer-token');
+
+      expect(response.status).not.toBe(403);
     },
   );
 
