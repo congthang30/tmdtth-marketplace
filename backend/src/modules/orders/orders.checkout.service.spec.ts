@@ -15,7 +15,6 @@ type AddressEntity = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -87,7 +86,6 @@ type ShippingQuoteEntity = {
   shippingCompanyId: bigint;
   shippingServiceId: bigint;
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: Prisma.Decimal;
   estimatedMinDays: number;
@@ -148,10 +146,9 @@ function createAddress(overrides: Partial<AddressEntity> = {}): AddressEntity {
     receiverName: 'Customer Demo',
     phoneNumber: '0900000003',
     province: 'TP.HCM',
-    district: 'District 1',
     ward: 'Ben Nghe',
     streetAddress: '10 Demo',
-    fullAddress: '10 Demo, Ben Nghe, District 1, TP.HCM',
+    fullAddress: '10 Demo, Ben Nghe, TP.HCM',
     isDeleted: false,
     ...overrides,
   };
@@ -242,7 +239,6 @@ function createShippingQuote(
     shippingCompanyId: 10n,
     shippingServiceId: 20n,
     destinationProvince: 'TP.HCM',
-    destinationDistrict: 'District 1',
     totalWeightGram: 900,
     quotedFee: new Prisma.Decimal('35000'),
     estimatedMinDays: 2,

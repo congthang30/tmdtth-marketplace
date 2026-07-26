@@ -196,7 +196,6 @@ export function CheckoutPage() {
         shopId: group.shop.id,
         shippingServiceId,
         destinationProvince: previewQuery.data?.address.province ?? "",
-        destinationDistrict: previewQuery.data?.address.district,
         totalWeightGram: getGroupWeightGram(group),
       }),
     onSuccess: (quote) => {
@@ -339,7 +338,7 @@ export function CheckoutPage() {
                     {address.isDefault ? "[Mặc định] " : ""}
                     {address.receiverName} · {address.phoneNumber} ·{" "}
                     {address.fullAddress ??
-                      `${address.streetAddress}, ${address.ward}, ${address.district}, ${address.province}`}
+                      `${address.streetAddress}, ${address.ward}, ${address.province}`}
                   </option>
                 ))}
               </SelectInput>

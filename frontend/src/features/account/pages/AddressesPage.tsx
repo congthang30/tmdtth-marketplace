@@ -34,11 +34,6 @@ const addressSchema = z.object({
     .trim()
     .min(2, "Vui lòng nhập tỉnh/thành phố")
     .max(100, "Tên tỉnh/thành phố quá dài"),
-  district: z
-    .string()
-    .trim()
-    .min(2, "Vui lòng nhập quận/huyện")
-    .max(100, "Tên quận/huyện quá dài"),
   ward: z
     .string()
     .trim()
@@ -70,7 +65,6 @@ const toAddressRequest = (
   receiverName: values.receiverName.trim(),
   phoneNumber: values.phoneNumber.trim(),
   province: values.province.trim(),
-  district: values.district.trim(),
   ward: values.ward.trim(),
   streetAddress: values.streetAddress.trim(),
   fullAddress: values.fullAddress?.trim() || null,
@@ -86,7 +80,6 @@ function AddressFormModal({ open, address, onClose }: AddressFormModalProps) {
       receiverName: "",
       phoneNumber: "",
       province: "",
-      district: "",
       ward: "",
       streetAddress: "",
       fullAddress: "",
@@ -103,7 +96,6 @@ function AddressFormModal({ open, address, onClose }: AddressFormModalProps) {
       receiverName: address?.receiverName ?? "",
       phoneNumber: address?.phoneNumber ?? "",
       province: address?.province ?? "",
-      district: address?.district ?? "",
       ward: address?.ward ?? "",
       streetAddress: address?.streetAddress ?? "",
       fullAddress: address?.fullAddress ?? "",
@@ -171,17 +163,14 @@ function AddressFormModal({ open, address, onClose }: AddressFormModalProps) {
         <VietnamAddressFields
           value={{
             province: form.watch("province"),
-            district: form.watch("district"),
             ward: form.watch("ward"),
           }}
           onChange={(next) => {
             form.setValue("province", next.province, { shouldValidate: true });
-            form.setValue("district", next.district, { shouldValidate: true });
             form.setValue("ward", next.ward, { shouldValidate: true });
           }}
           errors={{
             province: form.formState.errors.province?.message,
-            district: form.formState.errors.district?.message,
             ward: form.formState.errors.ward?.message,
           }}
           required
@@ -327,7 +316,7 @@ export function AddressesPage() {
 
                 <p className="mt-4 text-sm leading-6 text-ink">
                   {address.fullAddress ??
-                    `${address.streetAddress}, ${address.ward}, ${address.district}, ${address.province}`}
+                    `${address.streetAddress}, ${address.ward}, ${address.province}`}
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-2">

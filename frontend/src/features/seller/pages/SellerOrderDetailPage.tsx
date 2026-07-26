@@ -367,7 +367,7 @@ export function SellerOrderDetailPage() {
             <p className="mt-1 text-muted">{order.receiverPhone}</p>
             <p className="mt-2 text-muted">
               {order.shippingAddress.streetAddress},{" "}
-              {order.shippingAddress.ward}, {order.shippingAddress.district},{" "}
+              {order.shippingAddress.ward},{" "}
               {order.shippingAddress.province}
             </p>
           </div>

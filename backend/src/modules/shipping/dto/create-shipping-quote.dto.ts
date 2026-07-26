@@ -41,12 +41,6 @@ export class CreateShippingQuoteDto {
   @MaxLength(100)
   destinationProvince!: string;
 
-  @IsOptional()
-  @Transform(trimString)
-  @IsString()
-  @MaxLength(100)
-  destinationDistrict?: string;
-
   @Type(() => Number)
   @IsInt()
   @Min(1)

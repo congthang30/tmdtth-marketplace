@@ -30,7 +30,6 @@ type ShopEntity = {
   email: string | null;
   phoneNumber: string | null;
   province: string | null;
-  district: string | null;
   ward: string | null;
   streetAddress: string | null;
   taxCode: string | null;
@@ -64,7 +63,6 @@ type ShopCreateArgs = {
     email: string | null;
     phoneNumber: string | null;
     province: string | null;
-    district: string | null;
     ward: string | null;
     streetAddress: string | null;
     taxCode: string | null;
@@ -105,7 +103,6 @@ function createShopEntity(overrides: Partial<ShopEntity> = {}): ShopEntity {
     email: null,
     phoneNumber: null,
     province: null,
-    district: null,
     ward: null,
     streetAddress: null,
     taxCode: null,
@@ -208,7 +205,6 @@ describe('ShopsService', () => {
         email: 'seller@example.com',
         phoneNumber: '0900000001',
         province: 'TP.HCM',
-        district: 'District 1',
         ward: 'Ben Nghe',
         streetAddress: '10 Demo',
         taxCode: 'TAX001',
@@ -231,7 +227,6 @@ describe('ShopsService', () => {
         email: 'seller@example.com',
         phoneNumber: '0900000001',
         province: 'TP.HCM',
-        district: 'District 1',
         ward: 'Ben Nghe',
         streetAddress: '10 Demo',
         taxCode: 'TAX001',

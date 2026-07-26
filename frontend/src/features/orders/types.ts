@@ -116,7 +116,6 @@ export type OrderListItem = Order & {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };

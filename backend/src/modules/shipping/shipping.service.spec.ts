@@ -59,7 +59,6 @@ type ShippingQuoteEntity = {
   shippingCompanyId: bigint;
   shippingServiceId: bigint;
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: { toString(): string };
   estimatedMinDays: number;
@@ -84,7 +83,6 @@ type CreateShipmentShopOrderEntity = {
     receiverName: string;
     receiverPhone: string;
     shippingProvince: string;
-    shippingDistrict: string;
     shippingWard: string;
     shippingStreetAddress: string;
   };
@@ -336,7 +334,6 @@ function createShippingQuoteEntity(
     shippingCompanyId: 10n,
     shippingServiceId: 20n,
     destinationProvince: 'TP.HCM',
-    destinationDistrict: 'Quận 1',
     totalWeightGram: 1500,
     quotedFee: { toString: () => '35000' },
     estimatedMinDays: 2,
@@ -366,7 +363,6 @@ function createShipmentShopOrderEntity(
       receiverName: 'Customer Demo',
       receiverPhone: '0900000003',
       shippingProvince: 'TP.HCM',
-      shippingDistrict: 'Quận 1',
       shippingWard: 'Phường Bến Nghé',
       shippingStreetAddress: '10 Demo',
     },
@@ -846,7 +842,6 @@ describe('ShippingService admin shipping companies', () => {
       shopId: '100',
       shippingServiceId: '20',
       destinationProvince: 'TP.HCM',
-      destinationDistrict: 'Quận 1',
       totalWeightGram: 1500,
     });
     const createArgs = prisma.shippingQuote.create.mock.calls[0][0] as {
@@ -855,7 +850,6 @@ describe('ShippingService admin shipping companies', () => {
         shippingCompanyId: bigint;
         shippingServiceId: bigint;
         destinationProvince: string;
-        destinationDistrict: string;
         totalWeightGram: number;
         quotedFee: { toString(): string };
         estimatedMinDays: number;
@@ -982,7 +976,7 @@ describe('ShippingService admin shipping companies', () => {
     expect(shipmentArgs.data.shipmentStatus).toBe('Pending');
     expect(shipmentArgs.data.shippingFee.toString()).toBe('35000');
     expect(shipmentArgs.data.deliveryAddress).toBe(
-      '10 Demo, Phường Bến Nghé, Quận 1, TP.HCM',
+      '10 Demo, Phường Bến Nghé, TP.HCM',
     );
     expect(shipmentArgs.data.recipientName).toBe('Customer Demo');
     expect(shipmentArgs.data.expectedDeliveryAt).toEqual(

@@ -31,11 +31,6 @@ export class CreateAddressDto {
   @Transform(trimString)
   @IsString()
   @Length(2, 100)
-  district!: string;
-
-  @Transform(trimString)
-  @IsString()
-  @Length(2, 100)
   ward!: string;
 
   @Transform(trimString)

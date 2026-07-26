@@ -169,7 +169,6 @@ const sellerShopOrderInclude = {
       receiverName: true,
       receiverPhone: true,
       shippingProvince: true,
-      shippingDistrict: true,
       shippingWard: true,
       shippingStreetAddress: true,
       customerNote: true,
@@ -225,7 +224,6 @@ type CheckoutAddressEntity = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -582,7 +580,6 @@ export class OrdersService {
           receiverName: context.address.receiverName,
           receiverPhone: context.address.phoneNumber,
           shippingProvince: context.address.province,
-          shippingDistrict: context.address.district,
           shippingWard: context.address.ward,
           shippingStreetAddress: context.address.streetAddress,
           subtotalAmount: context.subtotalAmount,
@@ -1450,11 +1447,7 @@ export class OrdersService {
       });
     }
 
-    if (
-      quote.destinationProvince !== address.province ||
-      (quote.destinationDistrict &&
-        quote.destinationDistrict !== address.district)
-    ) {
+    if (quote.destinationProvince !== address.province) {
       throw new BadRequestException({
         code: 'SHIPPING_QUOTE_ADDRESS_MISMATCH',
         message: 'Shipping quote does not match the selected address',
@@ -1501,7 +1494,6 @@ export class OrdersService {
     receiverName: string;
     phoneNumber: string;
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
     fullAddress: string | null;
@@ -1512,7 +1504,6 @@ export class OrdersService {
       receiverName: address.receiverName,
       phoneNumber: address.phoneNumber,
       province: address.province,
-      district: address.district,
       ward: address.ward,
       streetAddress: address.streetAddress,
       fullAddress: address.fullAddress,
@@ -1817,7 +1808,6 @@ export class OrdersService {
       receiverPhone: order.receiverPhone,
       shippingAddress: {
         province: order.shippingProvince,
-        district: order.shippingDistrict,
         ward: order.shippingWard,
         streetAddress: order.shippingStreetAddress,
       },
@@ -1927,7 +1917,6 @@ export class OrdersService {
       receiverPhone: shopOrder.order.receiverPhone,
       shippingAddress: {
         province: shopOrder.order.shippingProvince,
-        district: shopOrder.order.shippingDistrict,
         ward: shopOrder.order.shippingWard,
         streetAddress: shopOrder.order.shippingStreetAddress,
       },

@@ -47,12 +47,6 @@ export class CreateShopDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  district?: string;
-
-  @Transform(({ value }) => trimString(value))
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
   ward?: string;
 
   @Transform(({ value }) => trimString(value))

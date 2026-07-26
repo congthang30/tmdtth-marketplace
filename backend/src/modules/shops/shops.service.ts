@@ -99,7 +99,6 @@ export class ShopsService {
         email: this.normalizeNullableText(dto.email),
         phoneNumber: this.normalizeNullableText(dto.phoneNumber),
         province: this.normalizeNullableText(dto.province),
-        district: this.normalizeNullableText(dto.district),
         ward: this.normalizeNullableText(dto.ward),
         streetAddress: this.normalizeNullableText(dto.streetAddress),
         taxCode: this.normalizeNullableText(dto.taxCode),
@@ -226,7 +225,6 @@ export class ShopsService {
     email: string | null;
     phoneNumber: string | null;
     province: string | null;
-    district: string | null;
     ward: string | null;
     streetAddress: string | null;
     taxCode: string | null;
@@ -249,7 +247,6 @@ export class ShopsService {
       email: shop.email,
       phoneNumber: shop.phoneNumber,
       province: shop.province,
-      district: shop.district,
       ward: shop.ward,
       streetAddress: shop.streetAddress,
       taxCode: shop.taxCode,

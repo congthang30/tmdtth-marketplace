@@ -5,16 +5,10 @@ export type VietnamWard = {
   name: string;
 };
 
-export type VietnamDistrict = {
-  code: number;
-  name: string;
-  wards: VietnamWard[];
-};
-
 export type VietnamProvince = {
   code: number;
   name: string;
-  districts: VietnamDistrict[];
+  wards: VietnamWard[];
 };
 
 const provinces = rawData as VietnamProvince[];
@@ -68,70 +62,18 @@ export function findProvinceByName(name: string): VietnamProvince | null {
   );
 }
 
-export function getDistrictsByProvince(
+export function getWardsByProvince(
   provinceCode: number | null,
-): VietnamDistrict[] {
-  const province = getProvinceByCode(provinceCode);
-  return province?.districts ?? [];
-}
-
-export function searchDistricts(
-  provinceCode: number | null,
-  query: string,
-): VietnamDistrict[] {
-  const districts = getDistrictsByProvince(provinceCode);
-  const normalizedQuery = normalizeVietnameseText(query);
-  if (!normalizedQuery) {
-    return districts;
-  }
-  return districts.filter((district) =>
-    normalizeVietnameseText(district.name).includes(normalizedQuery),
-  );
-}
-
-export function getDistrictByCode(
-  provinceCode: number | null,
-  districtCode: number | null,
-): VietnamDistrict | null {
-  if (districtCode === null) {
-    return null;
-  }
-  const districts = getDistrictsByProvince(provinceCode);
-  return (
-    districts.find((district) => district.code === districtCode) ?? null
-  );
-}
-
-export function findDistrictByName(
-  provinceCode: number | null,
-  name: string,
-): VietnamDistrict | null {
-  const normalizedName = normalizeVietnameseText(name);
-  if (!normalizedName) {
-    return null;
-  }
-  const districts = getDistrictsByProvince(provinceCode);
-  return (
-    districts.find(
-      (district) => normalizeVietnameseText(district.name) === normalizedName,
-    ) ?? null
-  );
-}
-
-export function getWardsByDistrict(
-  provinceCode: number | null,
-  districtCode: number | null,
 ): VietnamWard[] {
-  const district = getDistrictByCode(provinceCode, districtCode);
-  return district?.wards ?? [];
+  const province = getProvinceByCode(provinceCode);
+  return province?.wards ?? [];
 }
 
 export function searchWards(
   provinceCode: number | null,
-  districtCode: number | null,
   query: string,
 ): VietnamWard[] {
-  const wards = getWardsByDistrict(provinceCode, districtCode);
+  const wards = getWardsByProvince(provinceCode);
   const normalizedQuery = normalizeVietnameseText(query);
   if (!normalizedQuery) {
     return wards;
@@ -141,16 +83,26 @@ export function searchWards(
   );
 }
 
+export function getWardByCode(
+  provinceCode: number | null,
+  wardCode: number | null,
+): VietnamWard | null {
+  if (wardCode === null) {
+    return null;
+  }
+  const wards = getWardsByProvince(provinceCode);
+  return wards.find((ward) => ward.code === wardCode) ?? null;
+}
+
 export function findWardByName(
   provinceCode: number | null,
-  districtCode: number | null,
   name: string,
 ): VietnamWard | null {
   const normalizedName = normalizeVietnameseText(name);
   if (!normalizedName) {
     return null;
   }
-  const wards = getWardsByDistrict(provinceCode, districtCode);
+  const wards = getWardsByProvince(provinceCode);
   return (
     wards.find((ward) => normalizeVietnameseText(ward.name) === normalizedName) ??
     null

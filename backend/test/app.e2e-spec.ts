@@ -138,7 +138,6 @@ type CheckoutPreviewE2eResponse = {
     receiverName: string;
     phoneNumber: string;
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
     fullAddress: string | null;
@@ -179,7 +178,6 @@ type ShopE2eResponse = {
   email: string | null;
   phoneNumber: string | null;
   province: string | null;
-  district: string | null;
   ward: string | null;
   streetAddress: string | null;
   taxCode: string | null;
@@ -407,7 +405,6 @@ type OrderListItemE2eResponse = Omit<OrderE2eResponse, 'address'> & {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };
@@ -432,7 +429,6 @@ type SellerShopOrderE2eResponse = {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };
@@ -520,7 +516,6 @@ type ShippingQuoteE2eResponse = {
     serviceName: string;
   };
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;
@@ -855,7 +850,6 @@ const shopResponse: ShopE2eResponse = {
   email: 'seller@example.com',
   phoneNumber: '0900000001',
   province: 'TP.HCM',
-  district: 'District 1',
   ward: 'Ben Nghe',
   streetAddress: '10 Demo',
   taxCode: 'TAX001',
@@ -1039,10 +1033,9 @@ const checkoutPreviewResponse: CheckoutPreviewE2eResponse = {
     receiverName: 'Customer Demo',
     phoneNumber: '0900000003',
     province: 'TP.HCM',
-    district: 'District 1',
     ward: 'Ben Nghe',
     streetAddress: '10 Demo',
-    fullAddress: '10 Demo, Ben Nghe, District 1, TP.HCM',
+    fullAddress: '10 Demo, Ben Nghe, TP.HCM',
   },
   paymentMethod: {
     id: '20',
@@ -1095,7 +1088,6 @@ const sellerShopOrderResponse: SellerShopOrderE2eResponse = {
   receiverPhone: '0900000003',
   shippingAddress: {
     province: 'TP.HCM',
-    district: 'Quận 1',
     ward: 'Phường Bến Nghé',
     streetAddress: '10 Demo',
   },
@@ -1216,7 +1208,6 @@ const myOrderResponse: OrderListItemE2eResponse = {
   receiverPhone: '0900000003',
   shippingAddress: {
     province: 'TP.HCM',
-    district: 'District 1',
     ward: 'Ben Nghe',
     streetAddress: '10 Demo',
   },
@@ -1416,7 +1407,6 @@ const shippingQuoteResponse: ShippingQuoteE2eResponse = {
     serviceName: 'Standard Delivery',
   },
   destinationProvince: 'TP.HCM',
-  destinationDistrict: 'Quận 1',
   totalWeightGram: 1500,
   quotedFee: '35000',
   estimatedMinDays: 2,
@@ -1877,7 +1867,6 @@ describe('App API (e2e)', () => {
         email: 'seller@example.com',
         phoneNumber: '0900000001',
         province: 'TP.HCM',
-        district: 'District 1',
         ward: 'Ben Nghe',
         streetAddress: '10 Demo',
         taxCode: 'TAX001',
@@ -3390,7 +3379,6 @@ describe('App API (e2e)', () => {
         shopId: '1',
         shippingServiceId: '20',
         destinationProvince: 'TP.HCM',
-        destinationDistrict: 'Quận 1',
         totalWeightGram: 1500,
       })
       .expect(201)

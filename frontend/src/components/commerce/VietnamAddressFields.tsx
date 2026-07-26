@@ -1,23 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Combobox } from "@/components/ui/Combobox";
 import {
-  findDistrictByName,
   findProvinceByName,
   findWardByName,
-  getDistrictsByProvince,
   getProvinceByCode,
-  getWardsByDistrict,
-  searchDistricts,
+  getWardsByProvince,
   searchProvinces,
   searchWards,
-  type VietnamDistrict,
   type VietnamProvince,
   type VietnamWard,
 } from "@/lib/vietnamAddress";
 
 export type VietnamAddressValue = {
   province: string;
-  district: string;
   ward: string;
 };
 
@@ -26,27 +21,28 @@ type VietnamAddressFieldsProps = {
   onChange: (value: VietnamAddressValue) => void;
   errors?: {
     province?: string;
-    district?: string;
     ward?: string;
   };
   required?: boolean;
   names?: {
     province?: string;
-    district?: string;
     ward?: string;
   };
 };
 
 /**
- * Cascading, search-to-filter Tỉnh/Thành → Quận/Huyện → Phường/Xã picker,
- * matching the address input pattern used by Shopee/Lazada/Tiki. Backed by
- * an offline bundled dataset (frontend/src/data/vn-address.json) — no
- * network calls at input time.
+ * Cascading, search-to-filter Tỉnh/Thành → Phường/Xã picker, matching the
+ * 2-tier administrative model in effect in Vietnam since 1 July 2025 (the
+ * Quận/Huyện tier was abolished; wards now belong directly to a province).
+ * Backed by an offline bundled dataset (frontend/src/data/vn-address.json,
+ * sourced from provinces.open-api.vn/api/v2) — no network calls at input
+ * time.
  *
- * The value/onChange contract is plain strings (province/district/ward
- * names), identical to the existing Zod schema and backend DTO fields, so
- * this is a drop-in replacement for the previous free-text TextInput trio
- * with zero backend/schema changes.
+ * The value/onChange contract is plain strings (province/ward names),
+ * matching the current Zod schema and backend DTO fields, so this is a
+ * drop-in replacement for the previous free-text TextInput pair with no
+ * backend/schema surprises beyond the district removal already agreed in
+ * the implementation plan.
  */
 export function VietnamAddressFields({
   value,
@@ -56,10 +52,8 @@ export function VietnamAddressFields({
   names,
 }: VietnamAddressFieldsProps) {
   const [provinceCode, setProvinceCode] = useState<number | null>(null);
-  const [districtCode, setDistrictCode] = useState<number | null>(null);
   const [wardCode, setWardCode] = useState<number | null>(null);
   const [provinceQuery, setProvinceQuery] = useState("");
-  const [districtQuery, setDistrictQuery] = useState("");
   const [wardQuery, setWardQuery] = useState("");
 
   // Hydrate codes from saved string values (edit existing address / resume
@@ -80,32 +74,18 @@ export function VietnamAddressFields({
   }, [value.province]);
 
   useEffect(() => {
-    if (!value.district || provinceCode === null) {
-      return;
-    }
-    setDistrictCode((current) => {
-      if (current !== null) {
-        return current;
-      }
-      const district = findDistrictByName(provinceCode, value.district);
-      return district?.code ?? null;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.district, provinceCode]);
-
-  useEffect(() => {
-    if (!value.ward || provinceCode === null || districtCode === null) {
+    if (!value.ward || provinceCode === null) {
       return;
     }
     setWardCode((current) => {
       if (current !== null) {
         return current;
       }
-      const ward = findWardByName(provinceCode, districtCode, value.ward);
+      const ward = findWardByName(provinceCode, value.ward);
       return ward?.code ?? null;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.ward, provinceCode, districtCode]);
+  }, [value.ward, provinceCode]);
 
   const provinceOptions = useMemo(
     () =>
@@ -116,54 +96,23 @@ export function VietnamAddressFields({
     [provinceQuery],
   );
 
-  const districtOptions = useMemo(
-    () =>
-      searchDistricts(provinceCode, districtQuery).map(
-        (district: VietnamDistrict) => ({
-          value: String(district.code),
-          label: district.name,
-        }),
-      ),
-    [provinceCode, districtQuery],
-  );
-
   const wardOptions = useMemo(
     () =>
-      searchWards(provinceCode, districtCode, wardQuery).map(
-        (ward: VietnamWard) => ({
-          value: String(ward.code),
-          label: ward.name,
-        }),
-      ),
-    [provinceCode, districtCode, wardQuery],
+      searchWards(provinceCode, wardQuery).map((ward: VietnamWard) => ({
+        value: String(ward.code),
+        label: ward.name,
+      })),
+    [provinceCode, wardQuery],
   );
 
   const handleProvinceChange = (nextValue: string) => {
     const nextCode = nextValue ? Number(nextValue) : null;
     setProvinceCode(nextCode);
-    setDistrictCode(null);
     setWardCode(null);
-    setDistrictQuery("");
     setWardQuery("");
     const province = getProvinceByCode(nextCode);
     onChange({
       province: province?.name ?? "",
-      district: "",
-      ward: "",
-    });
-  };
-
-  const handleDistrictChange = (nextValue: string) => {
-    const nextCode = nextValue ? Number(nextValue) : null;
-    setDistrictCode(nextCode);
-    setWardCode(null);
-    setWardQuery("");
-    const district = getDistrictsByProvince(provinceCode).find(
-      (item) => item.code === nextCode,
-    );
-    onChange({
-      ...value,
-      district: district?.name ?? "",
       ward: "",
     });
   };
@@ -171,7 +120,7 @@ export function VietnamAddressFields({
   const handleWardChange = (nextValue: string) => {
     const nextCode = nextValue ? Number(nextValue) : null;
     setWardCode(nextCode);
-    const ward = getWardsByDistrict(provinceCode, districtCode).find(
+    const ward = getWardsByProvince(provinceCode).find(
       (item) => item.code === nextCode,
     );
     onChange({
@@ -195,20 +144,6 @@ export function VietnamAddressFields({
         required={required}
       />
       <Combobox
-        label="Quận/Huyện"
-        placeholder="Chọn quận/huyện"
-        name={names?.district}
-        value={districtCode !== null ? String(districtCode) : ""}
-        onChange={handleDistrictChange}
-        query={districtQuery}
-        onQueryChange={setDistrictQuery}
-        options={districtOptions}
-        error={errors?.district}
-        disabled={provinceCode === null}
-        disabledHint="Chọn tỉnh/thành phố trước"
-        required={required}
-      />
-      <Combobox
         label="Phường/Xã"
         placeholder="Chọn phường/xã"
         name={names?.ward}
@@ -218,8 +153,8 @@ export function VietnamAddressFields({
         onQueryChange={setWardQuery}
         options={wardOptions}
         error={errors?.ward}
-        disabled={districtCode === null}
-        disabledHint="Chọn quận/huyện trước"
+        disabled={provinceCode === null}
+        disabledHint="Chọn tỉnh/thành phố trước"
         required={required}
       />
     </>

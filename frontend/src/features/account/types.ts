@@ -25,7 +25,6 @@ export type Address = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -43,7 +42,6 @@ export type AddressRequest = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress?: string | null;

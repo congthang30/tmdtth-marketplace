@@ -6,7 +6,6 @@ export type CheckoutAddressSummary = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -144,7 +143,6 @@ export type ShippingQuoteRequest = {
   shopId: string;
   shippingServiceId: string;
   destinationProvince: string;
-  destinationDistrict?: string;
   totalWeightGram: number;
 };
 
@@ -155,7 +153,6 @@ export type ShippingQuote = {
   shippingCompany: CheckoutShippingSelection['shippingCompany'];
   shippingService: CheckoutShippingSelection['shippingService'];
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;

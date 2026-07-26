@@ -4,7 +4,6 @@ export type CheckoutAddressSummary = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -227,7 +226,6 @@ export type OrderListItemResponse = Omit<OrderResponse, 'address'> & {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };
@@ -247,7 +245,6 @@ export type SellerShopOrderResponse = {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };

@@ -34,7 +34,6 @@ type SellerShopOrderEntity = {
     receiverName: string;
     receiverPhone: string;
     shippingProvince: string;
-    shippingDistrict: string;
     shippingWard: string;
     shippingStreetAddress: string;
     customerNote: string | null;
@@ -128,7 +127,6 @@ function createShopOrderEntity(
       receiverName: 'Customer Demo',
       receiverPhone: '0900000003',
       shippingProvince: 'TP.HCM',
-      shippingDistrict: 'Quận 1',
       shippingWard: 'Phường Bến Nghé',
       shippingStreetAddress: '10 Demo',
       customerNote: 'Giao giờ hành chính',

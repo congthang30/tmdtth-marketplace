@@ -13,7 +13,6 @@ export type Shop = {
   email: string | null;
   phoneNumber: string | null;
   province: string | null;
-  district: string | null;
   ward: string | null;
   streetAddress: string | null;
   taxCode: string | null;
@@ -32,7 +31,6 @@ export type ShopRequest = {
   email?: string;
   phoneNumber?: string;
   province?: string;
-  district?: string;
   ward?: string;
   streetAddress?: string;
   taxCode?: string;
@@ -143,7 +141,6 @@ export type SellerShopOrder = {
   receiverPhone: string;
   shippingAddress: {
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   };

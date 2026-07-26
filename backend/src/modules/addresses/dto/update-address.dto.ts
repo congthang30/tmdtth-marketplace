@@ -34,12 +34,6 @@ export class UpdateAddressDto {
   @Transform(trimString)
   @IsString()
   @Length(2, 100)
-  district?: string;
-
-  @IsOptional()
-  @Transform(trimString)
-  @IsString()
-  @Length(2, 100)
   ward?: string;
 
   @IsOptional()

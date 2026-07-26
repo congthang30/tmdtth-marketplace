@@ -42,7 +42,6 @@ const shopSchema = z.object({
     .or(z.literal(""))
     .optional(),
   province: z.string().trim().max(100, "Tên tỉnh/thành phố quá dài").optional(),
-  district: z.string().trim().max(100, "Tên quận/huyện quá dài").optional(),
   ward: z.string().trim().max(100, "Tên phường/xã quá dài").optional(),
   streetAddress: z
     .string()
@@ -110,7 +109,6 @@ export function SellerShopRegisterPage() {
       email: "",
       phoneNumber: "",
       province: "",
-      district: "",
       ward: "",
       streetAddress: "",
       taxCode: "",
@@ -296,7 +294,6 @@ export function SellerShopRegisterPage() {
               email: cleanOptional(values.email),
               phoneNumber: cleanOptional(values.phoneNumber),
               province: cleanOptional(values.province),
-              district: cleanOptional(values.district),
               ward: cleanOptional(values.ward),
               streetAddress: cleanOptional(values.streetAddress),
               taxCode: cleanOptional(values.taxCode),
@@ -388,17 +385,14 @@ export function SellerShopRegisterPage() {
               <VietnamAddressFields
                 value={{
                   province: form.watch("province") ?? "",
-                  district: form.watch("district") ?? "",
                   ward: form.watch("ward") ?? "",
                 }}
                 onChange={(next) => {
                   form.setValue("province", next.province, { shouldValidate: true });
-                  form.setValue("district", next.district, { shouldValidate: true });
                   form.setValue("ward", next.ward, { shouldValidate: true });
                 }}
                 errors={{
                   province: form.formState.errors.province?.message,
-                  district: form.formState.errors.district?.message,
                   ward: form.formState.errors.ward?.message,
                 }}
               />

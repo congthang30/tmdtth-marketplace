@@ -123,7 +123,6 @@ type ShippingQuoteEntity = {
   shippingCompanyId: bigint;
   shippingServiceId: bigint;
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: { toString(): string };
   estimatedMinDays: number;
@@ -147,7 +146,6 @@ const createShipmentShopOrderInclude = {
       receiverName: true,
       receiverPhone: true,
       shippingProvince: true,
-      shippingDistrict: true,
       shippingWard: true,
       shippingStreetAddress: true,
     },
@@ -518,9 +516,6 @@ export class ShippingService {
         shippingCompanyId: service.shippingCompanyId,
         shippingServiceId: service.id,
         destinationProvince: dto.destinationProvince,
-        destinationDistrict: this.normalizeNullableText(
-          dto.destinationDistrict,
-        ),
         totalWeightGram: dto.totalWeightGram,
         quotedFee,
         estimatedMinDays: service.estimatedMinDays,
@@ -1316,7 +1311,6 @@ export class ShippingService {
     return [
       shopOrder.order.shippingStreetAddress,
       shopOrder.order.shippingWard,
-      shopOrder.order.shippingDistrict,
       shopOrder.order.shippingProvince,
     ]
       .filter((part) => part.trim().length > 0)
@@ -1733,7 +1727,6 @@ export class ShippingService {
         serviceName: service.serviceName,
       },
       destinationProvince: quote.destinationProvince,
-      destinationDistrict: quote.destinationDistrict,
       totalWeightGram: quote.totalWeightGram,
       quotedFee: quote.quotedFee.toString(),
       estimatedMinDays: quote.estimatedMinDays,

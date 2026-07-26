@@ -23,7 +23,6 @@ type AddressUpdateData = Partial<
     | 'receiverName'
     | 'phoneNumber'
     | 'province'
-    | 'district'
     | 'ward'
     | 'streetAddress'
     | 'fullAddress'
@@ -85,7 +84,6 @@ export class AddressesService {
           receiverName: dto.receiverName,
           phoneNumber: dto.phoneNumber,
           province: dto.province,
-          district: dto.district,
           ward: dto.ward,
           streetAddress: dto.streetAddress,
           fullAddress: this.buildFullAddress(dto),
@@ -252,10 +250,6 @@ export class AddressesService {
       data.province = dto.province;
     }
 
-    if (dto.district !== undefined) {
-      data.district = dto.district;
-    }
-
     if (dto.ward !== undefined) {
       data.ward = dto.ward;
     }
@@ -268,13 +262,11 @@ export class AddressesService {
       data.fullAddress = this.normalizeNullableText(dto.fullAddress);
     } else if (
       dto.province !== undefined ||
-      dto.district !== undefined ||
       dto.ward !== undefined ||
       dto.streetAddress !== undefined
     ) {
       data.fullAddress = this.buildFullAddress({
         province: dto.province ?? address.province,
-        district: dto.district ?? address.district,
         ward: dto.ward ?? address.ward,
         streetAddress: dto.streetAddress ?? address.streetAddress,
       });
@@ -286,7 +278,6 @@ export class AddressesService {
   private buildFullAddress(address: {
     fullAddress?: string | null;
     province: string;
-    district: string;
     ward: string;
     streetAddress: string;
   }): string {
@@ -301,7 +292,6 @@ export class AddressesService {
     return [
       address.streetAddress,
       address.ward,
-      address.district,
       address.province,
     ].join(', ');
   }
@@ -322,7 +312,6 @@ export class AddressesService {
       receiverName: address.receiverName,
       phoneNumber: address.phoneNumber,
       province: address.province,
-      district: address.district,
       ward: address.ward,
       streetAddress: address.streetAddress,
       fullAddress: address.fullAddress,

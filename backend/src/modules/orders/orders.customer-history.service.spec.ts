@@ -91,7 +91,6 @@ type CustomerOrderEntity = {
   receiverName: string;
   receiverPhone: string;
   shippingProvince: string;
-  shippingDistrict: string;
   shippingWard: string;
   shippingStreetAddress: string;
   subtotalAmount: Prisma.Decimal;
@@ -146,7 +145,6 @@ function createCustomerOrder(
     receiverName: 'Customer Demo',
     receiverPhone: '0900000003',
     shippingProvince: 'TP.HCM',
-    shippingDistrict: 'District 1',
     shippingWard: 'Ben Nghe',
     shippingStreetAddress: '10 Demo',
     subtotalAmount: money('160000'),

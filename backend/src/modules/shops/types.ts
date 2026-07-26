@@ -9,7 +9,6 @@ export type ShopResponse = {
   email: string | null;
   phoneNumber: string | null;
   province: string | null;
-  district: string | null;
   ward: string | null;
   streetAddress: string | null;
   taxCode: string | null;

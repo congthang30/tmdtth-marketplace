@@ -68,7 +68,6 @@ export type ShippingQuoteResponse = {
     serviceName: string;
   };
   destinationProvince: string;
-  destinationDistrict: string | null;
   totalWeightGram: number;
   quotedFee: string;
   estimatedMinDays: number;

@@ -11,7 +11,6 @@ type AddressEntity = {
   receiverName: string;
   phoneNumber: string;
   province: string;
-  district: string;
   ward: string;
   streetAddress: string;
   fullAddress: string | null;
@@ -206,10 +205,9 @@ function createAddress(): AddressEntity {
     receiverName: 'Customer Demo',
     phoneNumber: '0900000003',
     province: 'TP.HCM',
-    district: 'District 1',
     ward: 'Ben Nghe',
     streetAddress: '10 Demo',
-    fullAddress: '10 Demo, Ben Nghe, District 1, TP.HCM',
+    fullAddress: '10 Demo, Ben Nghe, TP.HCM',
     isDeleted: false,
   };
 }
