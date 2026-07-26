@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { SelectInput } from "@/components/ui/SelectInput";
 import { TextInput } from "@/components/ui/TextInput";
 import { Textarea } from "@/components/ui/Textarea";
+import { VietnamAddressFields } from "@/components/commerce/VietnamAddressFields";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -384,9 +385,23 @@ export function SellerShopRegisterPage() {
               <TextInput label="Email" type="email" error={form.formState.errors.email?.message} {...form.register("email")} />
               <TextInput label="Số điện thoại" error={form.formState.errors.phoneNumber?.message} {...form.register("phoneNumber")} />
               <TextInput label="Mã số thuế công khai (nếu có)" error={form.formState.errors.taxCode?.message} {...form.register("taxCode")} />
-              <TextInput label="Tỉnh/Thành phố" error={form.formState.errors.province?.message} {...form.register("province")} />
-              <TextInput label="Quận/Huyện" error={form.formState.errors.district?.message} {...form.register("district")} />
-              <TextInput label="Phường/Xã" error={form.formState.errors.ward?.message} {...form.register("ward")} />
+              <VietnamAddressFields
+                value={{
+                  province: form.watch("province") ?? "",
+                  district: form.watch("district") ?? "",
+                  ward: form.watch("ward") ?? "",
+                }}
+                onChange={(next) => {
+                  form.setValue("province", next.province, { shouldValidate: true });
+                  form.setValue("district", next.district, { shouldValidate: true });
+                  form.setValue("ward", next.ward, { shouldValidate: true });
+                }}
+                errors={{
+                  province: form.formState.errors.province?.message,
+                  district: form.formState.errors.district?.message,
+                  ward: form.formState.errors.ward?.message,
+                }}
+              />
               <TextInput label="Địa chỉ đường/phố" error={form.formState.errors.streetAddress?.message} {...form.register("streetAddress")} />
               <Textarea label="Mô tả" rows={4} className="md:col-span-2" error={form.formState.errors.description?.message} {...form.register("description")} />
             </form>

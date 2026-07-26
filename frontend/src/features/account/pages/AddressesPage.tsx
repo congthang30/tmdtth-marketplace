@@ -13,6 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TextInput } from "@/components/ui/TextInput";
 import { Textarea } from "@/components/ui/Textarea";
+import { VietnamAddressFields } from "@/components/commerce/VietnamAddressFields";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
 import { addressesApi } from "../api";
@@ -167,20 +168,23 @@ function AddressFormModal({ open, address, onClose }: AddressFormModalProps) {
           error={form.formState.errors.phoneNumber?.message}
           {...form.register("phoneNumber")}
         />
-        <TextInput
-          label="Tỉnh/Thành phố"
-          error={form.formState.errors.province?.message}
-          {...form.register("province")}
-        />
-        <TextInput
-          label="Quận/Huyện"
-          error={form.formState.errors.district?.message}
-          {...form.register("district")}
-        />
-        <TextInput
-          label="Phường/Xã"
-          error={form.formState.errors.ward?.message}
-          {...form.register("ward")}
+        <VietnamAddressFields
+          value={{
+            province: form.watch("province"),
+            district: form.watch("district"),
+            ward: form.watch("ward"),
+          }}
+          onChange={(next) => {
+            form.setValue("province", next.province, { shouldValidate: true });
+            form.setValue("district", next.district, { shouldValidate: true });
+            form.setValue("ward", next.ward, { shouldValidate: true });
+          }}
+          errors={{
+            province: form.formState.errors.province?.message,
+            district: form.formState.errors.district?.message,
+            ward: form.formState.errors.ward?.message,
+          }}
+          required
         />
         <TextInput
           label="Địa chỉ đường/phố"
