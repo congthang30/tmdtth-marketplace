@@ -29,3 +29,20 @@ export function normalizeProvinceNameForMatching(value: string): string {
     .replace(/^(thanh pho|tinh|tp\.?|tp|t\.)\s*/, '')
     .trim();
 }
+
+/**
+ * GHN's sandbox master data has not been fully migrated to the 2025
+ * ward/commune merger: some entries still reflect the pre-reform 3-tier
+ * hierarchy, using unit-type prefixes like "Thị trấn" (township) or
+ * "Thị xã" for a place that our own (post-reform) data now calls "Xã"
+ * (commune) or "Phường" (ward) — e.g. GHN's "Thị trấn Ia Ly" vs our
+ * "Xã Ia Ly". The underlying place name is identical, only the
+ * administrative unit-type prefix differs, so this strips all known
+ * Vietnamese ward/commune-level prefixes before comparing.
+ */
+export function normalizeWardNameForMatching(value: string): string {
+  const normalized = normalizeVietnameseText(value);
+  return normalized
+    .replace(/^(phuong|xa|thi tran|thi xa)\s*/, '')
+    .trim();
+}

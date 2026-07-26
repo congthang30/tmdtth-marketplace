@@ -3,6 +3,7 @@ import { getCarrierTimeoutMs, getGhnConfig } from '../../../config/carrier.confi
 import {
   normalizeProvinceNameForMatching,
   normalizeVietnameseText,
+  normalizeWardNameForMatching,
 } from '../normalize-vietnamese-text';
 
 /**
@@ -127,7 +128,7 @@ export class GhnAddressResolver {
     await this.ensureLoaded();
 
     const normalizedProvince = normalizeProvinceNameForMatching(provinceName);
-    const normalizedWard = normalizeVietnameseText(wardName);
+    const normalizedWard = normalizeWardNameForMatching(wardName);
 
     const province = this.provinces?.find(
       (item) => normalizeProvinceNameForMatching(item.ProvinceName) === normalizedProvince,
@@ -144,7 +145,7 @@ export class GhnAddressResolver {
     for (const district of districts) {
       const wards = await this.getWards(district.DistrictID);
       const ward = wards.find(
-        (item) => normalizeVietnameseText(item.WardName) === normalizedWard,
+        (item) => normalizeWardNameForMatching(item.WardName) === normalizedWard,
       );
 
       if (ward) {
