@@ -17,6 +17,7 @@ export type ShopResponse = {
   approvedByUserId: string | null;
   approvedByUserIdString: string | null;
   approvedAt: Date | null;
+  rejectionReason: string | null;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;

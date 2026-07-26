@@ -1,0 +1,108 @@
+import { apiGet, apiGetResponse, apiPatch } from '@/services/api';
+import type { ApiMeta } from '@/types/api';
+import type {
+  BusinessType,
+  IdentityDocumentType,
+  PayoutStatus,
+  SellerDocumentType,
+  SellerType,
+  VerificationStatus,
+} from '@/features/seller-verification/types';
+
+export type AdminSellerVerificationListItem = {
+  id: string;
+  shop: { id: string; shopName: string; shopStatus: string };
+  sellerType: SellerType;
+  businessType: BusinessType | null;
+  legalName: string;
+  taxCodeMasked: string;
+  verificationStatus: VerificationStatus;
+  submittedAt: string | null;
+  createdAt: string;
+  documentCount: number;
+};
+
+export type AdminSellerVerificationDocument = {
+  id: string;
+  documentType: SellerDocumentType;
+  mimeType: string;
+  originalFileName: string;
+  bytes: number;
+  documentStatus: string;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export type AdminSellerVerificationDetail = {
+  id: string;
+  shop: { id: string; shopName: string; shopStatus: string };
+  sellerType: SellerType;
+  businessType: BusinessType | null;
+  legalName: string;
+  identityDocumentType: IdentityDocumentType | null;
+  identityNumberMasked: string | null;
+  taxCodeMasked: string;
+  businessRegistrationNumberMasked: string | null;
+  legalRepresentativeName: string | null;
+  registeredAddress: string | null;
+  verificationStatus: VerificationStatus;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  payoutAccount: null | {
+    bankCode: string;
+    bankName: string;
+    accountNumberMasked: string;
+    accountHolderName: string;
+    payoutStatus: PayoutStatus;
+  };
+  documents: AdminSellerVerificationDocument[];
+  reviews: Array<{ id: string; reviewStatus: string; reason: string | null; createdAt: string }>;
+  histories: Array<{ id: string; fromStatus: VerificationStatus | null; toStatus: VerificationStatus; createdAt: string }>;
+};
+
+export type AdminSellerVerificationParams = {
+  page?: number;
+  limit?: number;
+  q?: string;
+  status?: VerificationStatus;
+  sellerType?: SellerType;
+  sortBy?: 'createdAt' | 'submittedAt' | 'legalName';
+  sortOrder?: 'asc' | 'desc';
+};
+
+export const adminSellerVerificationKeys = {
+  all: ['admin', 'seller-verifications'] as const,
+  list: (params: AdminSellerVerificationParams) => [...adminSellerVerificationKeys.all, 'list', params] as const,
+  detail: (id: string) => [...adminSellerVerificationKeys.all, 'detail', id] as const,
+};
+
+export const adminSellerVerificationApi = {
+  async list(params: AdminSellerVerificationParams): Promise<{ items: AdminSellerVerificationListItem[]; meta?: ApiMeta }> {
+    const response = await apiGetResponse<AdminSellerVerificationListItem[]>('/admin/seller-verifications', { params });
+    return { items: response.data, meta: response.meta };
+  },
+  detail(id: string) {
+    return apiGet<AdminSellerVerificationDetail>(`/admin/seller-verifications/${id}`);
+  },
+  async accessDocument(profileId: string, documentId: string) {
+    return apiGet<{ signedUrl: string; expiresIn: number }>(
+      `/admin/seller-verifications/${profileId}/documents/${documentId}/access`,
+    );
+  },
+  startReview(id: string) {
+    return apiPatch<AdminSellerVerificationDetail>(`/admin/seller-verifications/${id}/start-review`);
+  },
+  requestRevision(id: string, reason: string) {
+    return apiPatch<AdminSellerVerificationDetail, { reason: string }>(
+      `/admin/seller-verifications/${id}/request-revision`, { reason },
+    );
+  },
+  approve(id: string) {
+    return apiPatch<AdminSellerVerificationDetail>(`/admin/seller-verifications/${id}/approve`);
+  },
+  reject(id: string, reason: string) {
+    return apiPatch<AdminSellerVerificationDetail, { reason: string }>(
+      `/admin/seller-verifications/${id}/reject`, { reason },
+    );
+  },
+};

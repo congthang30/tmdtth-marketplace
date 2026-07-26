@@ -1,0 +1,60 @@
+import { apiClient, apiDelete, apiGet, apiPatch, apiPost } from '@/services/api';
+import type { ApiResponse } from '@/types/api';
+import type {
+  SaveSellerPayoutRequest,
+  SaveSellerVerificationRequest,
+  SellerDocumentAccess,
+  SellerDocumentType,
+  SellerPayoutAccount,
+  SellerVerificationDocument,
+  SellerVerificationOverview,
+  SellerVerificationProfile,
+} from './types';
+
+export const sellerVerificationQueryKey = ['seller', 'verification', 'me'] as const;
+
+export const sellerVerificationApi = {
+  getMine() {
+    return apiGet<SellerVerificationOverview>('/shops/verification/me');
+  },
+  createDraft(body: SaveSellerVerificationRequest) {
+    return apiPost<SellerVerificationProfile, SaveSellerVerificationRequest>(
+      '/shops/verification',
+      body,
+    );
+  },
+  updateDraft(body: SaveSellerVerificationRequest) {
+    return apiPatch<SellerVerificationProfile, SaveSellerVerificationRequest>(
+      '/shops/verification/me',
+      body,
+    );
+  },
+  savePayout(body: SaveSellerPayoutRequest) {
+    return apiClient
+      .put<ApiResponse<SellerPayoutAccount>>('/shops/payout-account/me', body)
+      .then((response) => response.data.data);
+  },
+  async uploadDocument(documentType: SellerDocumentType, file: File) {
+    const body = new FormData();
+    body.append('documentType', documentType);
+    body.append('file', file);
+    const response = await apiClient.post<ApiResponse<SellerVerificationDocument>>(
+      '/shops/verification/me/documents',
+      body,
+    );
+    return response.data.data;
+  },
+  accessDocument(documentId: string) {
+    return apiGet<SellerDocumentAccess>(
+      `/shops/verification/me/documents/${documentId}/access`,
+    );
+  },
+  deleteDocument(documentId: string) {
+    return apiDelete<{ deleted: true }>(
+      `/shops/verification/me/documents/${documentId}`,
+    );
+  },
+  submit() {
+    return apiPost<SellerVerificationProfile>('/shops/verification/me/submit');
+  },
+};

@@ -37,9 +37,12 @@ type ShopEntity = {
   shopStatus: string;
   approvedByUserId: bigint | null;
   approvedAt: Date | null;
+  rejectionReason: string | null;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;
+  sellerVerification?: { verificationStatus: 'Approved' } | null;
+  payoutAccount?: { payoutStatus: 'Verified'; isActive: boolean } | null;
 };
 
 type ShopUpdateArgs = {
@@ -109,6 +112,7 @@ function createShopEntity(overrides: Partial<ShopEntity> = {}): ShopEntity {
     shopStatus: 'PendingApproval',
     approvedByUserId: null,
     approvedAt: null,
+    rejectionReason: null,
     isDeleted: false,
     createdAt: new Date('2026-07-03T00:00:00.000Z'),
     updatedAt: new Date('2026-07-03T00:00:00.000Z'),
@@ -263,7 +267,10 @@ describe('ShopsService', () => {
 
   describe('approveShop', () => {
     it('approves a pending shop and records the admin actor', async () => {
-      const pendingShop = createShopEntity();
+      const pendingShop = createShopEntity({
+        sellerVerification: { verificationStatus: 'Approved' },
+        payoutAccount: { payoutStatus: 'Verified', isActive: true },
+      });
       const approvedShop = createShopEntity({
         shopStatus: 'Approved',
         approvedByUserId: adminUser.id,
@@ -285,6 +292,52 @@ describe('ShopsService', () => {
       expect(result.shopStatus).toBe('Approved');
       expect(result.approvedByUserId).toBe('99');
     });
+
+    it('blocks a legacy pending shop with no verification or payout record', async () => {
+      prisma.shop.findUnique.mockResolvedValue(createShopEntity());
+
+      await expect(service.approveShop(adminUser, '1')).rejects.toMatchObject({
+        response: {
+          code: 'SHOP_SELLER_VERIFICATION_REQUIRED',
+          details: [
+            {
+              field: 'sellerVerification',
+              verificationStatus: null,
+              payoutStatus: null,
+            },
+          ],
+        },
+      });
+      expect(prisma.shop.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks approval when verification is approved but payout is unavailable', async () => {
+      prisma.shop.findUnique.mockResolvedValue(
+        createShopEntity({
+          sellerVerification: { verificationStatus: 'Approved' },
+          payoutAccount: null,
+        }),
+      );
+
+      await expect(service.approveShop(adminUser, '1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.shop.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks approval when a verified payout account is inactive', async () => {
+      prisma.shop.findUnique.mockResolvedValue(
+        createShopEntity({
+          sellerVerification: { verificationStatus: 'Approved' },
+          payoutAccount: { payoutStatus: 'Verified', isActive: false },
+        }),
+      );
+
+      await expect(service.approveShop(adminUser, '1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.shop.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('rejectShop', () => {
@@ -299,7 +352,9 @@ describe('ShopsService', () => {
       prisma.shop.findUnique.mockResolvedValue(pendingShop);
       prisma.shop.update.mockResolvedValue(rejectedShop);
 
-      const result = await service.rejectShop(adminUser, '1');
+      const result = await service.rejectShop(adminUser, '1', {
+        reason: 'Hồ sơ chưa hợp lệ.',
+      });
 
       const updateArgs = prisma.shop.update.mock.calls[0][0];
 
@@ -317,9 +372,9 @@ describe('ShopsService', () => {
         createShopEntity({ shopStatus: 'Approved' }),
       );
 
-      await expect(service.rejectShop(adminUser, '1')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.rejectShop(adminUser, '1', { reason: 'Hồ sơ chưa hợp lệ.' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.shop.update).not.toHaveBeenCalled();
     });
 
@@ -328,9 +383,9 @@ describe('ShopsService', () => {
         createShopEntity({ isDeleted: true }),
       );
 
-      await expect(service.rejectShop(adminUser, '1')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.rejectShop(adminUser, '1', { reason: 'Hồ sơ chưa hợp lệ.' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.shop.update).not.toHaveBeenCalled();
     });
   });

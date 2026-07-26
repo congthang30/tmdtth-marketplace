@@ -28,6 +28,8 @@ import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage"
 import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
 import { AdminShippingCompaniesPage } from "@/features/admin/pages/AdminShippingCompaniesPage";
 import { AdminShippingServicesPage } from "@/features/admin/pages/AdminShippingServicesPage";
+import { AdminSellerVerificationsPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationsPage";
+import { AdminSellerVerificationDetailPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationDetailPage";
 
 export const router = createBrowserRouter([
   {
@@ -242,6 +244,22 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
             <AdminShippingCompaniesPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/seller-verifications",
+        element: (
+          <RoleRoute allowedRoles={["Admin"]}>
+            <AdminSellerVerificationsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/seller-verifications/:id",
+        element: (
+          <RoleRoute allowedRoles={["Admin"]}>
+            <AdminSellerVerificationDetailPage />
           </RoleRoute>
         ),
       },

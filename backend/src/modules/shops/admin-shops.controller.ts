@@ -42,8 +42,6 @@ export class AdminShopsController {
     @Param('id') shopId: string,
     @Body() dto: RejectShopDto,
   ) {
-    void dto;
-
-    return this.shopsService.rejectShop(user, shopId);
+    return this.shopsService.rejectShop(user, shopId, dto);
   }
 }

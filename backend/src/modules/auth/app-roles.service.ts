@@ -35,14 +35,16 @@ export class AppRolesService {
     }
 
     if (!roles.has(AppRole.Seller)) {
-      const ownedShopCount = await this.prisma.shop.count({
+      const approvedShop = await this.prisma.shop.findFirst({
         where: {
           ownerUserId: user.id,
+          shopStatus: 'Approved',
           isDeleted: false,
         },
+        select: { id: true },
       });
 
-      if (ownedShopCount > 0) {
+      if (approvedShop) {
         roles.add(AppRole.Seller);
       }
     }

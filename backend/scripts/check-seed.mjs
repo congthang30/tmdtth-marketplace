@@ -147,6 +147,39 @@ async function main() {
   assert(Boolean(shop), 'Expected approved demo shop.', failures);
   assert(shop?.shopStatus === 'Approved', 'Demo shop must be Approved.', failures);
 
+  const verification = shop
+    ? await prisma.sellerVerificationProfile.findUnique({
+        where: { shopId: shop.id },
+      })
+    : null;
+  const payout = shop
+    ? await prisma.sellerPayoutAccount.findUnique({ where: { shopId: shop.id } })
+    : null;
+  assert(
+    verification?.verificationStatus === 'Approved',
+    'Demo shop seller verification must be Approved.',
+    failures,
+  );
+  assert(
+    payout?.payoutStatus === 'Verified' && payout.isActive,
+    'Demo shop payout account must be active and Verified.',
+    failures,
+  );
+  assert(
+    verification?.identityNumberEncrypted.startsWith('v1.') &&
+      verification.taxCodeEncrypted.startsWith('v1.') &&
+      payout?.accountNumberEncrypted.startsWith('v1.'),
+    'Demo sensitive seller data must use versioned encryption payloads.',
+    failures,
+  );
+  assert(
+    !verification?.identityNumberEncrypted.includes('079203012345') &&
+      !verification?.taxCodeEncrypted.includes('0312345678') &&
+      !payout?.accountNumberEncrypted.includes('123456789012'),
+    'Demo sensitive seller data must not contain plaintext values.',
+    failures,
+  );
+
   const products = await prisma.product.findMany({
     where: {
       slug: { in: ['noi-inox-3-lop', 'den-ngu-cam-ung'] },

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -7,8 +7,8 @@ function trimString(value: unknown): unknown {
 
 export class RejectShopDto {
   @Transform(({ value }) => trimString(value))
-  @IsOptional()
   @IsString()
+  @MinLength(5)
   @MaxLength(1000)
-  reason?: string;
+  reason!: string;
 }

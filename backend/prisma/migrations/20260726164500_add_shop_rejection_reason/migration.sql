@@ -1,0 +1,2 @@
+ALTER TABLE "Shops"
+ADD COLUMN "RejectionReason" VARCHAR(1000);

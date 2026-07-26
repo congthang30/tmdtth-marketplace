@@ -33,6 +33,10 @@ import { ShippingService } from '../src/modules/shipping/shipping.service';
 import { AdminShopsController } from '../src/modules/shops/admin-shops.controller';
 import { ShopsController } from '../src/modules/shops/shops.controller';
 import { ShopsService } from '../src/modules/shops/shops.service';
+import { SellerVerificationController } from '../src/modules/seller-verification/seller-verification.controller';
+import { SellerVerificationService } from '../src/modules/seller-verification/seller-verification.service';
+import { AdminSellerVerificationController } from '../src/modules/seller-verification/admin-seller-verification.controller';
+import { AdminSellerVerificationService } from '../src/modules/seller-verification/admin-seller-verification.service';
 import { UploadController } from '../src/modules/upload/upload.controller';
 import { UploadService } from '../src/modules/upload/upload.service';
 import { UsersController } from '../src/modules/users/users.controller';
@@ -67,7 +71,7 @@ function createUser(id: bigint, role: AppRole): AuthenticatedUser {
   };
 }
 
-type HttpMethod = 'get' | 'post' | 'patch' | 'delete';
+type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 type SecuredRoute = readonly [name: string, method: HttpMethod, url: string];
 
 const protectedRoutes: SecuredRoute[] = [
@@ -122,8 +126,23 @@ const protectedRoutes: SecuredRoute[] = [
   ['payment method list', 'get', '/api/payments/methods'],
   ['fake payment success', 'post', '/api/payments/1/fake-success'],
   ['shop registration', 'post', '/api/shops'],
+  ['seller verification detail', 'get', '/api/shops/verification/me'],
+  ['seller verification create', 'post', '/api/shops/verification'],
+  ['seller verification update', 'patch', '/api/shops/verification/me'],
+  ['seller payout update', 'put', '/api/shops/payout-account/me'],
+  ['seller verification submit', 'post', '/api/shops/verification/me/submit'],
+  ['seller document upload', 'post', '/api/shops/verification/me/documents'],
+  ['seller document delete', 'delete', '/api/shops/verification/me/documents/1'],
+  ['seller document access', 'get', '/api/shops/verification/me/documents/1/access'],
   ['admin shop approve', 'patch', '/api/admin/shops/1/approve'],
   ['admin shop reject', 'patch', '/api/admin/shops/1/reject'],
+  ['admin seller verification list', 'get', '/api/admin/seller-verifications'],
+  ['admin seller verification detail', 'get', '/api/admin/seller-verifications/1'],
+  ['admin seller document access', 'get', '/api/admin/seller-verifications/1/documents/2/access'],
+  ['admin seller verification start', 'patch', '/api/admin/seller-verifications/1/start-review'],
+  ['admin seller verification revision', 'patch', '/api/admin/seller-verifications/1/request-revision'],
+  ['admin seller verification approve', 'patch', '/api/admin/seller-verifications/1/approve'],
+  ['admin seller verification reject', 'patch', '/api/admin/seller-verifications/1/reject'],
   ['seller order list', 'get', '/api/seller/orders'],
   ['seller order detail', 'get', '/api/seller/orders/1'],
   ['seller order confirm', 'patch', '/api/seller/orders/1/confirm'],
@@ -223,6 +242,8 @@ describe('Authentication and role authorization (e2e)', () => {
         PaymentsController,
         ShopsController,
         AdminShopsController,
+        SellerVerificationController,
+        AdminSellerVerificationController,
         SellerProductsController,
         SellerOrdersController,
         AdminShippingCompaniesController,
@@ -252,6 +273,8 @@ describe('Authentication and role authorization (e2e)', () => {
         },
         { provide: PaymentsService, useValue: {} },
         { provide: ShopsService, useValue: {} },
+        { provide: SellerVerificationService, useValue: {} },
+        { provide: AdminSellerVerificationService, useValue: {} },
         {
           provide: ShippingService,
           useValue: {

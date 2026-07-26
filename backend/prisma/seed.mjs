@@ -1,10 +1,62 @@
 import bcrypt from 'bcryptjs';
+import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
 
 import { createPrismaClient } from '../scripts/prisma-client.mjs';
 
 const prisma = createPrismaClient();
 const now = () => new Date();
 const demoPassword = 'Demo@123456';
+const sellerEncryptionPayloadVersion = 'v1';
+
+function sellerEncryptionKey() {
+  const activeKeyId = process.env.SELLER_DATA_ACTIVE_KEY_ID?.trim();
+  const entries = process.env.SELLER_DATA_ENCRYPTION_KEYS?.split(',') ?? [];
+  const keys = new Map(
+    entries.map((entry) => {
+      const separator = entry.indexOf(':');
+      return [entry.slice(0, separator).trim(), entry.slice(separator + 1).trim()];
+    }),
+  );
+  const fallback = process.env.SELLER_DATA_ENCRYPTION_KEY?.trim();
+  const keyId = activeKeyId || (fallback ? 'legacy' : '');
+  const encoded = keys.get(keyId) || fallback;
+  const key = encoded ? Buffer.from(encoded, 'base64') : null;
+  if (!keyId || !key || key.length !== 32) {
+    throw new Error(
+      'Seller verification seed requires a valid 32-byte seller encryption key.',
+    );
+  }
+  return { keyId, key };
+}
+
+function encryptSellerValue(value) {
+  const { keyId, key } = sellerEncryptionKey();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(value.trim(), 'utf8'),
+    cipher.final(),
+  ]);
+  return [
+    sellerEncryptionPayloadVersion,
+    keyId,
+    iv.toString('base64url'),
+    cipher.getAuthTag().toString('base64url'),
+    ciphertext.toString('base64url'),
+  ].join('.');
+}
+
+function hashSellerValue(value) {
+  const normalized = value
+    .trim()
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+  return createHmac('sha256', sellerEncryptionKey().key)
+    .update(normalized)
+    .digest('hex');
+}
+
 
 const users = [
   {
@@ -543,6 +595,96 @@ async function seedDemoShop(seededUsers) {
   });
 }
 
+async function seedSellerVerification({ seededUsers, shop }) {
+  const admin = seededUsers['admin@example.com'];
+  const identityNumber = '079203012345';
+  const taxCode = '0312345678';
+  const bankAccountNumber = '123456789012';
+  const timestamp = now();
+
+  const profile = await prisma.sellerVerificationProfile.upsert({
+    where: { shopId: shop.id },
+    update: {
+      sellerType: 'Individual',
+      businessType: null,
+      legalName: 'Nguyễn Văn Seller',
+      identityDocumentType: 'CitizenId',
+      identityNumberEncrypted: encryptSellerValue(identityNumber),
+      identityNumberHash: hashSellerValue(identityNumber),
+      identityNumberLast4: identityNumber.slice(-4),
+      identityIssuedAt: new Date('2021-01-10'),
+      identityIssuedBy: 'Cục Cảnh sát quản lý hành chính về trật tự xã hội',
+      identityExpiresAt: new Date('2036-01-10'),
+      taxCodeEncrypted: encryptSellerValue(taxCode),
+      taxCodeHash: hashSellerValue(taxCode),
+      taxCodeLast4: taxCode.slice(-4),
+      businessRegistrationNumberEncrypted: null,
+      businessRegistrationNumberHash: null,
+      businessRegistrationNumberLast4: null,
+      businessRegistrationIssuedAt: null,
+      businessRegistrationIssuedBy: null,
+      legalRepresentativeName: null,
+      registeredAddress: null,
+      verificationStatus: 'Approved',
+      submittedAt: timestamp,
+      reviewedByUserId: admin.id,
+      reviewedAt: timestamp,
+      updatedAt: timestamp,
+    },
+    create: {
+      shopId: shop.id,
+      sellerType: 'Individual',
+      legalName: 'Nguyễn Văn Seller',
+      identityDocumentType: 'CitizenId',
+      identityNumberEncrypted: encryptSellerValue(identityNumber),
+      identityNumberHash: hashSellerValue(identityNumber),
+      identityNumberLast4: identityNumber.slice(-4),
+      identityIssuedAt: new Date('2021-01-10'),
+      identityIssuedBy: 'Cục Cảnh sát quản lý hành chính về trật tự xã hội',
+      identityExpiresAt: new Date('2036-01-10'),
+      taxCodeEncrypted: encryptSellerValue(taxCode),
+      taxCodeHash: hashSellerValue(taxCode),
+      taxCodeLast4: taxCode.slice(-4),
+      verificationStatus: 'Approved',
+      submittedAt: timestamp,
+      reviewedByUserId: admin.id,
+      reviewedAt: timestamp,
+    },
+  });
+
+  await prisma.sellerPayoutAccount.upsert({
+    where: { shopId: shop.id },
+    update: {
+      bankCode: 'VCB',
+      bankNameSnapshot: 'Ngân hàng TMCP Ngoại thương Việt Nam',
+      accountNumberEncrypted: encryptSellerValue(bankAccountNumber),
+      accountNumberHash: hashSellerValue(bankAccountNumber),
+      accountNumberLast4: bankAccountNumber.slice(-4),
+      accountHolderName: 'NGUYEN VAN SELLER',
+      payoutStatus: 'Verified',
+      verifiedByUserId: admin.id,
+      verifiedAt: timestamp,
+      isActive: true,
+      updatedAt: timestamp,
+    },
+    create: {
+      shopId: shop.id,
+      bankCode: 'VCB',
+      bankNameSnapshot: 'Ngân hàng TMCP Ngoại thương Việt Nam',
+      accountNumberEncrypted: encryptSellerValue(bankAccountNumber),
+      accountNumberHash: hashSellerValue(bankAccountNumber),
+      accountNumberLast4: bankAccountNumber.slice(-4),
+      accountHolderName: 'NGUYEN VAN SELLER',
+      payoutStatus: 'Verified',
+      verifiedByUserId: admin.id,
+      verifiedAt: timestamp,
+      isActive: true,
+    },
+  });
+
+  return profile;
+}
+
 async function upsertProductImage(productId, imageSeed) {
   const existing = await prisma.productImage.findFirst({
     where: {
@@ -795,6 +937,7 @@ async function main() {
   const attributeByCategoryAndName = await seedAttributes(categoryBySlug);
   await seedShipping(seededUsers);
   const shop = await seedDemoShop(seededUsers);
+  await seedSellerVerification({ seededUsers, shop });
   await seedProducts({
     categoryBySlug,
     attributeByCategoryAndName,

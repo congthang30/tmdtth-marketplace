@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PayoutStatus, VerificationStatus } from '@prisma/client';
 import {
   createPaginatedResult,
   getPaginationParams,
@@ -12,6 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
 import { AdminShopQueryDto } from './dto/admin-shop-query.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
+import { RejectShopDto } from './dto/reject-shop.dto';
 import { ShopResponse } from './types';
 
 const SHOP_STATUS_PENDING_APPROVAL = 'PendingApproval';
@@ -116,7 +118,13 @@ export class ShopsService {
     shopId: string,
   ): Promise<ShopResponse> {
     const id = this.parseShopId(shopId);
-    const shop = await this.prisma.shop.findUnique({ where: { id } });
+    const shop = await this.prisma.shop.findUnique({
+      where: { id },
+      include: {
+        sellerVerification: { select: { verificationStatus: true } },
+        payoutAccount: { select: { payoutStatus: true, isActive: true } },
+      },
+    });
 
     if (!shop || shop.isDeleted) {
       throw new NotFoundException({
@@ -134,6 +142,27 @@ export class ShopsService {
       });
     }
 
+    if (
+      shop.sellerVerification?.verificationStatus !==
+        VerificationStatus.Approved ||
+      shop.payoutAccount?.payoutStatus !== PayoutStatus.Verified ||
+      !shop.payoutAccount.isActive
+    ) {
+      throw new BadRequestException({
+        code: 'SHOP_SELLER_VERIFICATION_REQUIRED',
+        message:
+          'Chỉ có thể duyệt gian hàng khi hồ sơ người bán và tài khoản nhận tiền đã được xác minh.',
+        details: [
+          {
+            field: 'sellerVerification',
+            verificationStatus:
+              shop.sellerVerification?.verificationStatus ?? null,
+            payoutStatus: shop.payoutAccount?.payoutStatus ?? null,
+          },
+        ],
+      });
+    }
+
     const now = new Date();
     const updatedShop = await this.prisma.shop.update({
       where: { id },
@@ -141,6 +170,7 @@ export class ShopsService {
         shopStatus: SHOP_STATUS_APPROVED,
         approvedByUserId: user.id,
         approvedAt: now,
+        rejectionReason: null,
         updatedAt: now,
       },
     });
@@ -151,6 +181,7 @@ export class ShopsService {
   async rejectShop(
     user: AuthenticatedUser,
     shopId: string,
+    dto: RejectShopDto,
   ): Promise<ShopResponse> {
     const id = this.parseShopId(shopId);
     const shop = await this.prisma.shop.findUnique({ where: { id } });
@@ -178,6 +209,7 @@ export class ShopsService {
         shopStatus: SHOP_STATUS_REJECTED,
         approvedByUserId: user.id,
         approvedAt: now,
+        rejectionReason: dto.reason,
         updatedAt: now,
       },
     });
@@ -201,6 +233,7 @@ export class ShopsService {
     shopStatus: string;
     approvedByUserId: bigint | null;
     approvedAt: Date | null;
+    rejectionReason: string | null;
     isDeleted: boolean;
     createdAt: Date;
     updatedAt: Date | null;
@@ -224,6 +257,7 @@ export class ShopsService {
       approvedByUserId: shop.approvedByUserId?.toString() ?? null,
       approvedByUserIdString: shop.approvedByUserId?.toString() ?? null,
       approvedAt: shop.approvedAt,
+      rejectionReason: shop.rejectionReason,
       isDeleted: shop.isDeleted,
       createdAt: shop.createdAt,
       updatedAt: shop.updatedAt,

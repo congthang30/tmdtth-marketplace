@@ -864,7 +864,9 @@ describe('ProductsService', () => {
       orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
     });
     expect(result).toHaveLength(1);
-    expect(result[0].imageUrl).toBe('https://images.example.com/demo/den-ban-go.jpg');
+    expect(result[0].imageUrl).toBe(
+      'https://images.example.com/demo/den-ban-go.jpg',
+    );
     expect(result[0].isThumbnail).toBe(true);
   });
 
@@ -892,7 +894,9 @@ describe('ProductsService', () => {
     });
     expect(createArgs.data.productId).toBe(100n);
     expect(createArgs.data.productVariantId).toBeNull();
-    expect(createArgs.data.imageUrl).toBe('https://images.example.com/demo/den-ban-go.jpg');
+    expect(createArgs.data.imageUrl).toBe(
+      'https://images.example.com/demo/den-ban-go.jpg',
+    );
     expect(createArgs.data.isThumbnail).toBe(true);
     expect(result.isThumbnail).toBe(true);
   });
@@ -930,7 +934,9 @@ describe('ProductsService', () => {
       data: { isThumbnail: false },
     });
     expect(updateArgs.where.id).toBe(300n);
-    expect(updateArgs.data.imageUrl).toBe('https://images.example.com/demo/den-ban-go-2.jpg');
+    expect(updateArgs.data.imageUrl).toBe(
+      'https://images.example.com/demo/den-ban-go-2.jpg',
+    );
     expect(updateArgs.data.isThumbnail).toBe(true);
     expect(result.isThumbnail).toBe(true);
   });

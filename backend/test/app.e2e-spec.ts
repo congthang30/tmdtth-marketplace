@@ -2694,7 +2694,9 @@ describe('App API (e2e)', () => {
 
         expect(body.success).toBe(true);
         expect(body.data).toHaveLength(1);
-        expect(body.data[0].imageUrl).toBe('https://images.example.com/demo/den-ban-go.jpg');
+        expect(body.data[0].imageUrl).toBe(
+          'https://images.example.com/demo/den-ban-go.jpg',
+        );
       });
 
     const [userArg, productIdArg] =
@@ -2723,7 +2725,9 @@ describe('App API (e2e)', () => {
 
         expect(body.success).toBe(true);
         expect(body.data.isThumbnail).toBe(true);
-        expect(body.data.imageUrl).toBe('https://images.example.com/demo/den-ban-go.jpg');
+        expect(body.data.imageUrl).toBe(
+          'https://images.example.com/demo/den-ban-go.jpg',
+        );
       });
 
     const [userArg, productIdArg, dtoArg] =
@@ -2776,7 +2780,9 @@ describe('App API (e2e)', () => {
         const body = response.body as SuccessBody<ProductImageE2eResponse>;
 
         expect(body.success).toBe(true);
-        expect(body.data.imageUrl).toBe('https://images.example.com/demo/den-ban-go-2.jpg');
+        expect(body.data.imageUrl).toBe(
+          'https://images.example.com/demo/den-ban-go-2.jpg',
+        );
         expect(body.data.sortOrder).toBe(2);
       });
 

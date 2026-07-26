@@ -9,6 +9,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ShopsModule } from './modules/shops/shops.module';
+import { SellerVerificationModule } from './modules/seller-verification/seller-verification.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
@@ -27,6 +28,7 @@ import { PrismaModule } from './prisma/prisma.module';
     OrdersModule,
     PaymentsModule,
     ShopsModule,
+    SellerVerificationModule,
     ShippingModule,
     ReviewsModule,
     UploadModule,
