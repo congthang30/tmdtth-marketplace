@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { getCarrierTimeoutMs, getGhnConfig } from '../../../config/carrier.config';
-import { normalizeVietnameseText } from '../normalize-vietnamese-text';
+import {
+  normalizeProvinceNameForMatching,
+  normalizeVietnameseText,
+} from '../normalize-vietnamese-text';
 
 /**
  * GHN's master-data endpoints expose the province/district/ward hierarchy
@@ -123,11 +126,11 @@ export class GhnAddressResolver {
   async resolve(provinceName: string, wardName: string): Promise<ResolvedGhnAddress | null> {
     await this.ensureLoaded();
 
-    const normalizedProvince = normalizeVietnameseText(provinceName);
+    const normalizedProvince = normalizeProvinceNameForMatching(provinceName);
     const normalizedWard = normalizeVietnameseText(wardName);
 
     const province = this.provinces?.find(
-      (item) => normalizeVietnameseText(item.ProvinceName) === normalizedProvince,
+      (item) => normalizeProvinceNameForMatching(item.ProvinceName) === normalizedProvince,
     );
 
     if (!province) {
