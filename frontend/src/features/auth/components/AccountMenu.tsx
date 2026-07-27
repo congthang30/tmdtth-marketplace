@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, ChevronDown, MapPin, Store, UserRound } from "lucide-react";
+import { BriefcaseBusiness, ChevronDown, MapPin, PackageCheck, Store, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { LogoutButton } from "./LogoutButton";
@@ -70,6 +70,14 @@ export function AccountMenu() {
           >
             <UserRound size={16} aria-hidden="true" />
             Hồ sơ
+          </Link>
+          <Link
+            to="/orders"
+            className={itemClassName}
+            onClick={() => setIsOpen(false)}
+          >
+            <PackageCheck size={16} aria-hidden="true" />
+            Đơn mua
           </Link>
           <Link
             to="/addresses"

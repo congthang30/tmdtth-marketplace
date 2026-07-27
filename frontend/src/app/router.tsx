@@ -9,6 +9,7 @@ import { CartPage } from "@/features/cart/pages/CartPage";
 import { CheckoutPage } from "@/features/checkout/pages/CheckoutPage";
 import { OrderDetailPage } from "@/features/orders/pages/OrderDetailPage";
 import { OrdersPage } from "@/features/orders/pages/OrdersPage";
+import { VnpayReturnPage } from "@/features/orders/pages/VnpayReturnPage";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ProfilePage } from "@/features/auth/pages/ProfilePage";
 import { RegisterPage } from "@/features/auth/pages/RegisterPage";
@@ -23,10 +24,12 @@ import { SellerProductImagesPage } from "@/features/seller/pages/SellerProductIm
 import { SellerProductInventoryPage } from "@/features/seller/pages/SellerProductInventoryPage";
 import { SellerOrdersPage } from "@/features/seller/pages/SellerOrdersPage";
 import { SellerOrderDetailPage } from "@/features/seller/pages/SellerOrderDetailPage";
+import { SellerVouchersPage } from "@/features/seller/pages/SellerVouchersPage";
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage";
 import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage";
 import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
 import { AdminShippingProvidersPage } from "@/features/admin/pages/AdminShippingProvidersPage";
+import { AdminVouchersPage } from "@/features/admin/pages/AdminVouchersPage";
 import { AdminSellerVerificationsPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationsPage";
 import { AdminSellerVerificationDetailPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationDetailPage";
 
@@ -101,6 +104,10 @@ export const router = createBrowserRouter([
             <OrderDetailPage />
           </ProtectedRoute>
         ),
+      },
+      {
+        path: "payments/vnpay/return",
+        element: <VnpayReturnPage />,
       },
       {
         path: "seller/shop/register",
@@ -215,6 +222,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "seller/vouchers",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerVouchersPage />
+          </RoleRoute>
+        ),
+      },
+      {
         path: "admin",
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
@@ -243,6 +258,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
             <AdminShippingProvidersPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/vouchers",
+        element: (
+          <RoleRoute allowedRoles={["Admin"]}>
+            <AdminVouchersPage />
           </RoleRoute>
         ),
       },

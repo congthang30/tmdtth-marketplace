@@ -5,6 +5,7 @@ import {
   UserRound,
   ShieldCheck,
   Store,
+  Ticket,
   Truck,
   Warehouse,
 } from "lucide-react";
@@ -40,6 +41,12 @@ const navItems = [
     roles: ["Seller"],
   },
   {
+    to: "/seller/vouchers",
+    label: "Mã giảm giá",
+    icon: Ticket,
+    roles: ["Seller"],
+  },
+  {
     to: "/admin",
     label: "Tổng quan quản trị",
     icon: ShieldCheck,
@@ -61,6 +68,12 @@ const navItems = [
     to: "/admin/shipping/providers",
     label: "Đối tác vận chuyển",
     icon: Truck,
+    roles: ["Admin"],
+  },
+  {
+    to: "/admin/vouchers",
+    label: "Mã giảm giá",
+    icon: Ticket,
     roles: ["Admin"],
   },
 ] satisfies Array<{

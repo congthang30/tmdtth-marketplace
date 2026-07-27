@@ -90,6 +90,23 @@ export type CheckoutPreviewShopGroup = {
   shippingFeeAmount: string;
   totalAmount: string;
   shippingSelection: CheckoutShippingSelectionSummary | null;
+  shopVoucher: {
+    id: string;
+    idString: string;
+    voucherCode: string;
+    voucherName: string;
+    discountType: string;
+    discountAmount: string;
+  } | null;
+};
+
+export type AppliedVoucherSummary = {
+  id: string;
+  idString: string;
+  voucherCode: string;
+  voucherName: string;
+  discountType: string;
+  discountAmount: string;
 };
 
 export type CheckoutPreviewResponse = {
@@ -103,7 +120,7 @@ export type CheckoutPreviewResponse = {
   discountAmount: string;
   shippingFeeAmount: string;
   totalAmount: string;
-  voucher: null;
+  platformVoucher: AppliedVoucherSummary | null;
 };
 
 export type OrderItemResponse = {

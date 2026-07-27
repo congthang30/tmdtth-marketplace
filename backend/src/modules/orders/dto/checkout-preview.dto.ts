@@ -39,6 +39,18 @@ export class CheckoutShippingSelectionDto {
   shippingQuoteId!: string;
 }
 
+export class ShopVoucherSelectionDto {
+  @Transform(({ value }) => normalizeStringInput(value))
+  @IsString()
+  @Matches(/^\d+$/)
+  shopId!: string;
+
+  @Transform(trimString)
+  @IsString()
+  @MaxLength(50)
+  voucherCode!: string;
+}
+
 export class CheckoutPreviewDto {
   @Transform(trimString)
   @IsString()
@@ -62,7 +74,14 @@ export class CheckoutPreviewDto {
   @Transform(trimString)
   @IsString()
   @MaxLength(50)
-  voucherCode?: string;
+  platformVoucherCode?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ShopVoucherSelectionDto)
+  shopVoucherCodes?: ShopVoucherSelectionDto[];
 
   @IsOptional()
   @IsArray()

@@ -184,11 +184,10 @@ export function OrderDetailPage() {
     },
   });
 
-  const fakePaymentMutation = useMutation({
-    mutationFn: orderPaymentsApi.markFakeSuccess,
-    onSuccess: async () => {
-      await invalidateOrders();
-      pushToast({ tone: "success", title: "Đã xác nhận thanh toán" });
+  const vnpayMutation = useMutation({
+    mutationFn: orderPaymentsApi.createVnpayPaymentUrl,
+    onSuccess: ({ paymentUrl }) => {
+      window.location.assign(paymentUrl);
     },
   });
 
@@ -213,10 +212,10 @@ export function OrderDetailPage() {
   const order = orderQuery.data;
   const canCancel =
     order.orderStatus === "Created" && order.paymentStatus === "Pending";
-  const pendingFakePayment = order.payments.find(
+  const pendingVnpayPayment = order.payments.find(
     (payment) =>
       payment.paymentStatus === "Pending" &&
-      payment.paymentMethod.methodCode === "FAKE_ONLINE",
+      payment.paymentMethod.methodCode === "VNPAY",
   );
 
   return (
@@ -237,18 +236,16 @@ export function OrderDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {pendingFakePayment ? (
+            {pendingVnpayPayment ? (
               <Button
                 type="button"
-                disabled={fakePaymentMutation.isPending}
-                onClick={() =>
-                  fakePaymentMutation.mutate(pendingFakePayment.id)
-                }
+                disabled={vnpayMutation.isPending}
+                onClick={() => vnpayMutation.mutate(pendingVnpayPayment.id)}
               >
                 <Banknote size={16} aria-hidden="true" />
-                {fakePaymentMutation.isPending
-                  ? "Đang xử lý..."
-                  : "Xác nhận đã thanh toán"}
+                {vnpayMutation.isPending
+                  ? "Đang chuyển đến VNPay..."
+                  : "Thanh toán qua VNPay"}
               </Button>
             ) : null}
             {canCancel ? (
@@ -265,9 +262,9 @@ export function OrderDetailPage() {
         </div>
       </section>
 
-      {fakePaymentMutation.isError ? (
+      {vnpayMutation.isError ? (
         <Alert tone="danger">
-          {getErrorMessage(fakePaymentMutation.error)}
+          {getErrorMessage(vnpayMutation.error)}
         </Alert>
       ) : null}
 

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
 import { OrdersService } from './orders.service';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 type SellerShopOrderEntity = {
   id: bigint;
@@ -181,7 +182,10 @@ describe('OrdersService seller shop orders', () => {
         [(client: PrismaMock) => Promise<unknown>]
       >((callback) => callback(prisma)),
     };
-    service = new OrdersService(prisma as unknown as PrismaService);
+    service = new OrdersService(
+      prisma as unknown as PrismaService,
+      {} as VouchersService,
+    );
   });
 
   it('lists only shop orders owned by the current seller', async () => {

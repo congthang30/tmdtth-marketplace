@@ -13,6 +13,7 @@ import { SellerVerificationModule } from './modules/seller-verification/seller-v
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
+import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ShippingModule,
     ReviewsModule,
     UploadModule,
+    VouchersModule,
   ],
 })
 export class AppModule {}

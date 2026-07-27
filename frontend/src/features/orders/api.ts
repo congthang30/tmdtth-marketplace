@@ -1,5 +1,4 @@
 import { apiGetResponse, apiGet, apiPatch, apiPost } from '@/services/api';
-import type { Payment } from './types';
 import type {
   CancelOrderResponse,
   OrderDetail,
@@ -29,8 +28,26 @@ export const ordersApi = {
   },
 };
 
+export type VnpayPaymentUrlResponse = {
+  paymentUrl: string;
+  expiresAt: string;
+};
+
+export type VnpayReturnResult = {
+  success: boolean;
+  paymentId: string | null;
+  orderId: string | null;
+  paymentStatus: string;
+  message: string;
+};
+
 export const orderPaymentsApi = {
-  markFakeSuccess(paymentId: string) {
-    return apiPost<Payment>(`/payments/${paymentId}/fake-success`);
+  createVnpayPaymentUrl(paymentId: string) {
+    return apiPost<VnpayPaymentUrlResponse>(
+      `/payments/${paymentId}/vnpay/payment-url`,
+    );
+  },
+  getVnpayReturnResult(params: Record<string, string>) {
+    return apiGet<VnpayReturnResult>("/payments/vnpay/return", { params });
   },
 };

@@ -5,6 +5,7 @@ import {
   MapPin,
   Plus,
   ShoppingBag,
+  Ticket,
   Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -19,6 +20,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { addressesApi } from "@/features/account/api";
 import { cartApi, cartQueryKey } from "@/features/cart/api";
+import { VoucherSelector } from "@/features/vouchers/components/VoucherSelector";
+import { orderPaymentsApi } from "@/features/orders/api";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
 import { formatMoney } from "@/utils/format";
@@ -49,6 +52,15 @@ export function CheckoutPage() {
   const [quoteByShopId, setQuoteByShopId] = useState<
     Record<string, ShippingQuote>
   >({});
+  const [appliedPlatformVoucherCode, setAppliedPlatformVoucherCode] =
+    useState("");
+  const [appliedShopVoucherByShopId, setAppliedShopVoucherByShopId] =
+    useState<Record<string, string>>({});
+  const [voucherSelector, setVoucherSelector] = useState<
+    | { scope: "Platform" }
+    | { scope: "Shop"; shopId: string; shopName: string; subtotal: string }
+    | null
+  >(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const pushToast = useToastStore((state) => state.pushToast);
@@ -112,6 +124,15 @@ export function CheckoutPage() {
       : undefined;
   }, [quoteByShopId, selectedServiceByShopId, selectedShopIds]);
 
+  const shopVoucherCodes = useMemo(() => {
+    const entries = Object.entries(appliedShopVoucherByShopId).filter(
+      ([shopId, code]) => code.trim() && selectedShopIds.includes(shopId),
+    );
+    return entries.length > 0
+      ? entries.map(([shopId, voucherCode]) => ({ shopId, voucherCode }))
+      : undefined;
+  }, [appliedShopVoucherByShopId, selectedShopIds]);
+
   const shippingServicesQuery = useQuery({
     queryKey: ["checkout", "shipping-services", selectedShopIds[0] ?? ""],
     queryFn: () => checkoutShippingApi.listActiveServices(selectedShopIds[0]),
@@ -169,6 +190,8 @@ export function CheckoutPage() {
       shippingSelections
         ?.map((selection) => selection.shippingQuoteId)
         .join(",") ?? "",
+      appliedPlatformVoucherCode,
+      JSON.stringify(shopVoucherCodes ?? []),
     ],
     queryFn: () =>
       checkoutApi.preview({
@@ -176,6 +199,8 @@ export function CheckoutPage() {
         paymentMethodId,
         selectedCartItemIds,
         shippingSelections,
+        platformVoucherCode: appliedPlatformVoucherCode || undefined,
+        shopVoucherCodes,
       }),
     enabled:
       Boolean(addressId) &&
@@ -221,6 +246,27 @@ export function CheckoutPage() {
         title: "Đã tạo đơn hàng",
         description: order.orderCode,
       });
+      const pendingVnpayPayment = order.payments.find(
+        (payment) =>
+          payment.paymentMethod.methodCode === "VNPAY" &&
+          payment.paymentStatus === "Pending",
+      );
+      if (pendingVnpayPayment) {
+        try {
+          const result = await orderPaymentsApi.createVnpayPaymentUrl(
+            pendingVnpayPayment.id,
+          );
+          window.location.assign(result.paymentUrl);
+          return;
+        } catch {
+          pushToast({
+            tone: "info",
+            title: "Đơn hàng đã được tạo",
+            description:
+              "Chưa thể mở VNPay. Bạn có thể thanh toán lại trong chi tiết đơn.",
+          });
+        }
+      }
       navigate(`/orders/${order.id}`);
     },
   });
@@ -393,6 +439,28 @@ export function CheckoutPage() {
         </div>
 
         <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
+          <div className="flex min-h-11 items-center justify-between gap-4">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
+              <Ticket size={18} aria-hidden="true" />
+              Voucher toàn hệ thống
+            </h2>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setVoucherSelector({ scope: "Platform" })}
+            >
+              {appliedPlatformVoucherCode ? "Đổi voucher" : "Chọn voucher"}
+            </Button>
+          </div>
+          {preview?.platformVoucher ? (
+            <Alert tone="success" className="mt-3">
+              Đã áp dụng mã {preview.platformVoucher.voucherCode} — giảm{" "}
+              {formatMoney(preview.platformVoucher.discountAmount)}
+            </Alert>
+          ) : null}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
             <Truck size={18} aria-hidden="true" />
             Vận chuyển
@@ -487,6 +555,39 @@ export function CheckoutPage() {
                         </span>
                       </div>
                     ) : null}
+                    <div className="mt-3 flex min-h-11 flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+                      <div>
+                        <p className="text-sm font-medium text-ink">
+                          Voucher của {group.shop.shopName}
+                        </p>
+                        {group.shopVoucher ? (
+                          <p className="mt-1 text-xs text-primary-700">
+                            {group.shopVoucher.voucherCode} — giảm{" "}
+                            {formatMoney(group.shopVoucher.discountAmount)}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-muted">
+                            Chọn mã phù hợp với giá trị sản phẩm của gian hàng
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          setVoucherSelector({
+                            scope: "Shop",
+                            shopId: group.shop.id,
+                            shopName: group.shop.shopName,
+                            subtotal: group.subtotalAmount,
+                          })
+                        }
+                      >
+                        {appliedShopVoucherByShopId[group.shop.id]
+                          ? "Đổi voucher"
+                          : "Chọn voucher"}
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -562,6 +663,13 @@ export function CheckoutPage() {
                     {group.items.length} sản phẩm, tổng cộng{" "}
                     {formatMoney(group.totalAmount)}
                   </p>
+                  {group.shopVoucher ? (
+                    <p className="mt-1 flex items-center gap-1 text-emerald-700">
+                      <Ticket size={13} aria-hidden="true" />
+                      {group.shopVoucher.voucherCode}: -
+                      {formatMoney(group.shopVoucher.discountAmount)}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -586,6 +694,8 @@ export function CheckoutPage() {
               paymentMethodId,
               selectedCartItemIds,
               shippingSelections,
+              platformVoucherCode: appliedPlatformVoucherCode || undefined,
+              shopVoucherCodes,
               customerNote: customerNote.trim() || undefined,
             })
           }
@@ -594,6 +704,40 @@ export function CheckoutPage() {
           {createOrderMutation.isPending ? "Đang tạo đơn..." : "Đặt hàng"}
         </Button>
       </aside>
+
+      <VoucherSelector
+        open={voucherSelector !== null}
+        title={
+          voucherSelector?.scope === "Shop"
+            ? `Chọn voucher của ${voucherSelector.shopName}`
+            : "Chọn voucher toàn hệ thống"
+        }
+        shopId={
+          voucherSelector?.scope === "Shop" ? voucherSelector.shopId : undefined
+        }
+        subtotal={
+          voucherSelector?.scope === "Shop"
+            ? voucherSelector.subtotal
+            : (preview?.subtotalAmount ?? "0")
+        }
+        selectedCode={
+          voucherSelector?.scope === "Shop"
+            ? appliedShopVoucherByShopId[voucherSelector.shopId]
+            : appliedPlatformVoucherCode
+        }
+        onClose={() => setVoucherSelector(null)}
+        onConfirm={(voucherCode) => {
+          if (voucherSelector?.scope === "Shop") {
+            setAppliedShopVoucherByShopId((current) => ({
+              ...current,
+              [voucherSelector.shopId]: voucherCode,
+            }));
+          } else {
+            setAppliedPlatformVoucherCode(voucherCode);
+          }
+          setVoucherSelector(null);
+        }}
+      />
     </div>
   );
 }

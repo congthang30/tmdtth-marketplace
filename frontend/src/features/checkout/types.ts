@@ -78,6 +78,15 @@ export type CheckoutShippingSelection = {
   expiresAt: string;
 };
 
+export type AppliedVoucherSummary = {
+  id: string;
+  idString: string;
+  voucherCode: string;
+  voucherName: string;
+  discountType: "Percentage" | "FixedAmount";
+  discountAmount: string;
+};
+
 export type CheckoutPreviewShopGroup = {
   shop: CheckoutShopSummary;
   items: CheckoutPreviewItem[];
@@ -86,6 +95,7 @@ export type CheckoutPreviewShopGroup = {
   shippingFeeAmount: string;
   totalAmount: string;
   shippingSelection: CheckoutShippingSelection | null;
+  shopVoucher: AppliedVoucherSummary | null;
 };
 
 export type CheckoutPreviewResponse = {
@@ -99,14 +109,20 @@ export type CheckoutPreviewResponse = {
   discountAmount: string;
   shippingFeeAmount: string;
   totalAmount: string;
-  voucher: null;
+  platformVoucher: AppliedVoucherSummary | null;
+};
+
+export type ShopVoucherSelectionRequest = {
+  shopId: string;
+  voucherCode: string;
 };
 
 export type CheckoutRequest = {
   addressId: string;
   paymentMethodId: string;
   selectedCartItemIds?: string[];
-  voucherCode?: string;
+  platformVoucherCode?: string;
+  shopVoucherCodes?: ShopVoucherSelectionRequest[];
   shippingSelections?: CheckoutShippingSelectionRequest[];
 };
 
@@ -175,6 +191,15 @@ export type OrderResponse = {
   shippingFeeAmount: string;
   totalAmount: string;
   customerNote: string | null;
+  payments: Array<{
+    id: string;
+    idString: string;
+    paymentCode: string;
+    paymentMethod: PaymentMethod;
+    amount: string;
+    paymentStatus: string;
+    expiredAt: string | null;
+  }>;
   createdAt: string;
   updatedAt: string | null;
 };

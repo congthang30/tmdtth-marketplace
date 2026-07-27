@@ -205,6 +205,49 @@ const shippingCompanySeeds = [
   },
 ];
 
+const voucherSeeds = [
+  {
+    voucherCode: 'SAN10',
+    voucherName: 'Ưu đãi toàn hệ thống 10%',
+    scope: 'Platform',
+    discountType: 'Percentage',
+    discountValue: '10',
+    maxDiscountAmount: '50000',
+    minOrderAmount: '200000',
+    usageLimit: 1000,
+  },
+  {
+    voucherCode: 'SAN50K',
+    voucherName: 'Ưu đãi toàn hệ thống 50.000đ',
+    scope: 'Platform',
+    discountType: 'FixedAmount',
+    discountValue: '50000',
+    maxDiscountAmount: null,
+    minOrderAmount: '500000',
+    usageLimit: 500,
+  },
+  {
+    voucherCode: 'SHOP15',
+    voucherName: 'Giảm 15% tại Gia Dụng Thắng Nguyễn',
+    scope: 'Shop',
+    discountType: 'Percentage',
+    discountValue: '15',
+    maxDiscountAmount: '60000',
+    minOrderAmount: '150000',
+    usageLimit: 500,
+  },
+  {
+    voucherCode: 'SHOP100K',
+    voucherName: 'Giảm 100.000đ cho đơn gian hàng từ 1 triệu',
+    scope: 'Shop',
+    discountType: 'FixedAmount',
+    discountValue: '100000',
+    maxDiscountAmount: null,
+    minOrderAmount: '1000000',
+    usageLimit: 100,
+  },
+];
+
 const productSeeds = [
   {
     categorySlug: 'noi-chao',
@@ -357,18 +400,23 @@ async function seedPaymentMethods() {
   });
 
   await prisma.paymentMethod.upsert({
-    where: { methodCode: 'FAKE_ONLINE' },
+    where: { methodCode: 'VNPAY' },
     update: {
-      methodName: 'Thanh toán online giả lập',
+      methodName: 'Thanh toán qua VNPay',
       isOnline: true,
       isActive: true,
     },
     create: {
-      methodCode: 'FAKE_ONLINE',
-      methodName: 'Thanh toán online giả lập',
+      methodCode: 'VNPAY',
+      methodName: 'Thanh toán qua VNPay',
       isOnline: true,
       isActive: true,
     },
+  });
+
+  await prisma.paymentMethod.updateMany({
+    where: { methodCode: 'FAKE_ONLINE' },
+    data: { isActive: false },
   });
 }
 
@@ -900,6 +948,48 @@ async function seedProducts({
   }
 }
 
+async function seedVouchers(shop) {
+  const timestamp = now();
+  const startAt = new Date(timestamp);
+  startAt.setDate(startAt.getDate() - 1);
+  const endAt = new Date(timestamp);
+  endAt.setFullYear(endAt.getFullYear() + 1);
+
+  for (const voucherSeed of voucherSeeds) {
+    const shopId = voucherSeed.scope === 'Shop' ? shop.id : null;
+
+    await prisma.voucher.upsert({
+      where: { voucherCode: voucherSeed.voucherCode },
+      update: {
+        voucherName: voucherSeed.voucherName,
+        shopId,
+        discountType: voucherSeed.discountType,
+        discountValue: voucherSeed.discountValue,
+        maxDiscountAmount: voucherSeed.maxDiscountAmount,
+        minOrderAmount: voucherSeed.minOrderAmount,
+        usageLimit: voucherSeed.usageLimit,
+        usedCount: 0,
+        startAt,
+        endAt,
+        voucherStatus: 'Active',
+      },
+      create: {
+        voucherCode: voucherSeed.voucherCode,
+        voucherName: voucherSeed.voucherName,
+        shopId,
+        discountType: voucherSeed.discountType,
+        discountValue: voucherSeed.discountValue,
+        maxDiscountAmount: voucherSeed.maxDiscountAmount,
+        minOrderAmount: voucherSeed.minOrderAmount,
+        usageLimit: voucherSeed.usageLimit,
+        startAt,
+        endAt,
+        voucherStatus: 'Active',
+      },
+    });
+  }
+}
+
 async function main() {
   const seededUsers = await seedUsers();
   await seedPaymentMethods();
@@ -908,6 +998,7 @@ async function main() {
   await seedShipping();
   const shop = await seedDemoShop(seededUsers);
   await seedSellerVerification({ seededUsers, shop });
+  await seedVouchers(shop);
   await seedProducts({
     categoryBySlug,
     attributeByCategoryAndName,

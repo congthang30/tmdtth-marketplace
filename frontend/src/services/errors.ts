@@ -91,7 +91,22 @@ const apiErrorMessages: Record<string, string> = {
   UPLOAD_INVALID_FILE_TYPE: "Định dạng tệp không được hỗ trợ.",
   USER_LOCKED: "Tài khoản đã bị khóa.",
   VALIDATION_ERROR: "Thông tin nhập vào chưa hợp lệ.",
+  VOUCHER_ALREADY_USED: "Bạn đã sử dụng mã giảm giá này rồi.",
+  VOUCHER_CODE_EXISTS: "Mã giảm giá đã tồn tại.",
+  VOUCHER_DUPLICATE_SHOP_SELECTION:
+    "Mỗi gian hàng chỉ được áp dụng một mã giảm giá.",
+  VOUCHER_INACTIVE: "Mã giảm giá không còn hoạt động.",
+  VOUCHER_INVALID_DISCOUNT_VALUE: "Giá trị giảm giá không hợp lệ.",
+  VOUCHER_INVALID_MAX_DISCOUNT:
+    "Giảm tối đa chỉ áp dụng cho mã giảm theo phần trăm.",
+  VOUCHER_INVALID_WINDOW: "Thời gian kết thúc phải sau thời gian bắt đầu.",
+  VOUCHER_LIMIT_REACHED: "Mã giảm giá đã hết lượt sử dụng.",
+  VOUCHER_MIN_ORDER_NOT_MET:
+    "Đơn hàng chưa đạt giá trị tối thiểu để dùng mã này.",
+  VOUCHER_NOT_FOUND: "Không tìm thấy mã giảm giá.",
   VOUCHER_NOT_SUPPORTED: "Mã giảm giá hiện chưa được hỗ trợ.",
+  VOUCHER_NO_LONGER_AVAILABLE: "Mã giảm giá đã hết lượt sử dụng.",
+  VOUCHER_SHOP_MISMATCH: "Mã giảm giá này không áp dụng cho gian hàng này.",
 };
 
 function getApiErrorMessage(code: string, status?: number) {

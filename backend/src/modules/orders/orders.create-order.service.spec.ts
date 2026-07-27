@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
 import { OrdersService } from './orders.service';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 type AddressEntity = {
   id: bigint;
@@ -414,7 +415,10 @@ describe('OrdersService create order', () => {
         [(client: PrismaMock) => Promise<unknown>]
       >((callback) => callback(prisma)),
     };
-    service = new OrdersService(prisma as unknown as PrismaService);
+    service = new OrdersService(
+      prisma as unknown as PrismaService,
+      {} as VouchersService,
+    );
   });
 
   it('creates one order, splits shop orders, snapshots items, reserves inventory, creates payment, and clears selected cart items', async () => {

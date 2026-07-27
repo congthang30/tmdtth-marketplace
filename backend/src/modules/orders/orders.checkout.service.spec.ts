@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
 import { OrdersService } from './orders.service';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 type AddressEntity = {
   id: bigint;
@@ -290,7 +291,10 @@ describe('OrdersService checkout preview', () => {
         findUnique: jest.fn<Promise<ShippingQuoteEntity | null>, [unknown]>(),
       },
     };
-    service = new OrdersService(prisma as unknown as PrismaService);
+    service = new OrdersService(
+      prisma as unknown as PrismaService,
+      {} as VouchersService,
+    );
   });
 
   it('builds a multi-shop preview from selected cart items using current prices', async () => {

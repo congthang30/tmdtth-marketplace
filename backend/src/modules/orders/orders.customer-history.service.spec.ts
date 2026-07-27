@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
 import { OrdersService } from './orders.service';
+import { VouchersService } from '../vouchers/vouchers.service';
 
 type CustomerOrderItemEntity = {
   id: bigint;
@@ -258,7 +259,10 @@ describe('OrdersService customer order history', () => {
         findFirst: jest.fn<Promise<CustomerOrderEntity | null>, [unknown]>(),
       },
     };
-    service = new OrdersService(prisma as unknown as PrismaService);
+    service = new OrdersService(
+      prisma as unknown as PrismaService,
+      {} as VouchersService,
+    );
   });
 
   it('lists only orders owned by the current customer with shipment tracking summaries', async () => {

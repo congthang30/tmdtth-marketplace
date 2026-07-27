@@ -36,6 +36,8 @@ import {
   SellerShopOrderResponse,
   ShopOrderResponse,
 } from './types';
+import { VouchersService } from '../vouchers/vouchers.service';
+import { VoucherValidationResult } from '../vouchers/types';
 
 const ACTIVE_CART_STATUS = 'Active';
 const PUBLIC_PRODUCT_STATUS = 'Published';
@@ -214,7 +216,18 @@ type ShopGroupAccumulator = {
   discountAmount: Prisma.Decimal;
   shippingFeeAmount: Prisma.Decimal;
   shippingSelection: ResolvedCheckoutShippingSelection | null;
+  shopVoucher: ResolvedShopVoucher | null;
 };
+
+type ResolvedShopVoucher = {
+  voucherId: bigint;
+  voucherCode: string;
+  voucherName: string;
+  discountType: string;
+  discountAmount: Prisma.Decimal;
+};
+
+type ResolvedPlatformVoucher = ResolvedShopVoucher;
 
 type CheckoutClient = PrismaService | Prisma.TransactionClient;
 
@@ -245,6 +258,8 @@ type CheckoutContext = {
   selectedItems: CheckoutCartItem[];
   items: CheckoutPreviewItem[];
   shopGroups: CheckoutPreviewShopGroup[];
+  shopVouchersById: Map<string, ResolvedShopVoucher>;
+  platformVoucher: ResolvedPlatformVoucher | null;
   subtotalAmount: Prisma.Decimal;
   discountAmount: Prisma.Decimal;
   shippingFeeAmount: Prisma.Decimal;
@@ -284,7 +299,10 @@ type CheckoutShippingQuote = Prisma.ShippingQuoteGetPayload<{
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vouchersService: VouchersService,
+  ) {}
 
   async listMyOrders(user: AuthenticatedUser, query: PaginationQueryDto) {
     const page = Math.max(1, query.page ?? 1);
@@ -603,6 +621,17 @@ export class OrdersService {
         },
       });
 
+      if (context.platformVoucher) {
+        await this.vouchersService.applyVoucherInTransaction(
+          tx,
+          user,
+          context.platformVoucher.voucherId,
+          context.platformVoucher.discountAmount,
+          now,
+          { orderId: order.id },
+        );
+      }
+
       const sourceItemsByCartItemId = new Map(
         context.selectedItems.map((item) => [item.id.toString(), item]),
       );
@@ -643,6 +672,18 @@ export class OrdersService {
             createdAt: now,
           },
         });
+
+        const shopVoucher = context.shopVouchersById.get(group.shop.id);
+        if (shopVoucher) {
+          await this.vouchersService.applyVoucherInTransaction(
+            tx,
+            user,
+            shopVoucher.voucherId,
+            shopVoucher.discountAmount,
+            now,
+            { orderId: order.id, shopOrderId: shopOrder.id },
+          );
+        }
 
         const orderItems: OrderItemResponse[] = [];
 
@@ -820,6 +861,8 @@ export class OrdersService {
         });
       }
 
+      await this.vouchersService.revertVoucherUsagesForOrder(tx, order.id);
+
       for (const shopOrder of order.shopOrders) {
         const shopOrderUpdate = await tx.shopOrder.updateMany({
           where: {
@@ -971,14 +1014,6 @@ export class OrdersService {
     user: AuthenticatedUser,
     dto: CheckoutPreviewDto,
   ): Promise<CheckoutContext> {
-    if (dto.voucherCode) {
-      throw new BadRequestException({
-        code: 'VOUCHER_NOT_SUPPORTED',
-        message: 'Voucher checkout is not available yet',
-        details: [{ field: 'voucherCode' }],
-      });
-    }
-
     const addressId = this.parseId(dto.addressId, 'addressId');
     const paymentMethodId = this.parseId(
       dto.paymentMethodId,
@@ -1021,7 +1056,42 @@ export class OrdersService {
       address,
       new Date(),
     );
-    const shopGroups = this.buildShopGroups(items, shippingSelections);
+    const now = new Date();
+
+    const shopVouchersById = await this.resolveShopVouchers(
+      client,
+      user,
+      dto.shopVoucherCodes,
+      baseShopGroups,
+      now,
+    );
+
+    const preDiscountShopGroups = this.buildShopGroups(
+      items,
+      shippingSelections,
+      shopVouchersById,
+    );
+
+    const orderSubtotalBeforePlatformVoucher = preDiscountShopGroups.reduce(
+      (total, group) => total.add(this.toDecimal(group.subtotalAmount)),
+      new Prisma.Decimal(0),
+    );
+
+    const platformVoucher = dto.platformVoucherCode
+      ? await this.resolvePlatformVoucher(
+          client,
+          user,
+          dto.platformVoucherCode,
+          orderSubtotalBeforePlatformVoucher,
+          now,
+        )
+      : null;
+
+    const shopGroups = this.applyPlatformVoucherAllocation(
+      preDiscountShopGroups,
+      platformVoucher,
+    );
+
     const zero = new Prisma.Decimal(0);
     const subtotalAmount = shopGroups.reduce(
       (total, group) => total.add(this.toDecimal(group.subtotalAmount)),
@@ -1046,11 +1116,151 @@ export class OrdersService {
       selectedItems,
       items,
       shopGroups,
+      shopVouchersById,
+      platformVoucher,
       subtotalAmount,
       discountAmount,
       shippingFeeAmount,
       totalAmount,
     };
+  }
+
+  /**
+   * Validates each requested shop-voucher against the subtotal of the
+   * shop-group it targets. Rejects shopVoucherCodes referencing a shop
+   * that doesn't exist in this checkout, or specifying more than one code
+   * per shop.
+   */
+  private async resolveShopVouchers(
+    client: CheckoutClient,
+    user: AuthenticatedUser,
+    selections: { shopId: string; voucherCode: string }[] | undefined,
+    shopGroups: CheckoutPreviewShopGroup[],
+    now: Date,
+  ): Promise<Map<string, ResolvedShopVoucher>> {
+    const result = new Map<string, ResolvedShopVoucher>();
+    if (!selections?.length) {
+      return result;
+    }
+
+    const subtotalByShopId = new Map(
+      shopGroups.map((group) => [group.shop.id, this.toDecimal(group.subtotalAmount)]),
+    );
+
+    const seenShopIds = new Set<string>();
+    for (const selection of selections) {
+      if (seenShopIds.has(selection.shopId)) {
+        throw new BadRequestException({
+          code: 'VOUCHER_DUPLICATE_SHOP_SELECTION',
+          message: 'Each shop can only have one voucher applied',
+          details: [{ shopId: selection.shopId }],
+        });
+      }
+      seenShopIds.add(selection.shopId);
+
+      const shopSubtotal = subtotalByShopId.get(selection.shopId);
+      if (shopSubtotal === undefined) {
+        throw new BadRequestException({
+          code: 'VOUCHER_SHOP_MISMATCH',
+          message: 'Shop does not have items in this checkout',
+          details: [{ shopId: selection.shopId }],
+        });
+      }
+
+      const validation = await this.vouchersService.validateVoucher(
+        client as never,
+        user,
+        selection.voucherCode,
+        BigInt(selection.shopId),
+        shopSubtotal,
+        now,
+      );
+
+      result.set(selection.shopId, {
+        voucherId: validation.voucher.id,
+        voucherCode: validation.voucher.voucherCode,
+        voucherName: validation.voucher.voucherName,
+        discountType: validation.voucher.discountType,
+        discountAmount: this.toDecimal(validation.discountAmount),
+      });
+    }
+
+    return result;
+  }
+
+  private async resolvePlatformVoucher(
+    client: CheckoutClient,
+    user: AuthenticatedUser,
+    voucherCode: string,
+    orderSubtotal: Prisma.Decimal,
+    now: Date,
+  ): Promise<ResolvedPlatformVoucher> {
+    const validation = await this.vouchersService.validateVoucher(
+      client as never,
+      user,
+      voucherCode,
+      null,
+      orderSubtotal,
+      now,
+    );
+
+    return {
+      voucherId: validation.voucher.id,
+      voucherCode: validation.voucher.voucherCode,
+      voucherName: validation.voucher.voucherName,
+      discountType: validation.voucher.discountType,
+      discountAmount: this.toDecimal(validation.discountAmount),
+    };
+  }
+
+  /**
+   * Distributes the platform voucher's total discount across shop-groups
+   * proportionally to each group's subtotal share. The last group absorbs
+   * any rounding remainder so allocated amounts always sum exactly to the
+   * platform voucher's discountAmount.
+   */
+  private applyPlatformVoucherAllocation(
+    shopGroups: CheckoutPreviewShopGroup[],
+    platformVoucher: ResolvedPlatformVoucher | null,
+  ): CheckoutPreviewShopGroup[] {
+    if (!platformVoucher || shopGroups.length === 0) {
+      return shopGroups;
+    }
+
+    const totalSubtotal = shopGroups.reduce(
+      (total, group) => total.add(this.toDecimal(group.subtotalAmount)),
+      new Prisma.Decimal(0),
+    );
+
+    if (totalSubtotal.isZero()) {
+      return shopGroups;
+    }
+
+    let allocatedSoFar = new Prisma.Decimal(0);
+
+    return shopGroups.map((group, index) => {
+      const isLast = index === shopGroups.length - 1;
+      const groupSubtotal = this.toDecimal(group.subtotalAmount);
+      const share = isLast
+        ? platformVoucher.discountAmount.sub(allocatedSoFar)
+        : groupSubtotal
+            .mul(platformVoucher.discountAmount)
+            .div(totalSubtotal)
+            .toDecimalPlaces(2);
+
+      allocatedSoFar = allocatedSoFar.add(share);
+
+      const newDiscountAmount = this.toDecimal(group.discountAmount).add(share);
+      const newTotalAmount = groupSubtotal
+        .sub(newDiscountAmount)
+        .add(this.toDecimal(group.shippingFeeAmount));
+
+      return {
+        ...group,
+        discountAmount: this.formatMoney(newDiscountAmount),
+        totalAmount: this.formatMoney(newTotalAmount),
+      };
+    });
   }
 
   private toCheckoutPreviewResponse(
@@ -1070,9 +1280,21 @@ export class OrdersService {
       discountAmount: this.formatMoney(context.discountAmount),
       shippingFeeAmount: this.formatMoney(context.shippingFeeAmount),
       totalAmount: this.formatMoney(context.totalAmount),
-      voucher: null,
+      platformVoucher: context.platformVoucher
+        ? {
+            id: context.platformVoucher.voucherId.toString(),
+            idString: context.platformVoucher.voucherId.toString(),
+            voucherCode: context.platformVoucher.voucherCode,
+            voucherName: context.platformVoucher.voucherName,
+            discountType: context.platformVoucher.discountType,
+            discountAmount: this.formatMoney(
+              context.platformVoucher.discountAmount,
+            ),
+          }
+        : null,
     };
   }
+
 
   private async requireOwnedAddress(
     client: CheckoutClient,
@@ -1260,6 +1482,7 @@ export class OrdersService {
   private buildShopGroups(
     items: CheckoutPreviewItem[],
     shippingSelections = new Map<string, ResolvedCheckoutShippingSelection>(),
+    shopVouchersById = new Map<string, ResolvedShopVoucher>(),
   ): CheckoutPreviewShopGroup[] {
     const groupsByShopId = new Map<string, ShopGroupAccumulator>();
 
@@ -1288,6 +1511,14 @@ export class OrdersService {
         group.shippingSelection = shippingSelection;
       }
 
+      const shopVoucher = shopVouchersById.get(group.shop.id) ?? null;
+      if (shopVoucher) {
+        group.discountAmount = group.discountAmount.add(
+          shopVoucher.discountAmount,
+        );
+        group.shopVoucher = shopVoucher;
+      }
+
       const totalAmount = group.subtotalAmount
         .sub(group.discountAmount)
         .add(group.shippingFeeAmount);
@@ -1300,6 +1531,16 @@ export class OrdersService {
         shippingFeeAmount: this.formatMoney(group.shippingFeeAmount),
         totalAmount: this.formatMoney(totalAmount),
         shippingSelection: group.shippingSelection?.summary ?? null,
+        shopVoucher: group.shopVoucher
+          ? {
+              id: group.shopVoucher.voucherId.toString(),
+              idString: group.shopVoucher.voucherId.toString(),
+              voucherCode: group.shopVoucher.voucherCode,
+              voucherName: group.shopVoucher.voucherName,
+              discountType: group.shopVoucher.discountType,
+              discountAmount: this.formatMoney(group.shopVoucher.discountAmount),
+            }
+          : null,
       };
     });
   }
@@ -1314,6 +1555,7 @@ export class OrdersService {
       discountAmount: new Prisma.Decimal(0),
       shippingFeeAmount: new Prisma.Decimal(0),
       shippingSelection: null,
+      shopVoucher: null,
     };
   }
 
