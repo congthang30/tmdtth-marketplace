@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Star, Trash2, Upload } from "lucide-react";
+import { ImagePlus, Star, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useParams } from "react-router-dom";
@@ -22,11 +22,7 @@ import type { ProductImageRequest, SellerImage } from "../types";
 
 const imageSchema = z.object({
   productVariantId: z.string().optional(),
-  imageUrl: z
-    .string()
-    .trim()
-    .url("URL hình ảnh không hợp lệ")
-    .refine((value) => value.startsWith("https://"), "URL hình ảnh phải dùng HTTPS"),
+  imageUrl: z.string().trim().min(1, "Vui lòng chọn và tải hình ảnh lên"),
   altText: z.string().trim().max(255, "Văn bản thay thế quá dài").optional(),
   sortOrder: z
     .string()
@@ -120,7 +116,11 @@ export function SellerProductImagesPage() {
           )
         : sellerProductsApi.createImage(productId, toRequest(values)),
     onSuccess: async () => {
-      await invalidate();
+      await Promise.all([
+        invalidate(),
+        queryClient.invalidateQueries({ queryKey: ["catalog"] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+      ]);
       pushToast({ tone: "success", title: "Đã lưu hình ảnh" });
       setEditingImage(null);
       setIsCreateOpen(false);
@@ -133,7 +133,11 @@ export function SellerProductImagesPage() {
     mutationFn: (imageId: string) =>
       sellerProductsApi.updateImage(productId, imageId, { isThumbnail: true }),
     onSuccess: async () => {
-      await invalidate();
+      await Promise.all([
+        invalidate(),
+        queryClient.invalidateQueries({ queryKey: ["catalog"] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+      ]);
       pushToast({ tone: "success", title: "Đã cập nhật ảnh đại diện" });
     },
   });
@@ -208,9 +212,6 @@ export function SellerProductImagesPage() {
                     {image.isThumbnail ? <Badge>Ảnh đại diện</Badge> : null}
                     <Badge>Thứ tự {image.sortOrder}</Badge>
                   </div>
-                  <p className="truncate text-sm text-muted">
-                    {image.imageUrl}
-                  </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -246,7 +247,7 @@ export function SellerProductImagesPage() {
         ) : (
           <EmptyState
             title="Chưa có hình ảnh"
-            description="Hãy tải lên hoặc thêm URL hình ảnh cho sản phẩm này."
+            description="Hãy chọn và tải hình ảnh lên cho sản phẩm này."
             action={
               <Button type="button" onClick={() => setIsCreateOpen(true)}>
                 <ImagePlus size={16} aria-hidden="true" />
@@ -279,7 +280,7 @@ export function SellerProductImagesPage() {
             <Button
               type="submit"
               form="image-form"
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || uploadMutation.isPending}
             >
               {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
             </Button>
@@ -291,23 +292,35 @@ export function SellerProductImagesPage() {
             {getErrorMessage(saveMutation.error ?? uploadMutation.error)}
           </Alert>
         ) : null}
-        <div className="mb-4 flex flex-col gap-2 rounded-md border border-border bg-surface p-3">
+        <div className="mb-4 flex flex-col gap-3 rounded-md border border-border bg-surface p-3">
+          <label htmlFor="product-image-file" className="text-sm font-medium text-ink">
+            Chọn hình ảnh
+          </label>
           <input
+            id="product-image-file"
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            disabled={uploadMutation.isPending}
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0] ?? null;
+              setFile(selectedFile);
+              if (selectedFile) {
+                uploadMutation.mutate(selectedFile);
+              }
+            }}
           />
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!file || uploadMutation.isPending}
-            onClick={() => file && uploadMutation.mutate(file)}
-          >
-            <Upload size={16} aria-hidden="true" />
-            {uploadMutation.isPending
-              ? "Đang tải lên..."
-              : "Tải tệp đã chọn lên"}
-          </Button>
+          {uploadMutation.isPending ? (
+            <p className="flex min-h-11 items-center text-sm font-medium text-primary-700">Đang tải hình ảnh lên...</p>
+          ) : file && form.formState.dirtyFields.imageUrl ? (
+            <p className="text-sm font-medium text-success">Ảnh mới đã tải lên và sẵn sàng để lưu.</p>
+          ) : editingImage ? (
+            <p className="text-xs text-muted">Chọn tệp mới để thay thế hình ảnh hiện tại.</p>
+          ) : (
+            <p className="text-xs text-muted">Chọn tệp, hệ thống sẽ tự động tải ảnh lên.</p>
+          )}
+          {form.formState.errors.imageUrl ? (
+            <p className="text-xs text-danger">{form.formState.errors.imageUrl.message}</p>
+          ) : null}
         </div>
         {uploadsQuery.isLoading ? (
           <Skeleton className="mb-4 h-24 w-full" />
@@ -354,11 +367,6 @@ export function SellerProductImagesPage() {
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
         >
-          <TextInput
-            label="URL hình ảnh"
-            error={form.formState.errors.imageUrl?.message}
-            {...form.register("imageUrl")}
-          />
           <SelectInput
             label="Phân loại"
             error={form.formState.errors.productVariantId?.message}

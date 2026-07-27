@@ -22,6 +22,7 @@ import { SellerDataCryptoService } from './seller-data-crypto.service';
 import { SellerDocumentStorageService } from './seller-document-storage.service';
 import { SellerDocumentValidatorService } from './seller-document-validator.service';
 import { DocumentAccessContext } from './types';
+import { SellerVerificationEmailService } from './seller-verification-email.service';
 import { VerificationTransitionService } from './verification-transition.service';
 
 const EDITABLE_STATUSES: VerificationStatus[] = [
@@ -38,6 +39,7 @@ export class SellerVerificationService {
     private readonly storage: SellerDocumentStorageService,
     private readonly documentValidator: SellerDocumentValidatorService,
     private readonly transitions: VerificationTransitionService,
+    private readonly emailService: SellerVerificationEmailService,
   ) {}
 
   async getMine(user: AuthenticatedUser) {
@@ -109,9 +111,9 @@ export class SellerVerificationService {
       identityIssuedAt: this.toDate(dto.identityIssuedAt),
       identityIssuedBy: dto.identityIssuedBy ?? null,
       identityExpiresAt: this.toDate(dto.identityExpiresAt),
-      taxCodeEncrypted: this.crypto.encrypt(dto.taxCode),
-      taxCodeHash: this.crypto.hash(dto.taxCode),
-      taxCodeLast4: this.crypto.last4(dto.taxCode),
+      taxCodeEncrypted: dto.taxCode ? this.crypto.encrypt(dto.taxCode) : null,
+      taxCodeHash: dto.taxCode ? this.crypto.hash(dto.taxCode) : null,
+      taxCodeLast4: dto.taxCode ? this.crypto.last4(dto.taxCode) : null,
       businessRegistrationNumberEncrypted: dto.businessRegistrationNumber
         ? this.crypto.encrypt(dto.businessRegistrationNumber)
         : null,
@@ -121,12 +123,15 @@ export class SellerVerificationService {
       businessRegistrationNumberLast4: dto.businessRegistrationNumber
         ? this.crypto.last4(dto.businessRegistrationNumber)
         : null,
-      businessRegistrationIssuedAt: this.toDate(
-        dto.businessRegistrationIssuedAt,
-      ),
+      businessRegistrationIssuedAt: this.toDate(dto.businessRegistrationIssuedAt),
       businessRegistrationIssuedBy: dto.businessRegistrationIssuedBy ?? null,
       legalRepresentativeName: dto.legalRepresentativeName ?? null,
-      registeredAddress: dto.registeredAddress ?? null,
+      registeredAddress: dto.registeredAddress,
+      dateOfBirth: this.toDate(dto.dateOfBirth),
+      contactName: dto.contactName ?? null,
+      contactEmail: dto.contactEmail ?? null,
+      contactPhone: dto.contactPhone ?? null,
+      useAccountPhone: dto.useAccountPhone ?? true,
       verificationStatus: VerificationStatus.Draft,
       submittedAt: null,
       reviewedAt: null,
@@ -200,6 +205,19 @@ export class SellerVerificationService {
     return this.toPayoutResponse(account);
   }
 
+  async confirmContactEmail(user: AuthenticatedUser, email: string) {
+    const shop = await this.findOwnedShop(user.id);
+    const profile = await this.prisma.sellerVerificationProfile.findUnique({ where: { shopId: shop.id } });
+    if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
+      throw new ConflictException({ code: 'SELLER_VERIFICATION_NOT_EDITABLE', message: 'Hồ sơ không ở trạng thái cho phép xác minh email.', details: [] });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    return this.prisma.sellerVerificationProfile.update({
+      where: { id: profile.id },
+      data: { contactEmail: normalizedEmail, contactEmailVerifiedAt: new Date(), updatedAt: new Date() },
+    }).then((updated) => this.toProfileResponse(updated));
+  }
+
   async submitMine(user: AuthenticatedUser) {
     const shop = await this.findOwnedShop(user.id);
     const profile = await this.prisma.sellerVerificationProfile.findUnique({
@@ -217,27 +235,12 @@ export class SellerVerificationService {
         details: [],
       });
     }
-    if (!payout) {
-      throw new BadRequestException({
-        code: 'SELLER_PAYOUT_REQUIRED',
-        message: 'Hãy thêm tài khoản nhận tiền trước khi gửi hồ sơ.',
-        details: [{ field: 'payoutAccount' }],
-      });
-    }
-
     const requiredDocuments =
       profile.sellerType === SellerType.Individual
-        ? profile.identityDocumentType === 'Passport'
-          ? [SellerDocumentType.Passport, SellerDocumentType.BankAccountProof]
-          : [
-              SellerDocumentType.IdentityFront,
-              SellerDocumentType.IdentityBack,
-              SellerDocumentType.BankAccountProof,
-            ]
-        : [
-            SellerDocumentType.BusinessRegistration,
-            SellerDocumentType.BankAccountProof,
-          ];
+        ? [SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack, SellerDocumentType.FaceVerification]
+        : profile.businessType === 'HouseholdBusiness'
+          ? [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack]
+          : [SellerDocumentType.BusinessRegistration];
     const uploadedTypes = new Set(
       profile.documents.map((item) => item.documentType),
     );
@@ -280,6 +283,9 @@ export class SellerVerificationService {
       });
       return result;
     });
+    if (updated.contactEmail) {
+      await this.emailService.sendSubmissionReceived(updated.contactEmail, updated.contactName ?? updated.legalName, shop.shopName);
+    }
     return this.toProfileResponse(updated);
   }
 
@@ -299,6 +305,10 @@ export class SellerVerificationService {
         message: 'Hồ sơ không ở trạng thái cho phép thay đổi tài liệu.',
         details: [],
       });
+    }
+    if (documentType === SellerDocumentType.BusinessRegistration) {
+      const count = await this.prisma.sellerVerificationDocument.count({ where: { verificationProfileId: profile.id, documentType, isDeleted: false } });
+      if (count >= 3) throw new BadRequestException({ code: 'SELLER_DOCUMENT_LIMIT_REACHED', message: 'Chỉ được tải tối đa 3 ảnh giấy chứng nhận đăng ký.', details: [{ field: 'file', documentType }] });
     }
     const checksum = this.crypto.checksum(file.buffer);
     const duplicate = await this.prisma.sellerVerificationDocument.findFirst({
@@ -493,7 +503,7 @@ export class SellerVerificationService {
       identityIssuedAt: profile.identityIssuedAt,
       identityIssuedBy: profile.identityIssuedBy,
       identityExpiresAt: profile.identityExpiresAt,
-      taxCodeMasked: this.crypto.mask(profile.taxCodeLast4 as string),
+      taxCodeMasked: profile.taxCodeLast4 ? this.crypto.mask(profile.taxCodeLast4 as string) : null,
       businessRegistrationNumberMasked: this.crypto.mask(
         profile.businessRegistrationNumberLast4 as string | null,
       ),
@@ -501,6 +511,13 @@ export class SellerVerificationService {
       businessRegistrationIssuedBy: profile.businessRegistrationIssuedBy,
       legalRepresentativeName: profile.legalRepresentativeName,
       registeredAddress: profile.registeredAddress,
+      dateOfBirth: profile.dateOfBirth,
+      contactName: profile.contactName,
+      contactEmail: profile.contactEmail,
+      contactEmailVerifiedAt: profile.contactEmailVerifiedAt,
+      contactPhone: profile.contactPhone,
+      useAccountPhone: profile.useAccountPhone,
+      faceVerified: profile.faceVerified,
       verificationStatus: profile.verificationStatus,
       submittedAt: profile.submittedAt,
       reviewedAt: profile.reviewedAt,

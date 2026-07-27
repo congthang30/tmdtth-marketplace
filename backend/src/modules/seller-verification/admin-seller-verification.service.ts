@@ -23,6 +23,7 @@ import {
 import { SellerDataCryptoService } from './seller-data-crypto.service';
 import { SellerDocumentStorageService } from './seller-document-storage.service';
 import { DocumentAccessContext } from './types';
+import { SellerVerificationEmailService } from './seller-verification-email.service';
 import { VerificationTransitionService } from './verification-transition.service';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class AdminSellerVerificationService {
     private readonly crypto: SellerDataCryptoService,
     private readonly storage: SellerDocumentStorageService,
     private readonly transitions: VerificationTransitionService,
+    private readonly emailService: SellerVerificationEmailService,
   ) {}
 
   async list(query: AdminSellerVerificationQueryDto) {
@@ -260,12 +262,13 @@ export class AdminSellerVerificationService {
     const id = this.parseId(profileId);
     const profile = await this.prisma.sellerVerificationProfile.findUnique({
       where: { id },
+      include: { shop: { select: { shopName: true } } },
     });
     if (!profile) throw this.notFound();
     this.transitions.assertAllowed(profile.verificationStatus, toStatus);
     const now = new Date();
 
-    return this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.sellerVerificationProfile.update({
         where: { id },
         data: {
@@ -326,6 +329,10 @@ export class AdminSellerVerificationService {
         reviewedAt: updated.reviewedAt,
       };
     });
+    if (toStatus === VerificationStatus.Approved && profile.contactEmail) {
+      await this.emailService.sendApproved(profile.contactEmail, profile.contactName ?? profile.legalName, profile.shop.shopName);
+    }
+    return result;
   }
 
   private parseId(value: string): bigint {

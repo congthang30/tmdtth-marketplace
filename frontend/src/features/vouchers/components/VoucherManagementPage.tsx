@@ -22,7 +22,11 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import { TextInput } from "@/components/ui/TextInput";
+import { categoriesApi } from "@/features/catalog/api";
+import type { CategoryTreeNode } from "@/features/catalog/types";
+import { sellerProductsApi } from "@/features/seller/api";
 import { getErrorMessage } from "@/services/errors";
+import { apiGet } from "@/services/api";
 import { useToastStore } from "@/stores/toast.store";
 import { formatDateTime, formatMoney, formatStatus } from "@/utils/format";
 import type { Voucher, VoucherListResponse, VoucherRequest } from "../types";
@@ -42,6 +46,10 @@ const voucherSchema = z
       .min(2, "Tên mã giảm giá cần ít nhất 2 ký tự")
       .max(150, "Tên mã giảm giá quá dài"),
     discountType: z.enum(["Percentage", "FixedAmount"]),
+    discountTarget: z.enum(["Product", "Shipping"]),
+    productScope: z.enum(["AllProducts", "Categories", "SpecificProducts"]),
+    categoryIds: z.array(z.string()),
+    productIds: z.array(z.string()),
     discountValue: z
       .string()
       .trim()
@@ -77,6 +85,10 @@ const voucherSchema = z
       message: "Phần trăm giảm giá tối đa là 100",
       path: ["discountValue"],
     },
+  )
+  .refine(
+    (values) => values.discountTarget !== "Shipping" || values.categoryIds.length === 0,
+    { message: "Voucher vận chuyển không áp dụng theo danh mục", path: ["categoryIds"] },
   );
 
 type VoucherFormValues = z.infer<typeof voucherSchema>;
@@ -98,6 +110,10 @@ function defaultFormValues(): VoucherFormValues {
     voucherCode: "",
     voucherName: "",
     discountType: "Percentage",
+    discountTarget: "Product",
+    productScope: "AllProducts",
+    categoryIds: [],
+    productIds: [],
     discountValue: "10",
     maxDiscountAmount: "",
     minOrderAmount: "0",
@@ -112,6 +128,10 @@ function toFormValues(voucher: Voucher): VoucherFormValues {
     voucherCode: voucher.voucherCode,
     voucherName: voucher.voucherName,
     discountType: voucher.discountType,
+    discountTarget: voucher.discountTarget ?? "Product",
+    productScope: voucher.productScope ?? "AllProducts",
+    categoryIds: (voucher.categories ?? []).map((category) => category.id),
+    productIds: (voucher.products ?? []).map((product) => product.id),
     discountValue: voucher.discountValue,
     maxDiscountAmount: voucher.maxDiscountAmount ?? "",
     minOrderAmount: voucher.minOrderAmount,
@@ -128,6 +148,10 @@ function toRequest(
   const request: VoucherRequest = {
     voucherName: values.voucherName.trim(),
     discountType: values.discountType,
+    discountTarget: values.discountTarget,
+    productScope: values.discountTarget === "Shipping" ? "AllProducts" : values.productScope,
+    categoryIds: values.discountTarget === "Product" && values.productScope === "Categories" ? values.categoryIds : [],
+    productIds: values.discountTarget === "Product" && values.productScope === "SpecificProducts" ? values.productIds : [],
     discountValue: Number(values.discountValue),
     maxDiscountAmount:
       values.discountType === "Percentage" &&
@@ -168,6 +192,7 @@ type VoucherManagementPageProps = {
   emptyTitle: string;
   emptyDescription: string;
   showScopeColumn?: boolean;
+  owner: "platform" | "shop";
 };
 
 const statuses = ["", "Active", "Inactive"] as const;
@@ -182,6 +207,7 @@ export function VoucherManagementPage({
   emptyTitle,
   emptyDescription,
   showScopeColumn = false,
+  owner,
 }: VoucherManagementPageProps) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<(typeof statuses)[number]>("");
@@ -242,6 +268,20 @@ export function VoucherManagementPage({
   const meta = vouchersQuery.data?.meta;
   const isModalOpen = isCreateOpen || Boolean(editingVoucher);
   const discountType = form.watch("discountType");
+  const discountTarget = form.watch("discountTarget");
+  const productScope = form.watch("productScope");
+  const categoriesQuery = useQuery({
+    queryKey: owner === "shop" ? ["seller", "shop-categories", "voucher-form"] : ["categories", "tree", "voucher-form"],
+    queryFn: () => owner === "shop"
+      ? apiGet<Array<CategoryTreeNode & { productIds: string[] }>>("/seller/shop-categories")
+      : categoriesApi.list(),
+    enabled: isModalOpen,
+  });
+  const flattenCategories = (nodes: CategoryTreeNode[]): CategoryTreeNode[] =>
+    nodes.flatMap((node) => [node, ...flattenCategories(node.children ?? [])]);
+  const categories = owner === "shop" ? (categoriesQuery.data ?? []) : flattenCategories(categoriesQuery.data ?? []);
+  const productsQuery = useQuery({ queryKey: ["seller-products", "voucher-form"], queryFn: () => sellerProductsApi.list(1, 100), enabled: isModalOpen && owner === "shop" && productScope === "SpecificProducts" });
+  const products = productsQuery.data?.items ?? [];
 
   return (
     <div className="space-y-5">
@@ -350,7 +390,14 @@ export function VoucherManagementPage({
                     </TableCell>
                     <TableCell>
                       <p className="text-xs text-muted">
-                        Đơn tối thiểu {formatMoney(voucher.minOrderAmount)}
+                        {(voucher.discountTarget ?? "Product") === "Shipping"
+                          ? "Giảm phí vận chuyển"
+                          : (voucher.categories?.length ?? 0) > 0
+                            ? `Danh mục: ${(voucher.categories ?? []).map((category) => category.categoryName).join(", ")}`
+                            : "Tất cả sản phẩm"}
+                      </p>
+                      <p className="text-xs text-muted">
+                        Giá trị tối thiểu {formatMoney(voucher.minOrderAmount)}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -466,7 +513,44 @@ export function VoucherManagementPage({
             {...form.register("voucherName")}
           />
           <SelectInput
-            label="Loại giảm giá"
+            label="Đối tượng giảm giá"
+            error={form.formState.errors.discountTarget?.message}
+            {...form.register("discountTarget")}
+          >
+            <option value="Product">Tiền hàng</option>
+            {owner === "platform" ? <option value="Shipping">Phí vận chuyển</option> : null}
+          </SelectInput>
+          {discountTarget === "Product" ? (
+            <div className="space-y-3">
+              <SelectInput label="Phạm vi sản phẩm" {...form.register("productScope")}><option value="AllProducts">Tất cả sản phẩm</option><option value="Categories">Theo danh mục</option><option value="SpecificProducts">Sản phẩm cụ thể</option></SelectInput>
+            {productScope === "Categories" ? <fieldset className="rounded-lg border border-border p-3">
+              <legend className="px-1 text-sm font-medium text-ink">Danh mục áp dụng</legend>
+              <p className="mb-2 text-xs text-muted">Không chọn danh mục nghĩa là áp dụng cho tất cả sản phẩm.</p>
+              {categoriesQuery.isLoading ? <Skeleton className="h-20 w-full" /> : null}
+              <div className="max-h-40 space-y-1 overflow-y-auto">
+                {categories.map((category) => (
+                  <label key={category.id} className="flex min-h-11 items-center gap-2 rounded px-2 hover:bg-surface">
+                    <input
+                      type="checkbox"
+                      value={category.id}
+                      {...form.register("categoryIds")}
+                      className="h-5 w-5 accent-primary-600"
+                    />
+                    <span className="text-sm text-ink">{category.categoryName}</span>
+                  </label>
+                ))}
+              </div>
+              {form.formState.errors.categoryIds?.message ? (
+                <p className="mt-1 text-xs text-danger">{form.formState.errors.categoryIds.message}</p>
+              ) : null}
+            </fieldset> : null}
+            {productScope === "SpecificProducts" ? <fieldset className="rounded-lg border border-border p-3"><legend className="px-1 text-sm font-medium text-ink">Sản phẩm áp dụng</legend>{productsQuery.isLoading ? <Skeleton className="h-20 w-full" /> : <div className="max-h-48 space-y-1 overflow-y-auto">{products.map((product) => <label key={product.id} className="flex min-h-11 items-center gap-2 rounded px-2 hover:bg-surface"><input type="checkbox" value={product.id} {...form.register("productIds")} className="h-5 w-5 accent-primary-600"/><span className="text-sm text-ink">{product.productName}</span></label>)}</div>}</fieldset> : null}
+            </div>
+          ) : (
+            <Alert tone="info">Mức giảm được tính trực tiếp trên tổng phí vận chuyển đã báo giá.</Alert>
+          )}
+          <SelectInput
+            label="Cách tính giảm giá"
             error={form.formState.errors.discountType?.message}
             {...form.register("discountType")}
           >

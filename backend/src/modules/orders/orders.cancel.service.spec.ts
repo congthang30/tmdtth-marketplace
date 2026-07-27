@@ -149,7 +149,10 @@ function callArgument<T>(
 describe('OrdersService customer cancellation', () => {
   it('cancels a multi-shop waiting order and releases every reservation', async () => {
     const prisma = createPrismaMock();
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     const result = await service.cancelMyOrder(customer, '700', {
       reason: 'Changed my mind',
@@ -244,7 +247,10 @@ describe('OrdersService customer cancellation', () => {
   it('does not expose an order owned by another customer', async () => {
     const prisma = createPrismaMock();
     prisma.order.findFirst.mockResolvedValue(null);
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     await expect(
       service.cancelMyOrder(customer, '700', { reason: 'Cancel' }),
@@ -259,7 +265,10 @@ describe('OrdersService customer cancellation', () => {
         shopOrders: [{ id: 701n, orderStatus: 'Confirmed', items: [] }],
       }),
     );
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     await expect(
       service.cancelMyOrder(customer, '700', { reason: 'Too late' }),
@@ -275,7 +284,10 @@ describe('OrdersService customer cancellation', () => {
         payments: [{ id: 901n, paymentStatus: 'Paid' }],
       }),
     );
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     await expect(
       service.cancelMyOrder(customer, '700', { reason: 'Refund please' }),
@@ -286,7 +298,10 @@ describe('OrdersService customer cancellation', () => {
   it('aborts when reserved inventory cannot be released', async () => {
     const prisma = createPrismaMock();
     prisma.productInventory.updateMany.mockResolvedValueOnce({ count: 0 });
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     await expect(
       service.cancelMyOrder(customer, '700', { reason: 'Cancel' }),
@@ -297,7 +312,10 @@ describe('OrdersService customer cancellation', () => {
 
   it('rejects an invalid order id before opening a transaction', async () => {
     const prisma = createPrismaMock();
-    const service = new OrdersService(prisma as unknown as PrismaService, new VouchersService(prisma as unknown as PrismaService));
+    const service = new OrdersService(
+      prisma as unknown as PrismaService,
+      new VouchersService(prisma as unknown as PrismaService),
+    );
 
     await expect(
       service.cancelMyOrder(customer, 'invalid', { reason: 'Cancel' }),

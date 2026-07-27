@@ -30,7 +30,11 @@ export class PaymentsController {
     @Param('id') paymentId: string,
     @Ip() clientIp: string,
   ) {
-    return this.paymentsService.createVnpayPaymentUrl(user, paymentId, clientIp);
+    return this.paymentsService.createVnpayPaymentUrl(
+      user,
+      paymentId,
+      clientIp,
+    );
   }
 
   @Get('vnpay/return')

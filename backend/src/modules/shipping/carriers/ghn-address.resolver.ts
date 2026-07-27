@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { getCarrierTimeoutMs, getGhnConfig } from '../../../config/carrier.config';
+import {
+  getCarrierTimeoutMs,
+  getGhnConfig,
+} from '../../../config/carrier.config';
 import {
   normalizeProvinceNameForMatching,
   normalizeVietnameseText,
@@ -21,7 +24,11 @@ import {
  */
 
 type GhnWard = { WardCode: string; WardName: string };
-type GhnDistrict = { DistrictID: number; DistrictName: string; Wards?: GhnWard[] };
+type GhnDistrict = {
+  DistrictID: number;
+  DistrictName: string;
+  Wards?: GhnWard[];
+};
 type GhnProvince = { ProvinceID: number; ProvinceName: string };
 
 export type ResolvedGhnAddress = {
@@ -58,7 +65,11 @@ export class GhnAddressResolver {
         signal: controller.signal,
       });
 
-      const json = (await response.json()) as { code?: number; data?: T; message?: string };
+      const json = (await response.json()) as {
+        code?: number;
+        data?: T;
+        message?: string;
+      };
 
       if (!response.ok || json.code !== 200) {
         throw new Error(
@@ -73,7 +84,8 @@ export class GhnAddressResolver {
   }
 
   private async ensureLoaded(): Promise<void> {
-    const isFresh = this.provinces !== null && Date.now() - this.loadedAt < CACHE_TTL_MS;
+    const isFresh =
+      this.provinces !== null && Date.now() - this.loadedAt < CACHE_TTL_MS;
     if (isFresh) {
       return;
     }
@@ -95,9 +107,12 @@ export class GhnAddressResolver {
       return cached;
     }
 
-    const districts = await this.fetchJson<GhnDistrict[]>('/master-data/district', {
-      province_id: provinceId,
-    });
+    const districts = await this.fetchJson<GhnDistrict[]>(
+      '/master-data/district',
+      {
+        province_id: provinceId,
+      },
+    );
     this.districtsByProvinceId.set(provinceId, districts);
     return districts;
   }
@@ -124,14 +139,19 @@ export class GhnAddressResolver {
    * warning is logged (this is rare: ward names are usually unique within
    * a province after the 2025 merge).
    */
-  async resolve(provinceName: string, wardName: string): Promise<ResolvedGhnAddress | null> {
+  async resolve(
+    provinceName: string,
+    wardName: string,
+  ): Promise<ResolvedGhnAddress | null> {
     await this.ensureLoaded();
 
     const normalizedProvince = normalizeProvinceNameForMatching(provinceName);
     const normalizedWard = normalizeWardNameForMatching(wardName);
 
     const province = this.provinces?.find(
-      (item) => normalizeProvinceNameForMatching(item.ProvinceName) === normalizedProvince,
+      (item) =>
+        normalizeProvinceNameForMatching(item.ProvinceName) ===
+        normalizedProvince,
     );
 
     if (!province) {
@@ -145,7 +165,8 @@ export class GhnAddressResolver {
     for (const district of districts) {
       const wards = await this.getWards(district.DistrictID);
       const ward = wards.find(
-        (item) => normalizeWardNameForMatching(item.WardName) === normalizedWard,
+        (item) =>
+          normalizeWardNameForMatching(item.WardName) === normalizedWard,
       );
 
       if (ward) {

@@ -14,6 +14,8 @@ import { AuthenticatedUser } from '../auth/types';
 import { AdminShopQueryDto } from './dto/admin-shop-query.dto';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { RejectShopDto } from './dto/reject-shop.dto';
+import { ShopCatalogQueryDto } from './dto/shop-catalog-query.dto';
+import { UpsertShopCategoryDto } from './dto/upsert-shop-category.dto';
 import { ShopResponse } from './types';
 
 const SHOP_STATUS_PENDING_APPROVAL = 'PendingApproval';
@@ -111,6 +113,87 @@ export class ShopsService {
 
     return this.toShopResponse(shop);
   }
+
+  async getPublicShopCatalog(slug: string, query: ShopCatalogQueryDto) {
+    const shop = await this.prisma.shop.findFirst({
+      where: { slug, shopStatus: SHOP_STATUS_APPROVED, isDeleted: false },
+      select: { id: true, shopName: true, slug: true, description: true, province: true, createdAt: true },
+    });
+    if (!shop) throw new NotFoundException({ code: 'SHOP_NOT_FOUND', message: 'Không tìm thấy gian hàng.' });
+
+    const category = query.category
+      ? await this.prisma.shopCategory.findFirst({ where: { shopId: shop.id, slug: query.category, isActive: true }, select: { id: true } })
+      : null;
+    if (query.category && !category) throw new NotFoundException({ code: 'SHOP_CATEGORY_NOT_FOUND', message: 'Danh mục của gian hàng không tồn tại.' });
+
+    const where = {
+      shopId: shop.id,
+      isDeleted: false,
+      isViolation: false,
+      productStatus: 'Published',
+      ...(category ? { shopCategoryProducts: { some: { shopCategoryId: category.id } } } : {}),
+      ...(query.search ? { productName: { contains: query.search, mode: 'insensitive' as const } } : {}),
+    };
+    const skip = (query.page - 1) * query.limit;
+    const [categories, products, total] = await Promise.all([
+      this.prisma.shopCategory.findMany({
+        where: { shopId: shop.id, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { categoryName: 'asc' }],
+        include: { _count: { select: { categoryProducts: true } } },
+      }),
+      this.prisma.product.findMany({ where, skip, take: query.limit, orderBy: [{ createdAt: 'desc' }], include: { images: { where: { isThumbnail: true }, take: 1 }, variants: { where: { variantStatus: 'Active' } }, shop: true } }),
+      this.prisma.product.count({ where }),
+    ]);
+    return {
+      shop: { ...shop, id: shop.id.toString(), idString: shop.id.toString() },
+      categories: categories.map((item) => ({ id: item.id.toString(), idString: item.id.toString(), categoryName: item.categoryName, slug: item.slug, parentShopCategoryId: item.parentShopCategoryId?.toString() ?? null, productCount: item._count.categoryProducts })),
+      products: products.map((product) => ({ id: product.id.toString(), idString: product.id.toString(), slug: product.slug, productName: product.productName, priceMin: product.variants.reduce((min, variant) => variant.price.lt(min) ? variant.price : min, product.basePrice).toString(), thumbnailImage: product.images[0] ? { ...product.images[0], id: product.images[0].id.toString() } : null, shop: { id: product.shop.id.toString(), shopName: product.shop.shopName, slug: product.shop.slug } })),
+      meta: { page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) },
+    };
+  }
+
+  async listOwnedShopCategories(user: AuthenticatedUser) {
+    const shop = await this.requireOwnedApprovedShop(user);
+    const rows = await this.prisma.shopCategory.findMany({ where: { shopId: shop.id }, orderBy: [{ sortOrder: 'asc' }, { categoryName: 'asc' }], include: { categoryProducts: { select: { productId: true } } } });
+    return rows.map((row) => this.toShopCategoryResponse(row));
+  }
+
+  async createOwnedShopCategory(user: AuthenticatedUser, dto: UpsertShopCategoryDto) {
+    const shop = await this.requireOwnedApprovedShop(user);
+    await this.assertParentCategory(shop.id, dto.parentShopCategoryId);
+    const row = await this.prisma.shopCategory.create({ data: { shopId: shop.id, categoryName: dto.categoryName, slug: await this.uniqueShopCategorySlug(shop.id, dto.categoryName), parentShopCategoryId: dto.parentShopCategoryId ? BigInt(dto.parentShopCategoryId) : null, description: this.normalizeNullableText(dto.description), sortOrder: dto.sortOrder ?? 0, isActive: dto.isActive ?? true }, include: { categoryProducts: { select: { productId: true } } } });
+    return this.toShopCategoryResponse(row);
+  }
+
+  async updateOwnedShopCategory(user: AuthenticatedUser, id: string, dto: UpsertShopCategoryDto) {
+    const shop = await this.requireOwnedApprovedShop(user); const categoryId = this.parseShopId(id);
+    await this.requireOwnedCategory(shop.id, categoryId); await this.assertParentCategory(shop.id, dto.parentShopCategoryId, categoryId);
+    const row = await this.prisma.shopCategory.update({ where: { id: categoryId }, data: { categoryName: dto.categoryName, parentShopCategoryId: dto.parentShopCategoryId ? BigInt(dto.parentShopCategoryId) : null, description: this.normalizeNullableText(dto.description), sortOrder: dto.sortOrder, isActive: dto.isActive, updatedAt: new Date() }, include: { categoryProducts: { select: { productId: true } } } });
+    return this.toShopCategoryResponse(row);
+  }
+
+  async assignOwnedShopCategoryProducts(user: AuthenticatedUser, id: string, productIds: string[]) {
+    const shop = await this.requireOwnedApprovedShop(user); const categoryId = this.parseShopId(id); await this.requireOwnedCategory(shop.id, categoryId);
+    const ids = productIds.map((value) => this.parseShopId(value));
+    const count = await this.prisma.product.count({ where: { id: { in: ids }, shopId: shop.id, isDeleted: false } });
+    if (count !== ids.length) throw new BadRequestException({ code: 'SHOP_CATEGORY_PRODUCT_INVALID', message: 'Một hoặc nhiều sản phẩm không thuộc gian hàng.' });
+    await this.prisma.$transaction(async (tx) => { await tx.shopCategoryProduct.deleteMany({ where: { shopCategoryId: categoryId } }); if (ids.length) await tx.shopCategoryProduct.createMany({ data: ids.map((productId, sortOrder) => ({ shopCategoryId: categoryId, productId, sortOrder })) }); });
+    return this.listOwnedShopCategories(user);
+  }
+
+  async deleteOwnedShopCategory(user: AuthenticatedUser, id: string) {
+    const shop = await this.requireOwnedApprovedShop(user); const categoryId = this.parseShopId(id); await this.requireOwnedCategory(shop.id, categoryId);
+    await this.prisma.shopCategory.delete({ where: { id: categoryId } }); return { success: true };
+  }
+
+  private async requireOwnedApprovedShop(user: AuthenticatedUser) {
+    const shop = await this.prisma.shop.findFirst({ where: { ownerUserId: user.id, shopStatus: SHOP_STATUS_APPROVED, isDeleted: false }, select: { id: true } });
+    if (!shop) throw new NotFoundException({ code: 'SHOP_NOT_FOUND', message: 'Không tìm thấy gian hàng đã được duyệt.' }); return shop;
+  }
+  private async requireOwnedCategory(shopId: bigint, id: bigint) { const row = await this.prisma.shopCategory.findFirst({ where: { id, shopId } }); if (!row) throw new NotFoundException({ code: 'SHOP_CATEGORY_NOT_FOUND', message: 'Không tìm thấy danh mục của gian hàng.' }); return row; }
+  private async assertParentCategory(shopId: bigint, parentId?: string, selfId?: bigint) { if (!parentId) return; const id = this.parseShopId(parentId); if (id === selfId) throw new BadRequestException({ code: 'SHOP_CATEGORY_PARENT_INVALID', message: 'Danh mục không thể là cha của chính nó.' }); await this.requireOwnedCategory(shopId, id); }
+  private async uniqueShopCategorySlug(shopId: bigint, name: string) { const base = this.slugify(name); if (!base) throw new BadRequestException({ code: 'SHOP_CATEGORY_NAME_INVALID', message: 'Tên danh mục không hợp lệ.' }); let slug = base; let suffix = 2; while (await this.prisma.shopCategory.findUnique({ where: { shopId_slug: { shopId, slug } }, select: { id: true } })) slug = `${base}-${suffix++}`; return slug; }
+  private toShopCategoryResponse(row: { id: bigint; parentShopCategoryId: bigint | null; categoryName: string; slug: string; description: string | null; sortOrder: number; isActive: boolean; categoryProducts: Array<{ productId: bigint }> }) { return { id: row.id.toString(), idString: row.id.toString(), parentShopCategoryId: row.parentShopCategoryId?.toString() ?? null, categoryName: row.categoryName, slug: row.slug, description: row.description, sortOrder: row.sortOrder, isActive: row.isActive, productIds: row.categoryProducts.map((item) => item.productId.toString()) }; }
 
   async approveShop(
     user: AuthenticatedUser,

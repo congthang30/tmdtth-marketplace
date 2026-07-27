@@ -11,6 +11,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { SelectInput } from "@/components/ui/SelectInput";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TextInput } from "@/components/ui/TextInput";
+import { SuggestionSearch } from "@/features/search/SuggestionSearch";
 import { catalogApi, categoriesApi } from "../api";
 import type { ProductListQuery } from "../types";
 import { flattenCategories } from "../utils";
@@ -178,14 +179,17 @@ export function CatalogPage() {
           className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.9fr_0.6fr_0.6fr_0.7fr_0.7fr_auto]"
           onSubmit={applyFilters}
         >
-          <TextInput
-            label="Tìm kiếm"
-            value={filters.q}
-            placeholder="Tên, thương hiệu hoặc mô tả"
-            onChange={(event) =>
-              setFilters((current) => ({ ...current, q: event.target.value }))
-            }
-          />
+          <div>
+            <span className="mb-1 block text-sm font-medium text-ink">Tìm kiếm</span>
+            <SuggestionSearch
+              context="customer"
+              embedded
+              label="Tìm kiếm sản phẩm"
+              value={filters.q}
+              placeholder="Tên sản phẩm, danh mục hoặc gian hàng"
+              onValueChange={(nextValue) => setFilters((current) => ({ ...current, q: nextValue }))}
+            />
+          </div>
           <SelectInput
             label="Danh mục"
             value={filters.categoryId}

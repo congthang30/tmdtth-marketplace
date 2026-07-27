@@ -21,6 +21,7 @@ export type SellerDocumentType =
   | 'Passport'
   | 'BusinessRegistration'
   | 'LegalRepresentativeIdentity'
+  | 'FaceVerification'
   | 'BankAccountProof';
 export type DocumentStatus = 'Pending' | 'Accepted' | 'Rejected';
 
@@ -32,6 +33,7 @@ export type SellerVerificationDocument = {
   bytes: number;
   documentStatus: DocumentStatus;
   createdAt: string;
+  previewUrl?: string;
 };
 
 export type SellerVerificationReview = {
@@ -59,6 +61,13 @@ export type SellerVerificationProfile = {
   businessRegistrationIssuedBy: string | null;
   legalRepresentativeName: string | null;
   registeredAddress: string | null;
+  dateOfBirth: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactEmailVerifiedAt: string | null;
+  contactPhone: string | null;
+  useAccountPhone: boolean;
+  faceVerified: boolean;
   verificationStatus: VerificationStatus;
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -90,12 +99,17 @@ export type SaveSellerVerificationRequest = {
   identityIssuedAt?: string;
   identityIssuedBy?: string;
   identityExpiresAt?: string;
-  taxCode: string;
+  taxCode?: string;
   businessRegistrationNumber?: string;
   businessRegistrationIssuedAt?: string;
   businessRegistrationIssuedBy?: string;
   legalRepresentativeName?: string;
   registeredAddress?: string;
+  dateOfBirth?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  useAccountPhone?: boolean;
 };
 
 export type SaveSellerPayoutRequest = {

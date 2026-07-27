@@ -210,6 +210,7 @@ const voucherSeeds = [
     voucherCode: 'SAN10',
     voucherName: 'Ưu đãi toàn hệ thống 10%',
     scope: 'Platform',
+    discountTarget: 'Product',
     discountType: 'Percentage',
     discountValue: '10',
     maxDiscountAmount: '50000',
@@ -220,6 +221,7 @@ const voucherSeeds = [
     voucherCode: 'SAN50K',
     voucherName: 'Ưu đãi toàn hệ thống 50.000đ',
     scope: 'Platform',
+    discountTarget: 'Product',
     discountType: 'FixedAmount',
     discountValue: '50000',
     maxDiscountAmount: null,
@@ -230,6 +232,7 @@ const voucherSeeds = [
     voucherCode: 'SHOP15',
     voucherName: 'Giảm 15% tại Gia Dụng Thắng Nguyễn',
     scope: 'Shop',
+    discountTarget: 'Product',
     discountType: 'Percentage',
     discountValue: '15',
     maxDiscountAmount: '60000',
@@ -240,11 +243,35 @@ const voucherSeeds = [
     voucherCode: 'SHOP100K',
     voucherName: 'Giảm 100.000đ cho đơn gian hàng từ 1 triệu',
     scope: 'Shop',
+    discountTarget: 'Product',
     discountType: 'FixedAmount',
     discountValue: '100000',
     maxDiscountAmount: null,
     minOrderAmount: '1000000',
     usageLimit: 100,
+  },
+  {
+    voucherCode: 'FREESHIP30',
+    voucherName: 'Hỗ trợ phí vận chuyển tối đa 30.000đ',
+    scope: 'Platform',
+    discountTarget: 'Shipping',
+    discountType: 'FixedAmount',
+    discountValue: '30000',
+    maxDiscountAmount: null,
+    minOrderAmount: '0',
+    usageLimit: 1000,
+  },
+  {
+    voucherCode: 'BEP10',
+    voucherName: 'Giảm 10% sản phẩm đồ nhà bếp',
+    scope: 'Platform',
+    discountTarget: 'Product',
+    categorySlugs: ['do-nha-bep'],
+    discountType: 'Percentage',
+    discountValue: '10',
+    maxDiscountAmount: '50000',
+    minOrderAmount: '100000',
+    usageLimit: 1000,
   },
 ];
 
@@ -948,7 +975,7 @@ async function seedProducts({
   }
 }
 
-async function seedVouchers(shop) {
+async function seedVouchers(shop, categoryBySlug) {
   const timestamp = now();
   const startAt = new Date(timestamp);
   startAt.setDate(startAt.getDate() - 1);
@@ -958,12 +985,13 @@ async function seedVouchers(shop) {
   for (const voucherSeed of voucherSeeds) {
     const shopId = voucherSeed.scope === 'Shop' ? shop.id : null;
 
-    await prisma.voucher.upsert({
+    const voucher = await prisma.voucher.upsert({
       where: { voucherCode: voucherSeed.voucherCode },
       update: {
         voucherName: voucherSeed.voucherName,
         shopId,
         discountType: voucherSeed.discountType,
+        discountTarget: voucherSeed.discountTarget,
         discountValue: voucherSeed.discountValue,
         maxDiscountAmount: voucherSeed.maxDiscountAmount,
         minOrderAmount: voucherSeed.minOrderAmount,
@@ -978,6 +1006,7 @@ async function seedVouchers(shop) {
         voucherName: voucherSeed.voucherName,
         shopId,
         discountType: voucherSeed.discountType,
+        discountTarget: voucherSeed.discountTarget,
         discountValue: voucherSeed.discountValue,
         maxDiscountAmount: voucherSeed.maxDiscountAmount,
         minOrderAmount: voucherSeed.minOrderAmount,
@@ -987,6 +1016,15 @@ async function seedVouchers(shop) {
         voucherStatus: 'Active',
       },
     });
+
+    await prisma.voucherCategory.deleteMany({ where: { voucherId: voucher.id } });
+    for (const categorySlug of voucherSeed.categorySlugs ?? []) {
+      const category = categoryBySlug[categorySlug];
+      if (!category) throw new Error(`Category not found: ${categorySlug}`);
+      await prisma.voucherCategory.create({
+        data: { voucherId: voucher.id, categoryId: category.id },
+      });
+    }
   }
 }
 
@@ -998,7 +1036,7 @@ async function main() {
   await seedShipping();
   const shop = await seedDemoShop(seededUsers);
   await seedSellerVerification({ seededUsers, shop });
-  await seedVouchers(shop);
+  await seedVouchers(shop, categoryBySlug);
   await seedProducts({
     categoryBySlug,
     attributeByCategoryAndName,

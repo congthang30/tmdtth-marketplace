@@ -1,8 +1,24 @@
 import type { ApiMeta } from "@/types/api";
 
 export type VoucherDiscountType = "Percentage" | "FixedAmount";
+export type VoucherDiscountTarget = "Product" | "Shipping";
+export type VoucherProductScope = "AllProducts" | "Categories" | "SpecificProducts";
 export type VoucherScope = "Platform" | "Shop";
 export type VoucherStatus = "Active" | "Inactive";
+
+export type VoucherCategory = {
+  id: string;
+  idString: string;
+  categoryName: string;
+  slug: string;
+};
+
+export type VoucherProduct = {
+  id: string;
+  idString: string;
+  productName: string;
+  slug: string;
+};
 
 /** Full voucher row used by admin/seller management screens. */
 export type Voucher = {
@@ -22,6 +38,10 @@ export type Voucher = {
   startAt: string;
   endAt: string;
   voucherStatus: VoucherStatus;
+  discountTarget: VoucherDiscountTarget;
+  productScope: VoucherProductScope;
+  categories: VoucherCategory[];
+  products: VoucherProduct[];
   createdAt: string;
 };
 
@@ -46,12 +66,21 @@ export type VoucherSummary = {
   endAt: string;
   isEligible: boolean;
   estimatedDiscountAmount: string;
+  discountTarget: VoucherDiscountTarget;
+  productScope: VoucherProductScope;
+  categories: VoucherCategory[];
+  products: VoucherProduct[];
+  eligibleAmount: string;
 };
 
 export type VoucherRequest = {
   voucherCode?: string;
   voucherName?: string;
   discountType?: VoucherDiscountType;
+  discountTarget?: VoucherDiscountTarget;
+  productScope?: VoucherProductScope;
+  categoryIds?: string[];
+  productIds?: string[];
   discountValue?: number;
   maxDiscountAmount?: number;
   minOrderAmount?: number;

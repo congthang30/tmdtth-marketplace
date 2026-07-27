@@ -1134,11 +1134,23 @@ export class ProductsService {
         : {}),
       ...(q
         ? {
-            OR: [
-              { productName: { contains: q } },
-              { brand: { contains: q } },
-              { description: { contains: q } },
-            ],
+            AND: q
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 8)
+              .map((token) => ({
+                OR: [
+                  { productName: { contains: token, mode: 'insensitive' as const } },
+                  { brand: { contains: token, mode: 'insensitive' as const } },
+                  { description: { contains: token, mode: 'insensitive' as const } },
+                  { category: { categoryName: { contains: token, mode: 'insensitive' as const } } },
+                  { shop: { shopName: { contains: token, mode: 'insensitive' as const } } },
+                  { variants: { some: { OR: [
+                    { sku: { contains: token, mode: 'insensitive' as const } },
+                    { variantName: { contains: token, mode: 'insensitive' as const } },
+                  ] } } },
+                ],
+              })),
           }
         : {}),
       shop: {

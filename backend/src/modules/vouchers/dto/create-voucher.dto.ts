@@ -1,5 +1,8 @@
 import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsDate,
   IsIn,
   IsInt,
@@ -14,6 +17,8 @@ import {
   MinLength,
 } from 'class-validator';
 import {
+  VOUCHER_DISCOUNT_TARGET_PRODUCT,
+  VOUCHER_DISCOUNT_TARGET_SHIPPING,
   VOUCHER_DISCOUNT_TYPE_FIXED_AMOUNT,
   VOUCHER_DISCOUNT_TYPE_PERCENTAGE,
 } from '../types';
@@ -22,6 +27,12 @@ const discountTypes = [
   VOUCHER_DISCOUNT_TYPE_PERCENTAGE,
   VOUCHER_DISCOUNT_TYPE_FIXED_AMOUNT,
 ] as const;
+const discountTargets = [
+  VOUCHER_DISCOUNT_TARGET_PRODUCT,
+  VOUCHER_DISCOUNT_TARGET_SHIPPING,
+] as const;
+
+const productScopes = ['AllProducts', 'Categories', 'SpecificProducts'] as const;
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -49,6 +60,28 @@ export class CreateVoucherDto {
 
   @IsIn(discountTypes)
   discountType!: (typeof discountTypes)[number];
+
+  @IsIn(discountTargets)
+  discountTarget!: (typeof discountTargets)[number];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @Matches(/^\d+$/, { each: true })
+  categoryIds?: string[];
+
+  @IsIn(productScopes)
+  productScope!: (typeof productScopes)[number];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @Matches(/^\d+$/, { each: true })
+  productIds?: string[];
 
   @Type(() => Number)
   @IsNumber()

@@ -289,11 +289,7 @@ export class AddressesService {
       return customFullAddress;
     }
 
-    return [
-      address.streetAddress,
-      address.ward,
-      address.province,
-    ].join(', ');
+    return [address.streetAddress, address.ward, address.province].join(', ');
   }
 
   private normalizeNullableText(value: string | null): string | null {

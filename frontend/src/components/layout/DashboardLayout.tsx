@@ -8,9 +8,11 @@ import {
   Ticket,
   Truck,
   Warehouse,
+  CalendarClock,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
+import { SuggestionSearch } from "@/features/search/SuggestionSearch";
 import { useAuthStore } from "@/stores/auth.store";
 import type { AppRole } from "@/types/domain";
 
@@ -35,9 +37,21 @@ const navItems = [
     roles: ["Seller"],
   },
   {
+    to: "/seller/shop-categories",
+    label: "Danh mục của gian hàng",
+    icon: FolderTree,
+    roles: ["Seller"],
+  },
+  {
     to: "/seller/orders",
     label: "Đơn hàng của gian hàng",
     icon: Warehouse,
+    roles: ["Seller"],
+  },
+  {
+    to: "/seller/sale-campaigns",
+    label: "Chương trình giảm giá",
+    icon: CalendarClock,
     roles: ["Seller"],
   },
   {
@@ -110,6 +124,7 @@ export function DashboardLayout() {
   );
   const fullName = user?.profile?.fullName ?? user?.email ?? "Tài khoản";
   const roleLabel = getRoleLabel(user?.roles ?? []);
+  const searchContext = user?.roles.includes("Admin") ? "admin" : "seller";
 
   return (
     <div className="min-h-screen bg-surface text-ink">
@@ -152,6 +167,9 @@ export function DashboardLayout() {
                   Khu vực tài khoản
                 </p>
                 <h1 className="text-xl font-semibold">{fullName}</h1>
+              </div>
+              <div className="w-full sm:max-w-md">
+                <SuggestionSearch context={searchContext} placeholder={searchContext === "admin" ? "Tìm shop, sản phẩm, danh mục..." : "Tìm sản phẩm, SKU, voucher..."} label="Tìm trong khu vực quản lý" />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <NavLink

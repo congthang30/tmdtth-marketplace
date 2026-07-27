@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ManagementSearch } from "@/components/data-display/ManagementSearch";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -33,6 +34,7 @@ import type { SellerProduct } from "../types";
 export function SellerProductsPage() {
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<SellerProduct | null>(null);
+  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
   const productsQuery = useQuery({
@@ -50,6 +52,11 @@ export function SellerProductsPage() {
   });
 
   const products = productsQuery.data?.items ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase("vi");
+  const filteredProducts = products.filter((product) =>
+    `${product.productName} ${product.category.categoryName} ${formatStatus(product.productStatus)}`
+      .toLocaleLowerCase("vi").includes(normalizedSearch),
+  );
   const meta = productsQuery.data?.meta;
 
   return (
@@ -72,6 +79,8 @@ export function SellerProductsPage() {
         </div>
       </section>
 
+      <ManagementSearch scope="product" value={search} onChange={setSearch} placeholder="Tìm tên sản phẩm, danh mục hoặc trạng thái trong trang này" resultCount={filteredProducts.length} />
+
       {productsQuery.isLoading ? <Skeleton className="h-96 w-full" /> : null}
       {productsQuery.isError ? (
         <ErrorState
@@ -81,7 +90,7 @@ export function SellerProductsPage() {
       ) : null}
 
       {!productsQuery.isLoading && !productsQuery.isError ? (
-        products.length > 0 ? (
+        filteredProducts.length > 0 ? (
           <div className="space-y-4">
             <Table>
               <TableHead>
@@ -96,7 +105,7 @@ export function SellerProductsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {products.map((product) => (
+                {filteredProducts.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell>
                       <p className="font-medium">{product.productName}</p>
@@ -164,8 +173,8 @@ export function SellerProductsPage() {
           </div>
         ) : (
           <EmptyState
-            title="Chưa có sản phẩm"
-            description="Hãy tạo sản phẩm đầu tiên sau khi gian hàng được phê duyệt."
+            title={search ? "Không tìm thấy sản phẩm" : "Chưa có sản phẩm"}
+            description={search ? "Hãy thử từ khóa khác hoặc chuyển sang trang khác." : "Hãy tạo sản phẩm đầu tiên sau khi gian hàng được phê duyệt."}
             action={
               <ButtonLink to="/seller/products/create">
                 <PackagePlus size={16} aria-hidden="true" />

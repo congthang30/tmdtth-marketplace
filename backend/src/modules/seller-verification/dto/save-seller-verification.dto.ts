@@ -1,6 +1,8 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
+  IsEmail,
   IsEnum,
   IsOptional,
   IsString,
@@ -27,7 +29,7 @@ export class SaveSellerVerificationDto {
   @Transform(trim)
   @IsString()
   @MinLength(2)
-  @MaxLength(200)
+  @MaxLength(100)
   legalName!: string;
 
   @ValidateIf(
@@ -43,9 +45,9 @@ export class SaveSellerVerificationDto {
   )
   @Transform(trim)
   @IsString()
-  @MinLength(6)
-  @MaxLength(30)
-  @Matches(/^[A-Za-z0-9]+$/)
+  @MinLength(9)
+  @MaxLength(12)
+  @Matches(/^\d{9,12}$/)
   identityNumber?: string;
 
   @IsOptional()
@@ -62,9 +64,20 @@ export class SaveSellerVerificationDto {
   @IsDateString()
   identityExpiresAt?: string;
 
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(5)
+  @MaxLength(600)
+  registeredAddress!: string;
+
+  @IsOptional()
   @Transform(trim)
   @Matches(/^\d{10}$/)
-  taxCode!: string;
+  taxCode?: string;
 
   @ValidateIf(
     (dto: SaveSellerVerificationDto) => dto.sellerType === SellerType.Business,
@@ -86,23 +99,33 @@ export class SaveSellerVerificationDto {
   @MaxLength(200)
   businessRegistrationIssuedBy?: string;
 
-  @ValidateIf(
-    (dto: SaveSellerVerificationDto) => dto.sellerType === SellerType.Business,
-  )
+  @IsOptional()
   @Transform(trim)
   @IsString()
-  @MinLength(2)
   @MaxLength(200)
   legalRepresentativeName?: string;
 
-  @ValidateIf(
-    (dto: SaveSellerVerificationDto) => dto.sellerType === SellerType.Business,
-  )
+  @IsOptional()
   @Transform(trim)
   @IsString()
-  @MinLength(5)
-  @MaxLength(600)
-  registeredAddress?: string;
+  @MinLength(2)
+  @MaxLength(100)
+  contactName?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsEmail()
+  @MaxLength(255)
+  contactEmail?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @Matches(/^[0-9+()\-\s]{8,20}$/)
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  useAccountPhone?: boolean;
 }
 
 export class SaveSellerPayoutAccountDto {

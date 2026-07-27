@@ -453,12 +453,14 @@ function createFakeCarrierClient(
     provider: 'GHN',
     isConfigured: jest.fn().mockReturnValue(false),
     healthCheck: jest.fn().mockResolvedValue(false),
-    getQuote: jest.fn<Promise<CarrierQuoteResult>, [unknown]>().mockResolvedValue({
-      feeAmount: 35000,
-      estimatedMinDays: 2,
-      estimatedMaxDays: 5,
-      raw: {},
-    }),
+    getQuote: jest
+      .fn<Promise<CarrierQuoteResult>, [unknown]>()
+      .mockResolvedValue({
+        feeAmount: 35000,
+        estimatedMinDays: 2,
+        estimatedMaxDays: 5,
+        raw: {},
+      }),
     createOrder: jest.fn(),
     getOrderStatus: jest.fn(),
     ...overrides,

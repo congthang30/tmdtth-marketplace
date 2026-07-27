@@ -25,9 +25,7 @@ export function normalizeVietnameseText(value: string): string {
  */
 export function normalizeProvinceNameForMatching(value: string): string {
   const normalized = normalizeVietnameseText(value);
-  return normalized
-    .replace(/^(thanh pho|tinh|tp\.?|tp|t\.)\s*/, '')
-    .trim();
+  return normalized.replace(/^(thanh pho|tinh|tp\.?|tp|t\.)\s*/, '').trim();
 }
 
 /**
@@ -42,7 +40,5 @@ export function normalizeProvinceNameForMatching(value: string): string {
  */
 export function normalizeWardNameForMatching(value: string): string {
   const normalized = normalizeVietnameseText(value);
-  return normalized
-    .replace(/^(phuong|xa|thi tran|thi xa)\s*/, '')
-    .trim();
+  return normalized.replace(/^(phuong|xa|thi tran|thi xa)\s*/, '').trim();
 }

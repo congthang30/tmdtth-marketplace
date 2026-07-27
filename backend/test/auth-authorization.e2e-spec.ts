@@ -128,12 +128,36 @@ const protectedRoutes: SecuredRoute[] = [
   ['admin shop approve', 'patch', '/api/admin/shops/1/approve'],
   ['admin shop reject', 'patch', '/api/admin/shops/1/reject'],
   ['admin seller verification list', 'get', '/api/admin/seller-verifications'],
-  ['admin seller verification detail', 'get', '/api/admin/seller-verifications/1'],
-  ['admin seller document access', 'get', '/api/admin/seller-verifications/1/documents/2/access'],
-  ['admin seller verification start', 'patch', '/api/admin/seller-verifications/1/start-review'],
-  ['admin seller verification revision', 'patch', '/api/admin/seller-verifications/1/request-revision'],
-  ['admin seller verification approve', 'patch', '/api/admin/seller-verifications/1/approve'],
-  ['admin seller verification reject', 'patch', '/api/admin/seller-verifications/1/reject'],
+  [
+    'admin seller verification detail',
+    'get',
+    '/api/admin/seller-verifications/1',
+  ],
+  [
+    'admin seller document access',
+    'get',
+    '/api/admin/seller-verifications/1/documents/2/access',
+  ],
+  [
+    'admin seller verification start',
+    'patch',
+    '/api/admin/seller-verifications/1/start-review',
+  ],
+  [
+    'admin seller verification revision',
+    'patch',
+    '/api/admin/seller-verifications/1/request-revision',
+  ],
+  [
+    'admin seller verification approve',
+    'patch',
+    '/api/admin/seller-verifications/1/approve',
+  ],
+  [
+    'admin seller verification reject',
+    'patch',
+    '/api/admin/seller-verifications/1/reject',
+  ],
   ['seller order list', 'get', '/api/seller/orders'],
   ['seller order detail', 'get', '/api/seller/orders/1'],
   ['seller order confirm', 'patch', '/api/seller/orders/1/confirm'],
@@ -164,8 +188,16 @@ const ownerScopedVerificationRoutes: SecuredRoute[] = [
   ['seller payout update', 'put', '/api/shops/payout-account/me'],
   ['seller verification submit', 'post', '/api/shops/verification/me/submit'],
   ['seller document upload', 'post', '/api/shops/verification/me/documents'],
-  ['seller document delete', 'delete', '/api/shops/verification/me/documents/1'],
-  ['seller document access', 'get', '/api/shops/verification/me/documents/1/access'],
+  [
+    'seller document delete',
+    'delete',
+    '/api/shops/verification/me/documents/1',
+  ],
+  [
+    'seller document access',
+    'get',
+    '/api/shops/verification/me/documents/1/access',
+  ],
 ];
 
 const sellerRoutes: SecuredRoute[] = protectedRoutes.filter(

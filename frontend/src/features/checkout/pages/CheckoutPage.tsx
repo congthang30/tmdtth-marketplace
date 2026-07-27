@@ -52,6 +52,9 @@ export function CheckoutPage() {
   const [quoteByShopId, setQuoteByShopId] = useState<
     Record<string, ShippingQuote>
   >({});
+  const [quoteErrorByShopId, setQuoteErrorByShopId] = useState<
+    Record<string, string>
+  >({});
   const [appliedPlatformVoucherCode, setAppliedPlatformVoucherCode] =
     useState("");
   const [appliedShopVoucherByShopId, setAppliedShopVoucherByShopId] =
@@ -160,6 +163,7 @@ export function CheckoutPage() {
 
   useEffect(() => {
     setQuoteByShopId({});
+    setQuoteErrorByShopId({});
   }, [addressId, selectedCartItemKey]);
 
   useEffect(() => {
@@ -209,6 +213,11 @@ export function CheckoutPage() {
     retry: false,
   });
 
+  const shippingServices = useMemo(
+    () => shippingServicesQuery.data?.items ?? [],
+    [shippingServicesQuery.data?.items],
+  );
+
   const quoteMutation = useMutation({
     mutationFn: ({
       group,
@@ -224,18 +233,57 @@ export function CheckoutPage() {
         destinationWard: previewQuery.data?.address.ward ?? "",
         totalWeightGram: getGroupWeightGram(group),
       }),
+    onMutate: ({ group }) => {
+      setQuoteErrorByShopId((current) => {
+        const next = { ...current };
+        delete next[group.shop.id];
+        return next;
+      });
+    },
     onSuccess: (quote) => {
       setQuoteByShopId((current) => ({
         ...current,
         [quote.shop.id]: quote,
       }));
-      pushToast({
-        tone: "success",
-        title: "Đã có báo giá vận chuyển",
-        description: `${quote.shop.shopName}: ${formatMoney(quote.quotedFee)}`,
-      });
+    },
+    onError: (error, { group }) => {
+      setQuoteErrorByShopId((current) => ({
+        ...current,
+        [group.shop.id]: getErrorMessage(error),
+      }));
     },
   });
+
+  useEffect(() => {
+    if (
+      !addressId ||
+      quoteMutation.isPending ||
+      !previewQuery.data ||
+      shippingServices.length === 0
+    ) {
+      return;
+    }
+
+    const group = previewQuery.data.shopGroups.find(
+      (item) =>
+        !quoteByShopId[item.shop.id] && !quoteErrorByShopId[item.shop.id],
+    );
+    if (!group) {
+      return;
+    }
+
+    const shippingServiceId =
+      selectedServiceByShopId[group.shop.id] ?? shippingServices[0].id;
+    quoteMutation.mutate({ group, shippingServiceId });
+  }, [
+    addressId,
+    previewQuery.data,
+    quoteByShopId,
+    quoteErrorByShopId,
+    quoteMutation,
+    selectedServiceByShopId,
+    shippingServices,
+  ]);
 
   const createOrderMutation = useMutation({
     mutationFn: checkoutApi.createOrder,
@@ -280,7 +328,6 @@ export function CheckoutPage() {
   const addresses = addressesQuery.data?.items ?? [];
   const paymentMethods = paymentMethodsQuery.data ?? [];
   const preview = previewQuery.data;
-  const shippingServices = shippingServicesQuery.data?.items ?? [];
   const hasAllShippingQuotes =
     selectedShopIds.length > 0 &&
     selectedShopIds.every((shopId) => Boolean(quoteByShopId[shopId]));
@@ -398,20 +445,60 @@ export function CheckoutPage() {
             <CreditCard size={18} aria-hidden="true" />
             Thanh toán
           </h2>
-          <div className="mt-4">
-            <SelectInput
-              label="Phương thức thanh toán"
-              value={paymentMethodId}
-              onChange={(event) => setPaymentMethodId(event.target.value)}
-            >
-              {paymentMethods.map((method) => (
-                <option key={method.id} value={method.id}>
-                  {method.methodName}
-                  {method.isOnline ? " - trực tuyến" : ""}
-                </option>
-              ))}
-            </SelectInput>
-          </div>
+          <fieldset className="mt-4">
+            <legend className="text-sm font-medium text-ink">
+              Phương thức thanh toán
+            </legend>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {paymentMethods.map((method) => {
+                const isSelected = paymentMethodId === method.id;
+
+                return (
+                  <label
+                    key={method.id}
+                    className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 ${
+                      isSelected
+                        ? "border-primary-600 bg-primary-50"
+                        : "border-border bg-surface hover:border-primary-300"
+                    }`}
+                  >
+                    {method.methodCode === "VNPAY" ? (
+                      <span className="flex h-11 w-20 shrink-0 items-center justify-center rounded-md border border-border bg-white p-1.5">
+                        <img
+                          src="/brands/vnpay.svg"
+                          alt="VNPAY"
+                          className="h-full w-full object-contain"
+                        />
+                      </span>
+                    ) : (
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border bg-white text-primary-700">
+                        <CreditCard size={22} aria-hidden="true" />
+                        <span className="sr-only">Thanh toán khi nhận hàng</span>
+                      </span>
+                    )}
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={method.id}
+                      checked={isSelected}
+                      onChange={(event) => setPaymentMethodId(event.target.value)}
+                      className="h-4 w-4 shrink-0 accent-primary-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-ink">
+                        {method.methodName}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {method.isOnline
+                          ? "Thanh toán trực tuyến"
+                          : "Thanh toán khi nhận hàng"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
         </div>
 
         <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
@@ -453,7 +540,7 @@ export function CheckoutPage() {
             </Button>
           </div>
           {preview?.platformVoucher ? (
-            <Alert tone="success" className="mt-3">
+            <Alert tone="info" className="mt-3">
               Đã áp dụng mã {preview.platformVoucher.voucherCode} — giảm{" "}
               {formatMoney(preview.platformVoucher.discountAmount)}
             </Alert>
@@ -475,11 +562,6 @@ export function CheckoutPage() {
               {getErrorMessage(shippingServicesQuery.error)}
             </Alert>
           ) : null}
-          {addressId && quoteMutation.isError ? (
-            <Alert tone="danger" className="mt-4">
-              {getErrorMessage(quoteMutation.error)}
-            </Alert>
-          ) : null}
           {!addressId ? null : shippingServicesQuery.isLoading ? (
             <div className="mt-4 space-y-3">
               <Skeleton className="h-16 w-full" />
@@ -493,8 +575,13 @@ export function CheckoutPage() {
             <div className="mt-4 space-y-3">
               {preview?.shopGroups.map((group) => {
                 const selectedServiceId =
-                  selectedServiceByShopId[group.shop.id] ?? "";
+                  selectedServiceByShopId[group.shop.id] ?? shippingServices[0].id;
+                const shippingService =
+                  shippingServices.find(
+                    (service) => service.id === selectedServiceId,
+                  ) ?? shippingServices[0];
                 const quote = quoteByShopId[group.shop.id];
+                const quoteError = quoteErrorByShopId[group.shop.id];
                 const isQuoting =
                   quoteMutation.isPending &&
                   quoteMutation.variables?.group.shop.id === group.shop.id;
@@ -504,56 +591,55 @@ export function CheckoutPage() {
                     key={group.shop.id}
                     className="rounded-md border border-border bg-surface p-3"
                   >
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                      <SelectInput
-                        label={group.shop.shopName}
-                        value={selectedServiceId}
-                        onChange={(event) => {
-                          const shippingServiceId = event.target.value;
-                          setSelectedServiceByShopId((current) => ({
-                            ...current,
-                            [group.shop.id]: shippingServiceId,
-                          }));
-                          setQuoteByShopId((current) => {
-                            const next = { ...current };
-                            delete next[group.shop.id];
-                            return next;
-                          });
-                        }}
-                      >
-                        <option value="">Chọn dịch vụ vận chuyển</option>
-                        {shippingServices.map((service) => (
-                          <option key={service.id} value={service.id}>
-                            {service.serviceName} - {service.estimatedMinDays}-
-                            {service.estimatedMaxDays} ngày
-                          </option>
-                        ))}
-                      </SelectInput>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={!selectedServiceId || isQuoting}
-                        onClick={() =>
-                          quoteMutation.mutate({
-                            group,
-                            shippingServiceId: selectedServiceId,
-                          })
-                        }
-                      >
-                        <Truck size={16} aria-hidden="true" />
-                        {isQuoting ? "Đang báo giá..." : "Lấy báo giá"}
-                      </Button>
-                    </div>
-                    {quote ? (
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                        <span className="font-semibold text-primary-700">
-                          {formatMoney(quote.quotedFee)}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-12 w-20 shrink-0 items-center justify-center rounded-md border border-border bg-white p-1.5">
+                          <img
+                            src="/brands/ghn.svg"
+                            alt="Giao Hàng Nhanh"
+                            className="h-full w-full object-contain"
+                          />
                         </span>
-                        <span className="text-muted">
-                          {quote.shippingService.serviceName},{" "}
-                          {quote.estimatedMinDays}-{quote.estimatedMaxDays} ngày
-                        </span>
+                        <div>
+                          <p className="font-medium text-ink">
+                            {group.shop.shopName}
+                          </p>
+                          <p className="mt-1 text-sm text-muted">
+                            {shippingService.serviceName} · dự kiến{" "}
+                            {shippingService.estimatedMinDays}-
+                            {shippingService.estimatedMaxDays} ngày
+                          </p>
+                        </div>
                       </div>
+                      {quote ? (
+                        <p className="text-base font-semibold text-primary-700">
+                          {formatMoney(quote.quotedFee)}
+                        </p>
+                      ) : isQuoting ? (
+                        <p className="text-sm text-muted" role="status">
+                          Đang tự động lấy báo giá...
+                        </p>
+                      ) : null}
+                    </div>
+                    {quoteError ? (
+                      <Alert tone="danger" className="mt-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span>{quoteError}</span>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => {
+                              setQuoteErrorByShopId((current) => {
+                                const next = { ...current };
+                                delete next[group.shop.id];
+                                return next;
+                              });
+                            }}
+                          >
+                            Thử lại
+                          </Button>
+                        </div>
+                      </Alert>
                     ) : null}
                     <div className="mt-3 flex min-h-11 flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
                       <div>

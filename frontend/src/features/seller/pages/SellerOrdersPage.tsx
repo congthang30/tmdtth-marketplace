@@ -3,6 +3,7 @@ import { Eye, PackageCheck } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ManagementSearch } from "@/components/data-display/ManagementSearch";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/ButtonLink";
@@ -21,11 +22,17 @@ import { sellerOrdersApi } from "../api";
 
 export function SellerOrdersPage() {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
   const ordersQuery = useQuery({
     queryKey: ["seller", "orders", page],
     queryFn: () => sellerOrdersApi.list(page, 10),
   });
   const orders = ordersQuery.data?.items ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase("vi");
+  const filteredOrders = orders.filter((order) =>
+    `${order.shopOrderCode} ${order.orderCode} ${order.receiverName} ${order.receiverPhone} ${formatStatus(order.orderStatus)} ${formatStatus(order.orderPaymentStatus)}`
+      .toLocaleLowerCase("vi").includes(normalizedSearch),
+  );
   const meta = ordersQuery.data?.meta;
 
   return (
@@ -40,6 +47,8 @@ export function SellerOrdersPage() {
         </p>
       </section>
 
+      <ManagementSearch scope="order" value={search} onChange={setSearch} placeholder="Tìm mã đơn, người nhận, số điện thoại hoặc trạng thái trong trang này" resultCount={filteredOrders.length} />
+
       {ordersQuery.isLoading ? <Skeleton className="h-96 w-full" /> : null}
       {ordersQuery.isError ? (
         <ErrorState
@@ -48,7 +57,7 @@ export function SellerOrdersPage() {
         />
       ) : null}
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
-        orders.length > 0 ? (
+        filteredOrders.length > 0 ? (
           <div className="space-y-4">
             <Table>
               <TableHead>
@@ -64,7 +73,7 @@ export function SellerOrdersPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
                       <Link
@@ -112,8 +121,8 @@ export function SellerOrdersPage() {
           </div>
         ) : (
           <EmptyState
-            title="Chưa có đơn hàng"
-            description="Đơn hàng sẽ xuất hiện sau khi khách hàng hoàn tất thanh toán."
+            title={search ? "Không tìm thấy đơn hàng" : "Chưa có đơn hàng"}
+            description={search ? "Hãy thử từ khóa khác hoặc chuyển sang trang khác." : "Đơn hàng sẽ xuất hiện sau khi khách hàng hoàn tất thanh toán."}
             action={
               <ButtonLink to="/seller/products" variant="secondary">
                 <PackageCheck size={16} aria-hidden="true" />

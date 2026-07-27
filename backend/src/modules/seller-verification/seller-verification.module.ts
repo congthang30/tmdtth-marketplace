@@ -8,6 +8,7 @@ import { SellerDocumentStorageService } from './seller-document-storage.service'
 import { SellerDocumentValidatorService } from './seller-document-validator.service';
 import { SellerVerificationController } from './seller-verification.controller';
 import { SellerVerificationService } from './seller-verification.service';
+import { SellerVerificationEmailService } from './seller-verification-email.service';
 import { VerificationTransitionService } from './verification-transition.service';
 
 @Module({
@@ -22,6 +23,7 @@ import { VerificationTransitionService } from './verification-transition.service
     SellerDocumentStorageService,
     SellerDocumentValidatorService,
     SellerVerificationService,
+    SellerVerificationEmailService,
     VerificationTransitionService,
   ],
   exports: [SellerVerificationService],

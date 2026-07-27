@@ -33,6 +33,19 @@ function describeDiscount(voucher: VoucherSummary) {
   return `Giảm ${formatMoney(voucher.discountValue)}`;
 }
 
+function describeEligibility(voucher: VoucherSummary) {
+  if (voucher.discountTarget === "Shipping") {
+    return "Áp dụng cho phí vận chuyển";
+  }
+  if (voucher.productScope === "SpecificProducts" && (voucher.products?.length ?? 0) > 0) {
+    return `Áp dụng cho: ${(voucher.products ?? []).map((product) => product.productName).join(", ")}`;
+  }
+  if (voucher.productScope === "Categories" && (voucher.categories?.length ?? 0) > 0) {
+    return `Áp dụng cho: ${(voucher.categories ?? []).map((category) => category.categoryName).join(", ")}`;
+  }
+  return "Áp dụng cho tất cả sản phẩm";
+}
+
 export function VoucherSelector({
   open,
   title,
@@ -164,8 +177,11 @@ export function VoucherSelector({
                         <span className="mt-1 block text-sm text-primary-700">
                           {describeDiscount(voucher)}
                         </span>
+                        <span className="mt-1 block text-xs font-medium text-ink">
+                          {describeEligibility(voucher)}
+                        </span>
                         <span className="mt-1 block text-xs text-muted">
-                          Đơn tối thiểu {formatMoney(voucher.minOrderAmount)} · HSD{" "}
+                          Giá trị tối thiểu {formatMoney(voucher.minOrderAmount)} · HSD{" "}
                           {new Intl.DateTimeFormat("vi-VN").format(
                             new Date(voucher.endAt),
                           )}
@@ -219,8 +235,9 @@ export function VoucherSelector({
                       <p className="mt-1 text-sm text-muted">
                         {describeDiscount(voucher)}
                       </p>
+                      <p className="mt-1 text-xs text-muted">{describeEligibility(voucher)}</p>
                       <p className="mt-1 text-xs text-danger">
-                        Cần đơn tối thiểu {formatMoney(voucher.minOrderAmount)}
+                        Cần giá trị đủ điều kiện tối thiểu {formatMoney(voucher.minOrderAmount)}
                       </p>
                     </div>
                   </div>

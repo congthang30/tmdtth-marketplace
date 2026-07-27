@@ -70,6 +70,7 @@ enum SellerDocumentType {
   Passport
   BusinessRegistration
   LegalRepresentativeIdentity
+  FaceVerification
   BankAccountProof
 }
 
@@ -188,14 +189,16 @@ model Shop {
   approvedByUser User? @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   products       Product[]
+  shopCategories ShopCategory[]
   cartItems      CartItem[]
   shopOrders     ShopOrder[]
   orderItems     OrderItem[]
   shippingQuotes ShippingQuote[]
   vouchers       Voucher[]
+  saleCampaigns  ShopSaleCampaign[]
   shopReviews    ShopReview[]
   returnRequests ReturnRequest[]
-  complaints     Complaint[]     @relation("ComplaintAgainstShop")
+  complaints     Complaint[]        @relation("ComplaintAgainstShop")
 
   sellerVerification SellerVerificationProfile?
   payoutAccount      SellerPayoutAccount?
@@ -217,9 +220,9 @@ model SellerVerificationProfile {
   identityIssuedAt                    DateTime?             @map("IdentityIssuedAt") @db.Date
   identityIssuedBy                    String?               @map("IdentityIssuedBy") @db.VarChar(200)
   identityExpiresAt                   DateTime?             @map("IdentityExpiresAt") @db.Date
-  taxCodeEncrypted                    String                @map("TaxCodeEncrypted") @db.Text
-  taxCodeHash                         String                @unique @map("TaxCodeHash") @db.VarChar(64)
-  taxCodeLast4                        String                @map("TaxCodeLast4") @db.VarChar(4)
+  taxCodeEncrypted                    String?               @map("TaxCodeEncrypted") @db.Text
+  taxCodeHash                         String?               @unique @map("TaxCodeHash") @db.VarChar(64)
+  taxCodeLast4                        String?               @map("TaxCodeLast4") @db.VarChar(4)
   businessRegistrationNumberEncrypted String?               @map("BusinessRegistrationNumberEncrypted") @db.Text
   businessRegistrationNumberHash      String?               @unique @map("BusinessRegistrationNumberHash") @db.VarChar(64)
   businessRegistrationNumberLast4     String?               @map("BusinessRegistrationNumberLast4") @db.VarChar(4)
@@ -227,6 +230,13 @@ model SellerVerificationProfile {
   businessRegistrationIssuedBy        String?               @map("BusinessRegistrationIssuedBy") @db.VarChar(200)
   legalRepresentativeName             String?               @map("LegalRepresentativeName") @db.VarChar(200)
   registeredAddress                   String?               @map("RegisteredAddress") @db.VarChar(600)
+  dateOfBirth                         DateTime?             @map("DateOfBirth") @db.Date
+  contactName                         String?               @map("ContactName") @db.VarChar(100)
+  contactEmail                        String?               @map("ContactEmail") @db.VarChar(255)
+  contactEmailVerifiedAt              DateTime?             @map("ContactEmailVerifiedAt") @db.Timestamp(3)
+  contactPhone                        String?               @map("ContactPhone") @db.VarChar(20)
+  useAccountPhone                     Boolean               @default(true) @map("UseAccountPhone")
+  faceVerified                        Boolean               @default(false) @map("FaceVerified")
   verificationStatus                  VerificationStatus    @default(Draft) @map("VerificationStatus")
   submittedAt                         DateTime?             @map("SubmittedAt") @db.Timestamp(3)
   reviewedAt                          DateTime?             @map("ReviewedAt") @db.Timestamp(3)
@@ -366,10 +376,11 @@ model Category {
   createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
   updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
-  parentCategory  Category?          @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  childCategories Category[]         @relation("CategoryTree")
-  products        Product[]
-  attributes      ProductAttribute[]
+  parentCategory    Category?          @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childCategories   Category[]         @relation("CategoryTree")
+  products          Product[]
+  attributes        ProductAttribute[]
+  voucherCategories VoucherCategory[]
 
   @@index([parentCategoryId])
   @@map("Categories")
@@ -404,14 +415,16 @@ model Product {
   createdByUser User?    @relation("ProductCreatedBy", fields: [createdByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   updatedByUser User?    @relation("ProductUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  variants         ProductVariant[]
-  images           ProductImage[]
-  inventoryRecords ProductInventory[]
-  cartItems        CartItem[]
-  orderItems       OrderItem[]
-  reviews          ProductReview[]
-  attributeValues  ProductAttributeValue[]
-  moderationLogs   ProductModerationLog[]
+  variants             ProductVariant[]
+  images               ProductImage[]
+  inventoryRecords     ProductInventory[]
+  cartItems            CartItem[]
+  orderItems           OrderItem[]
+  reviews              ProductReview[]
+  attributeValues      ProductAttributeValue[]
+  moderationLogs       ProductModerationLog[]
+  voucherProducts      VoucherProduct[]
+  shopCategoryProducts ShopCategoryProduct[]
 
   @@unique([shopId, slug])
   @@index([categoryId])
@@ -432,17 +445,50 @@ model ProductVariant {
   createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
   updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
-  product          Product                 @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  images           ProductImage[]
-  inventoryRecords ProductInventory[]
-  cartItems        CartItem[]
-  orderItems       OrderItem[]
-  reviews          ProductReview[]
-  attributeValues  ProductAttributeValue[]
+  product           Product                 @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  images            ProductImage[]
+  inventoryRecords  ProductInventory[]
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+  reviews           ProductReview[]
+  attributeValues   ProductAttributeValue[]
+  saleCampaignItems ShopSaleCampaignItem[]
 
   @@unique([productId, sku])
   @@index([productId])
   @@map("ProductVariants")
+}
+
+model ShopSaleCampaign {
+  id           BigInt    @id @default(autoincrement()) @map("ShopSaleCampaignID")
+  shopId       BigInt    @map("ShopID")
+  campaignName String    @map("CampaignName") @db.VarChar(150)
+  startsAt     DateTime  @map("StartsAt") @db.Timestamp(3)
+  endsAt       DateTime  @map("EndsAt") @db.Timestamp(3)
+  status       String    @default("Scheduled") @map("Status") @db.VarChar(30)
+  createdAt    DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt    DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  shop  Shop                   @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  items ShopSaleCampaignItem[]
+
+  @@index([shopId, startsAt, endsAt])
+  @@index([status])
+  @@map("ShopSaleCampaigns")
+}
+
+model ShopSaleCampaignItem {
+  id               BigInt  @id @default(autoincrement()) @map("ShopSaleCampaignItemID")
+  campaignId       BigInt  @map("CampaignID")
+  productVariantId BigInt  @map("ProductVariantID")
+  salePrice        Decimal @map("SalePrice") @db.Decimal(18, 2)
+
+  campaign       ShopSaleCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  productVariant ProductVariant   @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([campaignId, productVariantId])
+  @@index([productVariantId])
+  @@map("ShopSaleCampaignItems")
 }
 
 model ProductImage {
@@ -1000,13 +1046,94 @@ model Voucher {
   startAt           DateTime @map("StartAt") @db.Timestamp(3)
   endAt             DateTime @map("EndAt") @db.Timestamp(3)
   voucherStatus     String   @default("Active") @map("VoucherStatus") @db.VarChar(50)
+  discountTarget    String   @default("Product") @map("DiscountTarget") @db.VarChar(50)
+  productScope      String   @default("AllProducts") @map("ProductScope") @db.VarChar(50)
   createdAt         DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
 
-  shop   Shop?          @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usages VoucherUsage[]
+  shop                  Shop?                 @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usages                VoucherUsage[]
+  voucherCategories     VoucherCategory[]
+  voucherProducts       VoucherProduct[]
+  voucherShopCategories VoucherShopCategory[]
 
   @@index([shopId])
   @@map("Vouchers")
+}
+
+model VoucherCategory {
+  voucherId  BigInt   @map("VoucherID")
+  categoryId BigInt   @map("CategoryID")
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  voucher  Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([voucherId, categoryId])
+  @@index([categoryId])
+  @@map("VoucherCategories")
+}
+
+model VoucherProduct {
+  voucherId BigInt   @map("VoucherID")
+  productId BigInt   @map("ProductID")
+  createdAt DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([voucherId, productId])
+  @@index([productId])
+  @@map("VoucherProducts")
+}
+
+model ShopCategory {
+  id                   BigInt    @id @default(autoincrement()) @map("ShopCategoryID")
+  shopId               BigInt    @map("ShopID")
+  parentShopCategoryId BigInt?   @map("ParentShopCategoryID")
+  categoryName         String    @map("CategoryName") @db.VarChar(150)
+  slug                 String    @map("Slug") @db.VarChar(180)
+  description          String?   @map("Description") @db.VarChar(500)
+  sortOrder            Int       @default(0) @map("SortOrder")
+  isActive             Boolean   @default(true) @map("IsActive")
+  createdAt            DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt            DateTime? @map("UpdatedAt") @db.Timestamp(3)
+
+  shop              Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  parent            ShopCategory?         @relation("ShopCategoryTree", fields: [parentShopCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children          ShopCategory[]        @relation("ShopCategoryTree")
+  categoryProducts  ShopCategoryProduct[]
+  voucherCategories VoucherShopCategory[]
+
+  @@unique([shopId, slug])
+  @@index([shopId, isActive, sortOrder])
+  @@map("ShopCategories")
+}
+
+model ShopCategoryProduct {
+  shopCategoryId BigInt   @map("ShopCategoryID")
+  productId      BigInt   @map("ProductID")
+  sortOrder      Int      @default(0) @map("SortOrder")
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shopCategory ShopCategory @relation(fields: [shopCategoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([shopCategoryId, productId])
+  @@index([productId])
+  @@map("ShopCategoryProducts")
+}
+
+model VoucherShopCategory {
+  voucherId      BigInt   @map("VoucherID")
+  shopCategoryId BigInt   @map("ShopCategoryID")
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  voucher      Voucher      @relation(fields: [voucherId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  shopCategory ShopCategory @relation(fields: [shopCategoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([voucherId, shopCategoryId])
+  @@index([shopCategoryId])
+  @@map("VoucherShopCategories")
 }
 
 model VoucherUsage {

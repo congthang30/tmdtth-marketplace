@@ -37,7 +37,6 @@ import {
   ShopOrderResponse,
 } from './types';
 import { VouchersService } from '../vouchers/vouchers.service';
-import { VoucherValidationResult } from '../vouchers/types';
 
 const ACTIVE_CART_STATUS = 'Active';
 const PUBLIC_PRODUCT_STATUS = 'Published';
@@ -78,6 +77,7 @@ const checkoutCartItemInclude = {
           isActive: true,
         },
       },
+      shopCategoryProducts: { select: { shopCategoryId: true } },
       images: {
         orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
       },
@@ -224,7 +224,10 @@ type ResolvedShopVoucher = {
   voucherCode: string;
   voucherName: string;
   discountType: string;
+  discountTarget: string;
+  categoryIds: bigint[];
   discountAmount: Prisma.Decimal;
+  eligibleAmount: Prisma.Decimal;
 };
 
 type ResolvedPlatformVoucher = ResolvedShopVoucher;
@@ -1058,11 +1061,16 @@ export class OrdersService {
     );
     const now = new Date();
 
+    const voucherBaseShopGroups = this.buildShopGroups(
+      items,
+      shippingSelections,
+    );
     const shopVouchersById = await this.resolveShopVouchers(
       client,
       user,
       dto.shopVoucherCodes,
-      baseShopGroups,
+      voucherBaseShopGroups,
+      selectedItems,
       now,
     );
 
@@ -1083,6 +1091,13 @@ export class OrdersService {
           user,
           dto.platformVoucherCode,
           orderSubtotalBeforePlatformVoucher,
+          preDiscountShopGroups.flatMap((group) => group.items),
+          selectedItems,
+          preDiscountShopGroups.reduce(
+            (total, group) =>
+              total.add(this.toDecimal(group.shippingFeeAmount)),
+            new Prisma.Decimal(0),
+          ),
           now,
         )
       : null;
@@ -1136,6 +1151,7 @@ export class OrdersService {
     user: AuthenticatedUser,
     selections: { shopId: string; voucherCode: string }[] | undefined,
     shopGroups: CheckoutPreviewShopGroup[],
+    selectedItems: CheckoutCartItem[],
     now: Date,
   ): Promise<Map<string, ResolvedShopVoucher>> {
     const result = new Map<string, ResolvedShopVoucher>();
@@ -1144,7 +1160,10 @@ export class OrdersService {
     }
 
     const subtotalByShopId = new Map(
-      shopGroups.map((group) => [group.shop.id, this.toDecimal(group.subtotalAmount)]),
+      shopGroups.map((group) => [
+        group.shop.id,
+        this.toDecimal(group.subtotalAmount),
+      ]),
     );
 
     const seenShopIds = new Set<string>();
@@ -1168,11 +1187,24 @@ export class OrdersService {
       }
 
       const validation = await this.vouchersService.validateVoucher(
-        client as never,
+        client,
         user,
         selection.voucherCode,
-        BigInt(selection.shopId),
-        shopSubtotal,
+        {
+          orderShopId: BigInt(selection.shopId),
+          productLines: selectedItems
+            .filter((item) => item.shopId.toString() === selection.shopId)
+            .map((item) => ({
+              productId: item.productId,
+              categoryId: item.product.categoryId,
+              shopCategoryIds: item.product.shopCategoryProducts.map((relation) => relation.shopCategoryId),
+              amount: item.productVariant.price.mul(item.quantity),
+            })),
+          shippingAmount: this.toDecimal(
+            shopGroups.find((group) => group.shop.id === selection.shopId)
+              ?.shippingFeeAmount ?? '0',
+          ),
+        },
         now,
       );
 
@@ -1181,7 +1213,10 @@ export class OrdersService {
         voucherCode: validation.voucher.voucherCode,
         voucherName: validation.voucher.voucherName,
         discountType: validation.voucher.discountType,
+        discountTarget: validation.voucher.discountTarget,
+        categoryIds: validation.voucher.categoryIds,
         discountAmount: this.toDecimal(validation.discountAmount),
+        eligibleAmount: this.toDecimal(validation.eligibleAmount),
       });
     }
 
@@ -1193,14 +1228,25 @@ export class OrdersService {
     user: AuthenticatedUser,
     voucherCode: string,
     orderSubtotal: Prisma.Decimal,
+    previewItems: CheckoutPreviewItem[],
+    selectedItems: CheckoutCartItem[],
+    shippingAmount: Prisma.Decimal,
     now: Date,
   ): Promise<ResolvedPlatformVoucher> {
     const validation = await this.vouchersService.validateVoucher(
-      client as never,
+      client,
       user,
       voucherCode,
-      null,
-      orderSubtotal,
+      {
+        orderShopId: null,
+        productLines: selectedItems.map((item) => ({
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          shopCategoryIds: item.product.shopCategoryProducts.map((relation) => relation.shopCategoryId),
+          amount: item.productVariant.price.mul(item.quantity),
+        })),
+        shippingAmount,
+      },
       now,
     );
 
@@ -1209,7 +1255,10 @@ export class OrdersService {
       voucherCode: validation.voucher.voucherCode,
       voucherName: validation.voucher.voucherName,
       discountType: validation.voucher.discountType,
+      discountTarget: validation.voucher.discountTarget,
+      categoryIds: validation.voucher.categoryIds,
       discountAmount: this.toDecimal(validation.discountAmount),
+      eligibleAmount: this.toDecimal(validation.eligibleAmount),
     };
   }
 
@@ -1294,7 +1343,6 @@ export class OrdersService {
         : null,
     };
   }
-
 
   private async requireOwnedAddress(
     client: CheckoutClient,
@@ -1538,7 +1586,9 @@ export class OrdersService {
               voucherCode: group.shopVoucher.voucherCode,
               voucherName: group.shopVoucher.voucherName,
               discountType: group.shopVoucher.discountType,
-              discountAmount: this.formatMoney(group.shopVoucher.discountAmount),
+              discountAmount: this.formatMoney(
+                group.shopVoucher.discountAmount,
+              ),
             }
           : null,
       };

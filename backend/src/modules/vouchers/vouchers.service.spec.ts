@@ -23,6 +23,14 @@ type VoucherEntity = {
   startAt: Date;
   endAt: Date;
   voucherStatus: string;
+  discountTarget: string;
+  productScope: string;
+  voucherProducts: Array<{ productId: bigint; product: { id: bigint; productName: string; slug: string } }>;
+  voucherShopCategories: Array<{ shopCategoryId: bigint; shopCategory: { id: bigint; categoryName: string; slug: string } }>;
+  voucherCategories: Array<{
+    categoryId: bigint;
+    category: { id: bigint; categoryName: string; slug: string };
+  }>;
   createdAt: Date;
 };
 
@@ -76,6 +84,11 @@ function createVoucher(overrides: Partial<VoucherEntity> = {}): VoucherEntity {
     startAt: new Date('2026-07-01T00:00:00.000Z'),
     endAt: new Date('2026-08-01T00:00:00.000Z'),
     voucherStatus: 'Active',
+    discountTarget: 'Product',
+    productScope: 'AllProducts',
+    voucherProducts: [],
+    voucherShopCategories: [],
+    voucherCategories: [],
     createdAt: now,
     ...overrides,
   };
@@ -115,8 +128,11 @@ describe('VouchersService.validateVoucher', () => {
       prisma as never,
       customer,
       'sale10',
-      null,
-      money('500000'),
+      {
+        orderShopId: null,
+        productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+        shippingAmount: money('0'),
+      },
       now,
     );
 
@@ -128,7 +144,11 @@ describe('VouchersService.validateVoucher', () => {
   it('rejects a shop voucher when orderShopId does not match the voucher shop (mã shop khác không dùng được)', async () => {
     const prisma = createPrismaMock();
     prisma.voucher.findUnique.mockResolvedValue(
-      createVoucher({ shopId: 5n, discountType: 'FixedAmount', discountValue: money('20000') }),
+      createVoucher({
+        shopId: 5n,
+        discountType: 'FixedAmount',
+        discountValue: money('20000'),
+      }),
     );
     const service = new VouchersService(prisma as unknown as PrismaService);
 
@@ -137,8 +157,11 @@ describe('VouchersService.validateVoucher', () => {
         prisma as never,
         customer,
         'SALE10',
-        7n, // different shop
-        money('500000'),
+        {
+          orderShopId: 7n,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          shippingAmount: money('0'),
+        },
         now,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -147,7 +170,12 @@ describe('VouchersService.validateVoucher', () => {
   it('accepts a shop voucher when orderShopId matches the voucher shop', async () => {
     const prisma = createPrismaMock();
     prisma.voucher.findUnique.mockResolvedValue(
-      createVoucher({ shopId: 5n, discountType: 'FixedAmount', discountValue: money('20000'), maxDiscountAmount: null }),
+      createVoucher({
+        shopId: 5n,
+        discountType: 'FixedAmount',
+        discountValue: money('20000'),
+        maxDiscountAmount: null,
+      }),
     );
     const service = new VouchersService(prisma as unknown as PrismaService);
 
@@ -155,8 +183,11 @@ describe('VouchersService.validateVoucher', () => {
       prisma as never,
       customer,
       'SALE10',
-      5n,
-      money('500000'),
+      {
+        orderShopId: 5n,
+        productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+        shippingAmount: money('0'),
+      },
       now,
     );
 
@@ -169,7 +200,17 @@ describe('VouchersService.validateVoucher', () => {
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.validateVoucher(prisma as never, customer, 'MISSING', null, money('100000'), now),
+      service.validateVoucher(
+        prisma as never,
+        customer,
+        'MISSING',
+        {
+          orderShopId: null,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('100000') }],
+          shippingAmount: money('0'),
+        },
+        now,
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -181,7 +222,17 @@ describe('VouchersService.validateVoucher', () => {
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.validateVoucher(prisma as never, customer, 'SALE10', null, money('500000'), now),
+      service.validateVoucher(
+        prisma as never,
+        customer,
+        'SALE10',
+        {
+          orderShopId: null,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          shippingAmount: money('0'),
+        },
+        now,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -193,7 +244,17 @@ describe('VouchersService.validateVoucher', () => {
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.validateVoucher(prisma as never, customer, 'SALE10', null, money('500000'), now),
+      service.validateVoucher(
+        prisma as never,
+        customer,
+        'SALE10',
+        {
+          orderShopId: null,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          shippingAmount: money('0'),
+        },
+        now,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -203,7 +264,17 @@ describe('VouchersService.validateVoucher', () => {
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.validateVoucher(prisma as never, customer, 'SALE10', null, money('50000'), now),
+      service.validateVoucher(
+        prisma as never,
+        customer,
+        'SALE10',
+        {
+          orderShopId: null,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('50000') }],
+          shippingAmount: money('0'),
+        },
+        now,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -214,7 +285,17 @@ describe('VouchersService.validateVoucher', () => {
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(
-      service.validateVoucher(prisma as never, customer, 'SALE10', null, money('500000'), now),
+      service.validateVoucher(
+        prisma as never,
+        customer,
+        'SALE10',
+        {
+          orderShopId: null,
+          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          shippingAmount: money('0'),
+        },
+        now,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
@@ -335,7 +416,10 @@ describe('VouchersService shop scoping for CRUD', () => {
 
   it('rejects creating a shop voucher when the shop is not yet approved', async () => {
     const prisma = createPrismaMock();
-    prisma.shop.findFirst.mockResolvedValue({ id: 5n, shopStatus: 'PendingApproval' });
+    prisma.shop.findFirst.mockResolvedValue({
+      id: 5n,
+      shopStatus: 'PendingApproval',
+    });
     const service = new VouchersService(prisma as unknown as PrismaService);
 
     await expect(

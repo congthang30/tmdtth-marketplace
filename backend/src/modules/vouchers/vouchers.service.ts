@@ -17,12 +17,14 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { VoucherQueryDto } from './dto/voucher-query.dto';
 import {
+  VOUCHER_DISCOUNT_TARGET_SHIPPING,
   VOUCHER_DISCOUNT_TYPE_FIXED_AMOUNT,
   VOUCHER_DISCOUNT_TYPE_PERCENTAGE,
   VOUCHER_STATUS_ACTIVE,
   VOUCHER_STATUS_INACTIVE,
   VoucherResponse,
   VoucherSummary,
+  VoucherValidationContext,
   VoucherValidationResult,
 } from './types';
 
@@ -43,6 +45,14 @@ type VoucherRow = {
   startAt: Date;
   endAt: Date;
   voucherStatus: string;
+  discountTarget: string;
+  productScope: string;
+  voucherShopCategories: Array<{ shopCategoryId: bigint; shopCategory: { id: bigint; categoryName: string; slug: string } }>;
+  voucherProducts: Array<{ productId: bigint; product: { id: bigint; productName: string; slug: string } }>;
+  voucherCategories: Array<{
+    categoryId: bigint;
+    category: { id: bigint; categoryName: string; slug: string };
+  }>;
 };
 
 type VoucherClient = PrismaService | Prisma.TransactionClient;
@@ -128,12 +138,20 @@ export class VouchersService {
         OR: [{ shopId: null }, ...(shopId ? [{ shopId }] : [])],
       },
       orderBy: [{ createdAt: 'desc' }],
+      include: {
+        voucherCategories: { include: { category: true } },
+          voucherProducts: { include: { product: true } },
+          voucherShopCategories: { include: { shopCategory: true } },
+      },
     });
 
     const usableVouchers: VoucherSummary[] = [];
 
     for (const voucher of vouchers) {
-      if (voucher.usageLimit !== null && voucher.usedCount >= voucher.usageLimit) {
+      if (
+        voucher.usageLimit !== null &&
+        voucher.usedCount >= voucher.usageLimit
+      ) {
         continue;
       }
 
@@ -144,7 +162,8 @@ export class VouchersService {
         continue;
       }
 
-      const isEligible = subtotal !== null && subtotal.gte(voucher.minOrderAmount);
+      const isEligible =
+        subtotal !== null && subtotal.gte(voucher.minOrderAmount);
       const estimatedDiscountAmount =
         isEligible && subtotal
           ? this.computeDiscountAmount(voucher, subtotal)
@@ -165,6 +184,12 @@ export class VouchersService {
         endAt: voucher.endAt,
         isEligible,
         estimatedDiscountAmount: estimatedDiscountAmount.toFixed(2),
+        discountTarget:
+          voucher.discountTarget as VoucherSummary['discountTarget'],
+        productScope: voucher.productScope as VoucherSummary['productScope'],
+        categories: voucher.shopId === null ? this.toCategorySummaries(voucher.voucherCategories) : voucher.voucherShopCategories.map(({ shopCategory }) => ({ id: shopCategory.id.toString(), idString: shopCategory.id.toString(), categoryName: shopCategory.categoryName, slug: shopCategory.slug })),
+        products: this.toProductSummaries(voucher.voucherProducts),
+        eligibleAmount: subtotal?.toFixed(2) ?? '0.00',
       });
     }
 
@@ -193,12 +218,16 @@ export class VouchersService {
     client: VoucherClient,
     user: AuthenticatedUser,
     voucherCode: string,
-    orderShopId: bigint | null,
-    orderSubtotal: Prisma.Decimal,
+    context: VoucherValidationContext,
     now: Date,
   ): Promise<VoucherValidationResult> {
     const voucher = await client.voucher.findUnique({
       where: { voucherCode: voucherCode.trim().toUpperCase() },
+      include: {
+        voucherCategories: { include: { category: true } },
+          voucherProducts: { include: { product: true } },
+          voucherShopCategories: { include: { shopCategory: true } },
+      },
     });
 
     if (!voucher) {
@@ -212,7 +241,10 @@ export class VouchersService {
     if (voucher.shopId !== null) {
       // Shop voucher: must be scoped to exactly the shop this order-group
       // belongs to. A voucher from shop A can never discount shop B's items.
-      if (orderShopId === null || voucher.shopId !== orderShopId) {
+      if (
+        context.orderShopId === null ||
+        voucher.shopId !== context.orderShopId
+      ) {
         throw new BadRequestException({
           code: 'VOUCHER_SHOP_MISMATCH',
           message: 'Mã giảm giá này không áp dụng cho gian hàng này.',
@@ -223,7 +255,18 @@ export class VouchersService {
 
     this.assertVoucherWindowAndStatusValid(voucher, now);
     this.assertVoucherHasRemainingUsage(voucher);
-    this.assertOrderMeetsMinimum(voucher, orderSubtotal);
+    const eligibleAmount = this.computeEligibleAmount(voucher, context);
+    if (eligibleAmount.isZero()) {
+      throw new BadRequestException({
+        code: 'VOUCHER_NO_ELIGIBLE_ITEMS',
+        message:
+          voucher.discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING
+            ? 'Mã vận chuyển cần có báo giá giao hàng hợp lệ.'
+            : 'Giỏ hàng không có sản phẩm thuộc danh mục áp dụng của mã này.',
+        details: [{ field: 'voucherCode', voucherCode }],
+      });
+    }
+    this.assertOrderMeetsMinimum(voucher, eligibleAmount);
 
     const priorUsage = await client.voucherUsage.count({
       where: { voucherId: voucher.id, userId: user.id },
@@ -236,17 +279,24 @@ export class VouchersService {
       });
     }
 
-    const discountAmount = this.computeDiscountAmount(voucher, orderSubtotal);
+    const discountAmount = this.computeDiscountAmount(voucher, eligibleAmount);
 
     return {
       voucher: {
         id: voucher.id,
         voucherCode: voucher.voucherCode,
         voucherName: voucher.voucherName,
-        discountType: voucher.discountType as VoucherValidationResult['voucher']['discountType'],
+        discountType:
+          voucher.discountType as VoucherValidationResult['voucher']['discountType'],
         discountValue: voucher.discountValue.toString(),
         maxDiscountAmount: voucher.maxDiscountAmount?.toString() ?? null,
+        discountTarget:
+          voucher.discountTarget as VoucherValidationResult['voucher']['discountTarget'],
+        categoryIds: voucher.voucherCategories.map((item) => item.categoryId),
+        productScope: voucher.productScope as VoucherValidationResult['voucher']['productScope'],
+        productIds: voucher.voucherProducts.map((item) => item.productId),
       },
+      eligibleAmount: eligibleAmount.toFixed(2),
       discountAmount: discountAmount.toFixed(2),
     };
   }
@@ -336,7 +386,10 @@ export class VouchersService {
   // Shared validation rules
   // ---------------------------------------------------------------------
 
-  private assertVoucherWindowAndStatusValid(voucher: VoucherRow, now: Date): void {
+  private assertVoucherWindowAndStatusValid(
+    voucher: VoucherRow,
+    now: Date,
+  ): void {
     if (voucher.voucherStatus !== VOUCHER_STATUS_ACTIVE) {
       throw new BadRequestException({
         code: 'VOUCHER_INACTIVE',
@@ -355,7 +408,10 @@ export class VouchersService {
   }
 
   private assertVoucherHasRemainingUsage(voucher: VoucherRow): void {
-    if (voucher.usageLimit !== null && voucher.usedCount >= voucher.usageLimit) {
+    if (
+      voucher.usageLimit !== null &&
+      voucher.usedCount >= voucher.usageLimit
+    ) {
       throw new BadRequestException({
         code: 'VOUCHER_LIMIT_REACHED',
         message: 'Mã giảm giá đã hết lượt sử dụng.',
@@ -380,6 +436,30 @@ export class VouchersService {
         ],
       });
     }
+  }
+
+  private computeEligibleAmount(
+    voucher: VoucherRow,
+    context: VoucherValidationContext,
+  ): Prisma.Decimal {
+    if (voucher.discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING) {
+      return context.shippingAmount;
+    }
+
+    const categoryIds = new Set(
+      voucher.voucherCategories.map((item) => item.categoryId.toString()),
+    );
+    const shopCategoryIds = new Set(voucher.voucherShopCategories.map((item) => item.shopCategoryId.toString()));
+    const productIds = new Set(voucher.voucherProducts.map((item) => item.productId.toString()));
+    return context.productLines.reduce(
+      (total, line) =>
+        voucher.productScope === 'AllProducts' ||
+        (voucher.productScope === 'Categories' && (voucher.shopId === null ? categoryIds.has(line.categoryId.toString()) : line.shopCategoryIds.some((id) => shopCategoryIds.has(id.toString())))) ||
+        (voucher.productScope === 'SpecificProducts' && productIds.has(line.productId.toString()))
+          ? total.add(line.amount)
+          : total,
+      new Prisma.Decimal(0),
+    );
   }
 
   private computeDiscountAmount(
@@ -415,6 +495,11 @@ export class VouchersService {
         orderBy: [{ createdAt: 'desc' }],
         skip,
         take,
+        include: {
+          voucherCategories: { include: { category: true } },
+          voucherProducts: { include: { product: true } },
+          voucherShopCategories: { include: { shopCategory: true } },
+        },
       }),
       this.prisma.voucher.count({ where }),
     ]);
@@ -462,6 +547,14 @@ export class VouchersService {
       });
     }
 
+    await this.assertValidTargetAndCategories(
+      dto.discountTarget,
+      dto.productScope,
+      dto.categoryIds,
+      dto.productIds,
+      shopId,
+    );
+
     const existing = await this.prisma.voucher.findUnique({
       where: { voucherCode: dto.voucherCode },
       select: { id: true },
@@ -480,6 +573,8 @@ export class VouchersService {
         voucherName: dto.voucherName,
         shopId,
         discountType: dto.discountType,
+        discountTarget: dto.discountTarget,
+        productScope: dto.discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING ? 'AllProducts' : dto.productScope,
         discountValue: dto.discountValue,
         maxDiscountAmount: dto.maxDiscountAmount ?? null,
         minOrderAmount: dto.minOrderAmount ?? 0,
@@ -489,7 +584,17 @@ export class VouchersService {
         endAt: dto.endAt,
         voucherStatus: VOUCHER_STATUS_ACTIVE,
         createdAt: new Date(),
+        voucherProducts: dto.productIds?.length ? { create: dto.productIds.map((productId) => ({ productId: BigInt(productId) })) } : undefined,
+        voucherShopCategories: shopId !== null && dto.categoryIds?.length ? { create: dto.categoryIds.map((shopCategoryId) => ({ shopCategoryId: BigInt(shopCategoryId) })) } : undefined,
+        voucherCategories: shopId === null && dto.categoryIds?.length
+          ? {
+              create: dto.categoryIds.map((categoryId) => ({
+                categoryId: BigInt(categoryId),
+              })),
+            }
+          : undefined,
       },
+      include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
     });
 
     return this.toVoucherResponse(voucher);
@@ -513,7 +618,8 @@ export class VouchersService {
       });
     }
 
-    const nextDiscountValue = dto.discountValue ?? Number(voucher.discountValue);
+    const nextDiscountValue =
+      dto.discountValue ?? Number(voucher.discountValue);
     if (
       voucher.discountType === VOUCHER_DISCOUNT_TYPE_PERCENTAGE &&
       nextDiscountValue > 100
@@ -525,26 +631,65 @@ export class VouchersService {
       });
     }
 
-    const updated = await this.prisma.voucher.update({
-      where: { id },
-      data: {
-        ...(dto.voucherName !== undefined ? { voucherName: dto.voucherName } : {}),
-        ...(dto.discountValue !== undefined
-          ? { discountValue: dto.discountValue }
-          : {}),
-        ...(dto.maxDiscountAmount !== undefined
-          ? { maxDiscountAmount: dto.maxDiscountAmount }
-          : {}),
-        ...(dto.minOrderAmount !== undefined
-          ? { minOrderAmount: dto.minOrderAmount }
-          : {}),
-        ...(dto.usageLimit !== undefined ? { usageLimit: dto.usageLimit } : {}),
-        ...(dto.startAt !== undefined ? { startAt: dto.startAt } : {}),
-        ...(dto.endAt !== undefined ? { endAt: dto.endAt } : {}),
-        ...(dto.voucherStatus !== undefined
-          ? { voucherStatus: dto.voucherStatus }
-          : {}),
-      },
+    const nextDiscountTarget = dto.discountTarget ?? voucher.discountTarget;
+    const nextProductScope = dto.productScope ?? voucher.productScope;
+    await this.assertValidTargetAndCategories(
+      nextDiscountTarget,
+      nextProductScope,
+      dto.categoryIds,
+      dto.productIds,
+      shopId,
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.categoryIds !== undefined) {
+        await tx.voucherCategory.deleteMany({ where: { voucherId: id } });
+        await tx.voucherShopCategory.deleteMany({ where: { voucherId: id } });
+      }
+      if (dto.productIds !== undefined) {
+        await tx.voucherProduct.deleteMany({ where: { voucherId: id } });
+      }
+
+      return tx.voucher.update({
+        where: { id },
+        data: {
+          ...(dto.voucherName !== undefined
+            ? { voucherName: dto.voucherName }
+            : {}),
+          ...(dto.discountValue !== undefined
+            ? { discountValue: dto.discountValue }
+            : {}),
+          ...(dto.maxDiscountAmount !== undefined
+            ? { maxDiscountAmount: dto.maxDiscountAmount }
+            : {}),
+          ...(dto.minOrderAmount !== undefined
+            ? { minOrderAmount: dto.minOrderAmount }
+            : {}),
+          ...(dto.usageLimit !== undefined
+            ? { usageLimit: dto.usageLimit }
+            : {}),
+          ...(dto.startAt !== undefined ? { startAt: dto.startAt } : {}),
+          ...(dto.endAt !== undefined ? { endAt: dto.endAt } : {}),
+          ...(dto.productScope !== undefined ? { productScope: dto.productScope } : {}),
+          ...(dto.discountTarget !== undefined
+            ? { discountTarget: dto.discountTarget }
+            : {}),
+          ...(dto.voucherStatus !== undefined
+            ? { voucherStatus: dto.voucherStatus }
+            : {}),
+          ...(dto.productIds?.length ? { voucherProducts: { create: dto.productIds.map((productId) => ({ productId: BigInt(productId) })) } } : {}),
+          ...(dto.categoryIds?.length
+            ? shopId === null ? {
+                voucherCategories: {
+                  create: dto.categoryIds.map((categoryId) => ({
+                    categoryId: BigInt(categoryId),
+                  })),
+                },
+              } : { voucherShopCategories: { create: dto.categoryIds.map((shopCategoryId) => ({ shopCategoryId: BigInt(shopCategoryId) })) } }
+            : {}),
+        },
+        include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
+      });
     });
 
     return this.toVoucherResponse(updated);
@@ -560,9 +705,79 @@ export class VouchersService {
     const updated = await this.prisma.voucher.update({
       where: { id },
       data: { voucherStatus: VOUCHER_STATUS_INACTIVE },
+      include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
     });
 
     return this.toVoucherResponse(updated);
+  }
+
+  private async assertValidTargetAndCategories(
+    discountTarget: string,
+    productScope: string,
+    categoryIds: string[] | undefined,
+    productIds: string[] | undefined,
+    shopId: bigint | null,
+  ): Promise<void> {
+    if (shopId !== null && discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING) {
+      throw new BadRequestException({ code: 'VOUCHER_SHOP_SHIPPING_NOT_SUPPORTED', message: 'Gian hàng chỉ có thể tạo voucher giảm tiền hàng.', details: [{ field: 'discountTarget' }] });
+    }
+    if (discountTarget !== VOUCHER_DISCOUNT_TARGET_SHIPPING && ((productScope === 'Categories') !== Boolean(categoryIds?.length) || (productScope === 'SpecificProducts') !== Boolean(productIds?.length))) {
+      throw new BadRequestException({ code: 'VOUCHER_PRODUCT_SCOPE_INVALID', message: 'Phạm vi áp dụng và danh sách sản phẩm hoặc danh mục chưa phù hợp.', details: [{ field: 'productScope' }] });
+    }
+    if (
+      discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING &&
+      categoryIds?.length
+    ) {
+      throw new BadRequestException({
+        code: 'VOUCHER_SHIPPING_CATEGORIES_NOT_ALLOWED',
+        message: 'Voucher phí vận chuyển không áp dụng theo danh mục sản phẩm.',
+        details: [{ field: 'categoryIds' }],
+      });
+    }
+    if (productIds?.length) {
+      const ids = productIds.map((id) => BigInt(id));
+      const count = await this.prisma.product.count({ where: { id: { in: ids }, isDeleted: false, ...(shopId !== null ? { shopId } : {}) } });
+      if (count !== ids.length) throw new BadRequestException({ code: 'VOUCHER_PRODUCT_INVALID', message: 'Một hoặc nhiều sản phẩm không tồn tại hoặc không thuộc gian hàng.', details: [{ field: 'productIds' }] });
+    }
+    if (!categoryIds?.length) return;
+
+    const ids = categoryIds.map((id) => BigInt(id));
+    if (shopId !== null) {
+      const categories = await this.prisma.shopCategory.findMany({ where: { id: { in: ids }, shopId, isActive: true }, select: { id: true } });
+      if (categories.length !== ids.length) throw new BadRequestException({ code: 'VOUCHER_SHOP_CATEGORY_INVALID', message: 'Một hoặc nhiều danh mục không thuộc gian hàng.', details: [{ field: 'categoryIds' }] });
+      return;
+    }
+    const categories = await this.prisma.category.findMany({
+      where: {
+        id: { in: ids },
+        isActive: true,
+        ...(shopId !== null
+          ? { products: { some: { shopId, isDeleted: false } } }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (categories.length !== ids.length) {
+      throw new BadRequestException({
+        code: 'VOUCHER_CATEGORY_INVALID',
+        message:
+          'Một hoặc nhiều danh mục không tồn tại hoặc không thuộc sản phẩm của gian hàng.',
+        details: [{ field: 'categoryIds' }],
+      });
+    }
+  }
+
+  private toProductSummaries(items: VoucherRow['voucherProducts']) {
+    return items.map(({ product }) => ({ id: product.id.toString(), idString: product.id.toString(), productName: product.productName, slug: product.slug }));
+  }
+
+  private toCategorySummaries(items: VoucherRow['voucherCategories']) {
+    return items.map(({ category }) => ({
+      id: category.id.toString(),
+      idString: category.id.toString(),
+      categoryName: category.categoryName,
+      slug: category.slug,
+    }));
   }
 
   private async requireVoucherInScope(id: bigint, shopId: bigint | null) {
@@ -619,6 +834,11 @@ export class VouchersService {
     endAt: Date;
     voucherStatus: string;
     createdAt: Date;
+    discountTarget: string;
+    productScope: string;
+    voucherCategories: VoucherRow['voucherCategories'];
+    voucherProducts: VoucherRow['voucherProducts'];
+    voucherShopCategories: VoucherRow['voucherShopCategories'];
   }): VoucherResponse {
     return {
       id: voucher.id.toString(),
@@ -637,6 +857,11 @@ export class VouchersService {
       startAt: voucher.startAt,
       endAt: voucher.endAt,
       voucherStatus: voucher.voucherStatus,
+      discountTarget:
+        voucher.discountTarget as VoucherResponse['discountTarget'],
+      productScope: voucher.productScope as VoucherResponse['productScope'],
+      categories: voucher.shopId === null ? this.toCategorySummaries(voucher.voucherCategories) : voucher.voucherShopCategories.map(({ shopCategory }) => ({ id: shopCategory.id.toString(), idString: shopCategory.id.toString(), categoryName: shopCategory.categoryName, slug: shopCategory.slug })),
+      products: this.toProductSummaries(voucher.voucherProducts),
       createdAt: voucher.createdAt,
     };
   }

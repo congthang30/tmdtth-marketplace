@@ -54,6 +54,12 @@ export const sellerVerificationApi = {
       `/shops/verification/me/documents/${documentId}`,
     );
   },
+  sendEmailCode(email: string) {
+    return apiPost<{ challengeId: string; expiresInSeconds: number; resendAfterSeconds: number; developmentCode?: string }, { email: string }>('/shops/verification/me/email/send-code', { email });
+  },
+  verifyEmailCode(email: string, challengeId: string, code: string) {
+    return apiPost<SellerVerificationProfile, { email: string; challengeId: string; code: string }>('/shops/verification/me/email/verify-code', { email, challengeId, code });
+  },
   submit() {
     return apiPost<SellerVerificationProfile>('/shops/verification/me/submit');
   },

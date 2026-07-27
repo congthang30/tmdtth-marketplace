@@ -17,17 +17,24 @@ services:
       SELLER_EMAILS: "${SELLER_EMAILS:-seller@example.com}"
       UPLOAD_MAX_FILE_SIZE_BYTES: "${UPLOAD_MAX_FILE_SIZE_BYTES:-5242880}"
       CLOUDINARY_FOLDER: "${CLOUDINARY_FOLDER:-tmdtth/products}"
-      SELLER_DATA_ENCRYPTION_KEYS: "${SELLER_DATA_ENCRYPTION_KEYS:-}"
-      SELLER_DATA_ACTIVE_KEY_ID: "${SELLER_DATA_ACTIVE_KEY_ID:-}"
-      SELLER_DATA_ENCRYPTION_KEY: "${SELLER_DATA_ENCRYPTION_KEY:-}"
       SELLER_DOCUMENT_CLOUDINARY_FOLDER: "${SELLER_DOCUMENT_CLOUDINARY_FOLDER:-tmdtth/seller-documents}"
       SELLER_DOCUMENT_MAX_FILE_SIZE_BYTES: "${SELLER_DOCUMENT_MAX_FILE_SIZE_BYTES:-10485760}"
       SELLER_DOCUMENT_SIGNED_URL_TTL_SECONDS: "${SELLER_DOCUMENT_SIGNED_URL_TTL_SECONDS:-300}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_SECURE: "${SMTP_SECURE:-false}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      OTP_HMAC_SECRET: "${OTP_HMAC_SECRET:-dev-only-change-this-otp-secret}"
     ports:
       - "3100:3100"
     depends_on:
       db-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 
   db-init:
@@ -49,6 +56,18 @@ services:
         condition: service_healthy
     command: sh -c "npm run db:ensure && npm run prisma:migrate:deploy"
     restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    container_name: tmdtth-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   postgres:
     image: postgres:16-alpine
@@ -74,3 +93,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

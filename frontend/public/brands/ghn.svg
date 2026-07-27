@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 56" role="img" aria-labelledby="title">
+  <title id="title">Giao Hàng Nhanh</title>
+  <rect width="180" height="56" rx="10" fill="#fff"/>
+  <path d="M14 17h25l-4 7H19l-2 4h16l-4 7H13L8 43h25l16-26H24l-4 7h-9l3-7Z" fill="#f36f21"/>
+  <text x="53" y="39" fill="#f36f21" font-family="Arial,Helvetica,sans-serif" font-size="30" font-weight="800" font-style="italic" letter-spacing="-2">GHN</text>
+  <path d="M121 19h46M125 28h42M121 37h46" stroke="#f36f21" stroke-width="4" stroke-linecap="round"/>
+</svg>

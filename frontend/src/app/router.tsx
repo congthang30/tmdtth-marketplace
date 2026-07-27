@@ -4,6 +4,7 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { PlaceholderPage } from "@/components/common/PlaceholderPage";
 import { CatalogPage } from "@/features/catalog/pages/CatalogPage";
 import { ProductDetailPage } from "@/features/catalog/pages/ProductDetailPage";
+import { ShopPage } from "@/features/shops/pages/ShopPage";
 import { AddressesPage } from "@/features/account/pages/AddressesPage";
 import { CartPage } from "@/features/cart/pages/CartPage";
 import { CheckoutPage } from "@/features/checkout/pages/CheckoutPage";
@@ -25,6 +26,8 @@ import { SellerProductInventoryPage } from "@/features/seller/pages/SellerProduc
 import { SellerOrdersPage } from "@/features/seller/pages/SellerOrdersPage";
 import { SellerOrderDetailPage } from "@/features/seller/pages/SellerOrderDetailPage";
 import { SellerVouchersPage } from "@/features/seller/pages/SellerVouchersPage";
+import { SellerShopCategoriesPage } from "@/features/shops/pages/SellerShopCategoriesPage";
+import { SellerSaleCampaignsPage } from "@/features/shops/pages/SellerSaleCampaignsPage";
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage";
 import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage";
 import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
@@ -48,6 +51,10 @@ export const router = createBrowserRouter([
       {
         path: "products/:slug",
         element: <ProductDetailPage />,
+      },
+      {
+        path: "shops/:slug",
+        element: <ShopPage />,
       },
       {
         path: "cart",
@@ -218,6 +225,22 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={["Seller"]}>
             <SellerOrderDetailPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "seller/shop-categories",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerShopCategoriesPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "seller/sale-campaigns",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerSaleCampaignsPage />
           </RoleRoute>
         ),
       },

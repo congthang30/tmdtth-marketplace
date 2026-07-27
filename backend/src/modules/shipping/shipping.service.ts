@@ -697,7 +697,10 @@ export class ShippingService {
 
     return this.toShipmentResponse(
       refreshed,
-      { ...refreshed.shippingService, shippingCompany: refreshed.shippingCompany },
+      {
+        ...refreshed.shippingService,
+        shippingCompany: refreshed.shippingCompany,
+      },
       refreshed.items,
     );
   }

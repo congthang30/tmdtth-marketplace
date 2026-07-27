@@ -3,12 +3,10 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 
 const steps = [
-  'Loại hình bán hàng',
-  'Thông tin gian hàng',
-  'Thông tin pháp lý',
-  'Tài khoản nhận tiền',
-  'Tài liệu xác minh',
-  'Rà soát và gửi',
+  'Tên và địa chỉ cửa hàng',
+  'Loại hình kinh doanh',
+  'Hồ sơ xác minh',
+  'Thông tin liên hệ',
 ] as const;
 
 type SellerOnboardingWizardProps = {
@@ -76,44 +74,16 @@ export function SellerOnboardingWizard({
         </ol>
       </nav>
 
-      <section
-        aria-labelledby="seller-onboarding-step-title"
-        className="min-w-0 rounded-lg border border-border bg-white p-4 shadow-panel sm:p-6"
-      >
+      <section aria-labelledby="seller-onboarding-step-title" className="min-w-0 rounded-lg border border-border bg-white p-4 shadow-panel sm:p-6">
         <div className="border-b border-border pb-4">
-          <p className="text-sm font-medium text-primary-700">
-            Bước {currentStep + 1} / {steps.length}
-          </p>
-          <h2 id="seller-onboarding-step-title" className="mt-1 text-xl font-semibold">
-            {currentLabel}
-          </h2>
+          <p className="text-sm font-medium text-primary-700">Bước {currentStep + 1} / {steps.length}</p>
+          <h2 id="seller-onboarding-step-title" className="mt-1 text-xl font-semibold">{currentLabel}</h2>
         </div>
-
         <div className="py-5">{children}</div>
-
         <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-between">
-          <Button
-            id="seller-onboarding-back"
-            type="button"
-            variant="secondary"
-            className="min-h-11"
-            disabled={currentStep === 0 || isBusy}
-            onClick={onBack}
-          >
-            Quay lại
-          </Button>
-          <Button
-            id="seller-onboarding-continue"
-            type="button"
-            className="min-h-11"
-            disabled={!canContinue || isBusy}
-            onClick={onContinue}
-          >
-            {isBusy
-              ? 'Đang xử lý...'
-              : isLastStep
-                ? 'Gửi hồ sơ xét duyệt'
-                : 'Lưu và tiếp tục'}
+          <Button id="seller-onboarding-back" type="button" variant="secondary" className="min-h-11" disabled={currentStep === 0 || isBusy} onClick={onBack}>Quay lại</Button>
+          <Button id="seller-onboarding-continue" type="button" className="min-h-11" disabled={!canContinue || isBusy} onClick={onContinue}>
+            {isBusy ? 'Đang xử lý...' : isLastStep ? 'Gửi hồ sơ xét duyệt' : 'Tiếp theo'}
           </Button>
         </div>
       </section>

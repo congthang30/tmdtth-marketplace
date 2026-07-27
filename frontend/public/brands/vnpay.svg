@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 56" role="img" aria-labelledby="title">
+  <title id="title">VNPAY</title>
+  <rect width="180" height="56" rx="10" fill="#fff"/>
+  <path d="M13 14h10l7 25 7-25h10L35 43H25L13 14Z" fill="#e5222a"/>
+  <text x="49" y="39" fill="#075aaa" font-family="Arial,Helvetica,sans-serif" font-size="28" font-weight="700" letter-spacing="-1">VNPAY</text>
+  <path d="M142 16h7v7h-7zM151 16h7v7h-7zM160 16h7v7h-7zM142 25h7v7h-7zM160 25h7v7h-7zM142 34h7v7h-7zM151 34h7v7h-7zM160 34h7v7h-7z" fill="#e5222a"/>
+</svg>

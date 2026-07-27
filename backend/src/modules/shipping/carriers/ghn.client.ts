@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { getCarrierRetryCount, getCarrierTimeoutMs, getGhnConfig } from '../../../config/carrier.config';
+import {
+  getCarrierRetryCount,
+  getCarrierTimeoutMs,
+  getGhnConfig,
+} from '../../../config/carrier.config';
 import {
   CarrierApiError,
   CarrierClient,
@@ -94,7 +98,10 @@ export class GhnClient implements CarrierClient {
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), getCarrierTimeoutMs());
+      const timeout = setTimeout(
+        () => controller.abort(),
+        getCarrierTimeoutMs(),
+      );
 
       try {
         const response = await fetch(`${config.baseUrl}${path}`, {
@@ -108,7 +115,10 @@ export class GhnClient implements CarrierClient {
           signal: controller.signal,
         });
 
-        const json = (await response.json()) as { code?: number; message?: string };
+        const json = (await response.json()) as {
+          code?: number;
+          message?: string;
+        };
 
         if (!response.ok || json.code !== 200) {
           throw new CarrierApiError(
@@ -124,7 +134,9 @@ export class GhnClient implements CarrierClient {
         if (error instanceof CarrierApiError || attempt === retries) {
           break;
         }
-        this.logger.warn(`GHN request to ${path} failed (attempt ${attempt + 1}), retrying...`);
+        this.logger.warn(
+          `GHN request to ${path} failed (attempt ${attempt + 1}), retrying...`,
+        );
       } finally {
         clearTimeout(timeout);
       }
@@ -158,7 +170,10 @@ export class GhnClient implements CarrierClient {
       input.from.provinceName,
       input.from.wardName,
     );
-    const to = await this.addressResolver.resolve(input.to.provinceName, input.to.wardName);
+    const to = await this.addressResolver.resolve(
+      input.to.provinceName,
+      input.to.wardName,
+    );
 
     if (!from || !to) {
       throw new CarrierApiError(
@@ -197,7 +212,10 @@ export class GhnClient implements CarrierClient {
       input.from.provinceName,
       input.from.wardName,
     );
-    const to = await this.addressResolver.resolve(input.to.provinceName, input.to.wardName);
+    const to = await this.addressResolver.resolve(
+      input.to.provinceName,
+      input.to.wardName,
+    );
 
     if (!from || !to) {
       throw new CarrierApiError(
@@ -234,7 +252,11 @@ export class GhnClient implements CarrierClient {
     );
 
     if (!response.data?.order_code) {
-      throw new CarrierApiError('GHN', 'GHN không trả về mã vận đơn hợp lệ.', response);
+      throw new CarrierApiError(
+        'GHN',
+        'GHN không trả về mã vận đơn hợp lệ.',
+        response,
+      );
     }
 
     return {
@@ -247,7 +269,9 @@ export class GhnClient implements CarrierClient {
     };
   }
 
-  async getOrderStatus(carrierOrderCode: string): Promise<CarrierTrackingResult> {
+  async getOrderStatus(
+    carrierOrderCode: string,
+  ): Promise<CarrierTrackingResult> {
     const response = await this.request<GhnOrderDetailResponse>(
       '/v2/shipping-order/detail',
       'POST',

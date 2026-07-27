@@ -173,9 +173,10 @@ export function ProductDetailPage() {
           <h1 className="mt-4 text-2xl font-semibold leading-tight text-ink">
             {product.productName}
           </h1>
-          <p className="mt-3 flex items-center gap-2 text-sm text-muted">
-            <Store size={15} aria-hidden="true" />
-            {product.shop.shopName}
+          <p className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
+            <Store size={16} aria-hidden="true" />
+            Bán bởi
+            <span className="font-medium text-ink">{product.shop.shopName}</span>
           </p>
 
           <div className="mt-5 rounded-lg bg-surface p-4">
@@ -316,6 +317,29 @@ export function ProductDetailPage() {
             )}
           </div>
         </aside>
+      </section>
+
+      <section className="rounded-lg border border-border bg-white p-5 shadow-panel sm:p-6" aria-labelledby="product-shop-heading">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-primary-100 bg-primary-50 text-primary-700">
+              <Store size={28} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Được bán bởi</p>
+              <h2 id="product-shop-heading" className="mt-1 truncate text-lg font-semibold text-ink">
+                {product.shop.shopName}
+              </h2>
+              <p className="mt-1 text-sm text-muted">Xem toàn bộ sản phẩm và danh mục của gian hàng.</p>
+            </div>
+          </div>
+          <div className="w-full sm:w-auto">
+            <ButtonLink to={`/shops/${product.shop.slug}`} variant="secondary">
+              <Store size={17} aria-hidden="true" />
+              Xem gian hàng
+            </ButtonLink>
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

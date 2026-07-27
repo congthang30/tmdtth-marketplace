@@ -1,5 +1,4 @@
 import {
-  apiDelete,
   apiGet,
   apiGetResponse,
   apiPatch,

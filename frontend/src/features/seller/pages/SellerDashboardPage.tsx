@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Boxes, ClipboardList, Store } from "lucide-react";
+import { Boxes, ClipboardList, FolderTree, Store, ExternalLink } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Badge } from "@/components/ui/Badge";
@@ -69,6 +69,16 @@ export function SellerDashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {shop.shopStatus === "Approved" ? (
+              <ButtonLink to={`/shops/${shop.slug}`} variant="secondary">
+                <ExternalLink size={16} aria-hidden="true" />
+                Xem gian hàng
+              </ButtonLink>
+            ) : null}
+            <ButtonLink to="/seller/shop-categories" variant="secondary">
+              <FolderTree size={16} aria-hidden="true" />
+              Danh mục
+            </ButtonLink>
             <ButtonLink to="/seller/products/create">
               <Boxes size={16} aria-hidden="true" />
               Thêm sản phẩm

@@ -4,6 +4,7 @@ import { VoucherManagementPage } from "@/features/vouchers/components/VoucherMan
 export function AdminVouchersPage() {
   return (
     <VoucherManagementPage
+      owner="platform"
       queryKeyPrefix="admin-vouchers"
       api={adminVouchersApi}
       eyebrow="Mã giảm giá toàn hệ thống"

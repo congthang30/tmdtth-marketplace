@@ -2,6 +2,7 @@ import { ShoppingCart, Store, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { AccountMenu } from "@/features/auth/components/AccountMenu";
+import { SuggestionSearch } from "@/features/search/SuggestionSearch";
 import { useAuthStore } from "@/stores/auth.store";
 
 const publicLinks = [{ to: "/products", label: "Sản phẩm" }];
@@ -55,6 +56,9 @@ export function PublicLayout() {
               </NavLink>
             ) : null}
           </nav>
+          <div className="order-3 w-full md:order-none md:max-w-md">
+            <SuggestionSearch context="customer" placeholder="Tìm sản phẩm, danh mục hoặc gian hàng" label="Tìm kiếm trên sàn" />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <ButtonLink to="/cart" variant="secondary">
               <ShoppingCart size={16} aria-hidden="true" />

@@ -16,7 +16,8 @@
  * app boot and be tested even before real sandbox credentials exist.
  */
 
-const DEFAULT_GHN_BASE_URL = 'https://dev-online-gateway.ghn.vn/shiip/public-api';
+const DEFAULT_GHN_BASE_URL =
+  'https://dev-online-gateway.ghn.vn/shiip/public-api';
 const DEFAULT_CARRIER_TIMEOUT_MS = 10_000;
 const DEFAULT_CARRIER_RETRY_COUNT = 2;
 
@@ -28,10 +29,9 @@ export type GhnConfig = {
 };
 
 export function getGhnConfig(): GhnConfig {
-  const baseUrl = (process.env.GHN_API_BASE_URL?.trim() || DEFAULT_GHN_BASE_URL).replace(
-    /\/+$/,
-    '',
-  );
+  const baseUrl = (
+    process.env.GHN_API_BASE_URL?.trim() || DEFAULT_GHN_BASE_URL
+  ).replace(/\/+$/, '');
   const token = process.env.GHN_TOKEN?.trim() || null;
   const shopId = process.env.GHN_SHOP_ID?.trim() || null;
 
@@ -49,7 +49,9 @@ export function getCarrierTimeoutMs(): number {
     return DEFAULT_CARRIER_TIMEOUT_MS;
   }
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value > 0 ? value : DEFAULT_CARRIER_TIMEOUT_MS;
+  return Number.isSafeInteger(value) && value > 0
+    ? value
+    : DEFAULT_CARRIER_TIMEOUT_MS;
 }
 
 export function getCarrierRetryCount(): number {
@@ -58,5 +60,7 @@ export function getCarrierRetryCount(): number {
     return DEFAULT_CARRIER_RETRY_COUNT;
   }
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_CARRIER_RETRY_COUNT;
+  return Number.isSafeInteger(value) && value >= 0
+    ? value
+    : DEFAULT_CARRIER_RETRY_COUNT;
 }

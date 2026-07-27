@@ -16,8 +16,10 @@ import { categoriesApi } from "@/features/catalog/api";
 import { flattenCategories } from "@/features/catalog/utils";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
-import { formatStatus } from "@/utils/format";
+import { formatMoney, formatStatus } from "@/utils/format";
 import { sellerProductsApi, sellerShopApi } from "../api";
+import { sellerShopCategoriesApi } from "@/features/shops/seller-api";
+import type { SellerShopCategory } from "@/features/shops/seller-api";
 import type { ProductRequest, SellerProduct } from "../types";
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
@@ -48,6 +50,7 @@ const productSchema = z.object({
     .regex(integerPattern, "Khối lượng phải là số nguyên không âm")
     .optional(),
   productStatus: z.enum(["Draft", "Published"]),
+  shopCategoryIds: z.array(z.string()),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -62,6 +65,7 @@ const defaultValues: ProductFormValues = {
   warrantyMonths: "",
   weightGram: "",
   productStatus: "Draft",
+  shopCategoryIds: [],
 };
 
 const optionalString = (value: string | undefined) => {
@@ -74,7 +78,7 @@ const optionalNumber = (value: string | undefined) => {
   return trimmed.length > 0 ? Number(trimmed) : undefined;
 };
 
-function toFormValues(product: SellerProduct): ProductFormValues {
+function toFormValues(product: SellerProduct, shopCategories: SellerShopCategory[]): ProductFormValues {
   return {
     categoryId: product.category.id,
     productName: product.productName,
@@ -86,6 +90,9 @@ function toFormValues(product: SellerProduct): ProductFormValues {
     weightGram: "",
     productStatus:
       product.productStatus === "Published" ? "Published" : "Draft",
+    shopCategoryIds: shopCategories
+      .filter((category) => category.productIds.includes(product.id))
+      .map((category) => category.id),
   };
 }
 
@@ -123,6 +130,10 @@ export function SellerProductFormPage() {
     queryKey: ["categories"],
     queryFn: categoriesApi.list,
   });
+  const shopCategoriesQuery = useQuery({
+    queryKey: ["seller", "shop-categories", "product-form"],
+    queryFn: sellerShopCategoriesApi.list,
+  });
   const productsQuery = useQuery({
     queryKey: ["seller", "products", "lookup"],
     queryFn: () => sellerProductsApi.list(1, 100),
@@ -131,20 +142,45 @@ export function SellerProductFormPage() {
 
   const product = productsQuery.data?.items.find((item) => item.id === id);
   const categories = flattenCategories(categoriesQuery.data ?? []);
+  const watchedBasePrice = form.watch("basePrice");
+  const watchedCompareAtPrice = form.watch("compareAtPrice");
+  const numericBasePrice = Number(watchedBasePrice || 0);
+  const numericCompareAtPrice = Number(watchedCompareAtPrice || 0);
+  const discountPercent = numericCompareAtPrice > numericBasePrice && numericBasePrice > 0
+    ? Math.round((1 - numericBasePrice / numericCompareAtPrice) * 100)
+    : 0;
+
+  const shopCategories = shopCategoriesQuery.data ?? [];
 
   useEffect(() => {
-    if (product) {
-      form.reset(toFormValues(product));
+    if (product && shopCategoriesQuery.isSuccess) {
+      form.reset(toFormValues(product, shopCategories));
     }
-  }, [form, product]);
+  }, [form, product, shopCategories, shopCategoriesQuery.isSuccess]);
 
   const mutation = useMutation({
-    mutationFn: (values: ProductFormValues) =>
-      isEdit && id
-        ? sellerProductsApi.update(id, toRequest(values))
-        : sellerProductsApi.create(toRequest(values, shopQuery.data?.id)),
+    mutationFn: async (values: ProductFormValues) => {
+      const savedProduct = isEdit && id
+        ? await sellerProductsApi.update(id, toRequest(values))
+        : await sellerProductsApi.create(toRequest(values, shopQuery.data?.id));
+      await Promise.all(
+        shopCategories.map((category) => {
+          const shouldContain = values.shopCategoryIds.includes(category.id);
+          const productIds = category.productIds.filter((productId) => productId !== savedProduct.id);
+          if (shouldContain) productIds.push(savedProduct.id);
+          const changed = shouldContain !== category.productIds.includes(savedProduct.id);
+          return changed
+            ? sellerShopCategoriesApi.assignProducts(category.id, productIds)
+            : Promise.resolve();
+        }),
+      );
+      return savedProduct;
+    },
     onSuccess: async (savedProduct) => {
-      await queryClient.invalidateQueries({ queryKey: ["seller", "products"] });
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+         queryClient.invalidateQueries({ queryKey: ["seller", "shop-categories"] }),
+       ]);
       pushToast({
         tone: "success",
         title: isEdit ? "Đã cập nhật sản phẩm" : "Đã tạo sản phẩm",
@@ -157,12 +193,13 @@ export function SellerProductFormPage() {
   if (
     shopQuery.isLoading ||
     categoriesQuery.isLoading ||
+    shopCategoriesQuery.isLoading ||
     productsQuery.isLoading
   ) {
     return <Skeleton className="h-96 w-full" />;
   }
 
-  if (shopQuery.isError || categoriesQuery.isError || productsQuery.isError) {
+  if (shopQuery.isError || categoriesQuery.isError || shopCategoriesQuery.isError || productsQuery.isError) {
     return (
       <ErrorState
         title="Không thể tải biểu mẫu sản phẩm"
@@ -233,18 +270,34 @@ export function SellerProductFormPage() {
               </option>
             ))}
           </SelectInput>
-          <TextInput
-            label="Giá bán"
-            inputMode="decimal"
-            error={form.formState.errors.basePrice?.message}
-            {...form.register("basePrice")}
-          />
-          <TextInput
-            label="Giá so sánh"
-            inputMode="decimal"
-            error={form.formState.errors.compareAtPrice?.message}
-            {...form.register("compareAtPrice")}
-          />
+          <div>
+            <TextInput
+              label="Giá bán mặc định"
+              inputMode="decimal"
+              error={form.formState.errors.basePrice?.message}
+              {...form.register("basePrice")}
+            />
+            <p className="mt-1 text-xs text-muted">Giá này được dùng làm giá gợi ý khi tạo phân loại mới.</p>
+          </div>
+          <div>
+            <TextInput
+              label="Giá gốc trước giảm (không bắt buộc)"
+              inputMode="decimal"
+              error={form.formState.errors.compareAtPrice?.message}
+              {...form.register("compareAtPrice")}
+            />
+            <p className="mt-1 text-xs text-muted">Phải lớn hơn hoặc bằng giá bán mặc định.</p>
+          </div>
+          {numericBasePrice > 0 ? (
+            <div className="md:col-span-2 rounded-lg border border-primary-100 bg-primary-50 p-4" aria-live="polite">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">Giá khách hàng nhìn thấy</p>
+              <div className="mt-2 flex flex-wrap items-baseline gap-3">
+                <strong className="text-2xl text-primary-700">{formatMoney(String(numericBasePrice))}</strong>
+                {numericCompareAtPrice > numericBasePrice ? <span className="text-sm text-muted line-through">{formatMoney(String(numericCompareAtPrice))}</span> : null}
+                {discountPercent > 0 ? <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-primary-700">Giảm {discountPercent}%</span> : null}
+              </div>
+            </div>
+          ) : null}
           <TextInput
             label="Thương hiệu"
             error={form.formState.errors.brand?.message}
@@ -270,6 +323,26 @@ export function SellerProductFormPage() {
             error={form.formState.errors.weightGram?.message}
             {...form.register("weightGram")}
           />
+          <fieldset className="md:col-span-2 rounded-lg border border-border p-4">
+            <legend className="px-1 text-sm font-medium text-ink">Danh mục của gian hàng</legend>
+            {shopCategories.length > 0 ? (
+              <div className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                {shopCategories.filter((category) => category.isActive).map((category) => (
+                  <label key={category.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 hover:bg-surface">
+                    <input
+                      type="checkbox"
+                      value={category.id}
+                      className="h-5 w-5 accent-primary-600"
+                      {...form.register("shopCategoryIds")}
+                    />
+                    <span className="text-sm">{category.categoryName}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-muted">Chưa có danh mục riêng. Hãy tạo tại mục Danh mục của gian hàng.</p>
+            )}
+          </fieldset>
           <Textarea
             label="Mô tả"
             rows={5}

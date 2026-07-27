@@ -48,7 +48,10 @@ export class VnpayProvider {
       ),
     );
     const expected = this.sign(this.toQuery(unsigned), config.hashSecret);
-    return timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'));
+    return timingSafeEqual(
+      Buffer.from(received, 'hex'),
+      Buffer.from(expected, 'hex'),
+    );
   }
 
   getPaymentTtlMinutes(): number {
@@ -57,13 +60,23 @@ export class VnpayProvider {
 
   private requireConfig() {
     const config = getVnpayConfig();
-    if (!config.isConfigured || !config.tmnCode || !config.hashSecret || !config.returnUrl) {
+    if (
+      !config.isConfigured ||
+      !config.tmnCode ||
+      !config.hashSecret ||
+      !config.returnUrl
+    ) {
       throw new ServiceUnavailableException({
         code: 'VNPAY_NOT_CONFIGURED',
         message: 'VNPay chưa được cấu hình. Vui lòng thử lại sau.',
       });
     }
-    return { ...config, tmnCode: config.tmnCode, hashSecret: config.hashSecret, returnUrl: config.returnUrl };
+    return {
+      ...config,
+      tmnCode: config.tmnCode,
+      hashSecret: config.hashSecret,
+      returnUrl: config.returnUrl,
+    };
   }
 
   private toProviderAmount(amount: string): string {
@@ -78,7 +91,10 @@ export class VnpayProvider {
     return Object.entries(params)
       .filter(([, value]) => value !== '')
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%20/g, '+')}`)
+      .map(
+        ([key, value]) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%20/g, '+')}`,
+      )
       .join('&');
   }
 
@@ -88,8 +104,14 @@ export class VnpayProvider {
 
   private formatDate(value: Date): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
     }).formatToParts(value);
     const part = (type: Intl.DateTimeFormatPartTypes) =>
       parts.find((item) => item.type === type)?.value ?? '';

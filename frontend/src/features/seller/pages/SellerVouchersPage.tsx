@@ -4,6 +4,7 @@ import { VoucherManagementPage } from "@/features/vouchers/components/VoucherMan
 export function SellerVouchersPage() {
   return (
     <VoucherManagementPage
+      owner="shop"
       queryKeyPrefix="seller-vouchers"
       api={sellerVouchersApi}
       eyebrow="Mã giảm giá gian hàng"

@@ -8,6 +8,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SearchModule } from './modules/search/search.module';
 import { ShopsModule } from './modules/shops/shops.module';
 import { SellerVerificationModule } from './modules/seller-verification/seller-verification.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
@@ -34,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ReviewsModule,
     UploadModule,
     VouchersModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
