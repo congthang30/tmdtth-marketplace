@@ -482,35 +482,78 @@ export class CartService {
     };
   }
 
-  private getItemAvailability(item: CartItemEntity): CartItemResponse['availability'] {
-    if (item.shop.ownerUser.isDeleted || item.shop.ownerUser.userStatus !== 'Active') {
-      return { isAvailable: false, code: 'SELLER_SUSPENDED', message: 'Người bán hiện không thể nhận đơn.' };
+  private getItemAvailability(
+    item: CartItemEntity,
+  ): CartItemResponse['availability'] {
+    if (
+      item.shop.ownerUser.isDeleted ||
+      item.shop.ownerUser.userStatus !== 'Active'
+    ) {
+      return {
+        isAvailable: false,
+        code: 'SELLER_SUSPENDED',
+        message: 'Người bán hiện không thể nhận đơn.',
+      };
     }
     if (item.shop.isDeleted || item.shop.shopStatus !== PUBLIC_SHOP_STATUS) {
-      return { isAvailable: false, code: 'SHOP_UNAVAILABLE', message: 'Gian hàng hiện không nhận đơn.' };
+      return {
+        isAvailable: false,
+        code: 'SHOP_UNAVAILABLE',
+        message: 'Gian hàng hiện không nhận đơn.',
+      };
     }
     if (this.isShopPaused(item.shop, new Date())) {
-      const message = item.shop.operationMode === 'PausedUntil' && item.shop.pauseEndsAt
-        ? `Gian hàng tạm nghỉ đến ${item.shop.pauseEndsAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`
-        : 'Gian hàng đang tạm nghỉ và chưa có ngày mở lại.';
+      const message =
+        item.shop.operationMode === 'PausedUntil' && item.shop.pauseEndsAt
+          ? `Gian hàng tạm nghỉ đến ${item.shop.pauseEndsAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`
+          : 'Gian hàng đang tạm nghỉ và chưa có ngày mở lại.';
       return { isAvailable: false, code: 'SHOP_PAUSED', message };
     }
-    if (item.product.isDeleted || item.product.isViolation || item.product.productStatus !== PUBLIC_PRODUCT_STATUS) {
-      return { isAvailable: false, code: 'PRODUCT_UNAVAILABLE', message: 'Sản phẩm hiện không còn khả dụng.' };
+    if (
+      item.product.isDeleted ||
+      item.product.isViolation ||
+      item.product.productStatus !== PUBLIC_PRODUCT_STATUS
+    ) {
+      return {
+        isAvailable: false,
+        code: 'PRODUCT_UNAVAILABLE',
+        message: 'Sản phẩm hiện không còn khả dụng.',
+      };
     }
     if (item.productVariant.variantStatus !== PUBLIC_VARIANT_STATUS) {
-      return { isAvailable: false, code: 'VARIANT_UNAVAILABLE', message: 'Phân loại sản phẩm hiện không khả dụng.' };
+      return {
+        isAvailable: false,
+        code: 'VARIANT_UNAVAILABLE',
+        message: 'Phân loại sản phẩm hiện không khả dụng.',
+      };
     }
     const quantityAvailable = this.getQuantityAvailable(item.productVariant);
     if (quantityAvailable < item.quantity) {
-      return { isAvailable: false, code: 'INSUFFICIENT_STOCK', message: `Chỉ còn ${quantityAvailable} sản phẩm.` };
+      return {
+        isAvailable: false,
+        code: 'INSUFFICIENT_STOCK',
+        message: `Chỉ còn ${quantityAvailable} sản phẩm.`,
+      };
     }
     return { isAvailable: true, code: null, message: null };
   }
 
-  private isShopPaused(shop: { operationMode: string; pauseStartsAt: Date | null; pauseEndsAt: Date | null }, now: Date): boolean {
+  private isShopPaused(
+    shop: {
+      operationMode: string;
+      pauseStartsAt: Date | null;
+      pauseEndsAt: Date | null;
+    },
+    now: Date,
+  ): boolean {
     if (shop.operationMode === 'PausedIndefinitely') return true;
-    return shop.operationMode === 'PausedUntil' && shop.pauseStartsAt !== null && shop.pauseEndsAt !== null && now >= shop.pauseStartsAt && now < shop.pauseEndsAt;
+    return (
+      shop.operationMode === 'PausedUntil' &&
+      shop.pauseStartsAt !== null &&
+      shop.pauseEndsAt !== null &&
+      now >= shop.pauseStartsAt &&
+      now < shop.pauseEndsAt
+    );
   }
 
   private getQuantityAvailable(item: {

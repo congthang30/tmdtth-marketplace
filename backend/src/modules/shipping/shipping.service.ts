@@ -38,6 +38,7 @@ const SHIPMENT_STATUS_PICKED_UP = 'PickedUp';
 const SHIPMENT_STATUS_IN_TRANSIT = 'InTransit';
 const SHIPMENT_STATUS_DELIVERED = 'Delivered';
 const SHIPMENT_STATUS_FAILED = 'Failed';
+const SHIPMENT_STATUS_RETURNED = 'Returned';
 const SHIPMENT_STATUS_CANCELLED = 'Cancelled';
 const PARENT_ORDER_PRE_SHIPPING_STATUSES = [
   'Created',
@@ -69,7 +70,8 @@ const SHIPMENT_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
     SHIPMENT_STATUS_FAILED,
   ],
   [SHIPMENT_STATUS_DELIVERED]: [],
-  [SHIPMENT_STATUS_FAILED]: [],
+  [SHIPMENT_STATUS_FAILED]: [SHIPMENT_STATUS_RETURNED],
+  [SHIPMENT_STATUS_RETURNED]: [],
   [SHIPMENT_STATUS_CANCELLED]: [],
 };
 const INVENTORY_TRANSACTION_COMPLETE_ORDER = 'COMPLETE_ORDER';
@@ -824,6 +826,8 @@ export class ShippingService {
           updatedShipment.shopOrder,
           now,
         );
+      } else if (dto.shipmentStatus === SHIPMENT_STATUS_RETURNED) {
+        await this.returnShipmentInventory(tx, user, updatedShipment, now);
       }
 
       return this.toShipmentResponse(
@@ -1314,6 +1318,24 @@ export class ShippingService {
     });
 
     for (const item of orderItems) {
+      const reservationUpdate = await client.inventoryReservation.updateMany({
+        where: {
+          orderItemId: item.id,
+          reservationStatus: 'Active',
+        },
+        data: {
+          reservationStatus: 'Completed',
+          completedAt: now,
+        },
+      });
+      if (reservationUpdate.count !== 1) {
+        throw new BadRequestException({
+          code: 'INVENTORY_RESERVATION_INVALID',
+          message: 'Active inventory reservation was not found',
+          details: [{ orderItemId: item.id.toString() }],
+        });
+      }
+
       const updateResult = await client.productInventory.updateMany({
         where: {
           productVariantId: item.productVariantId,
@@ -1383,6 +1405,65 @@ export class ShippingService {
         data: {
           soldCount: { increment: BigInt(item.quantity) },
           updatedAt: now,
+        },
+      });
+    }
+  }
+
+  private async returnShipmentInventory(
+    client: Prisma.TransactionClient,
+    user: AuthenticatedUser,
+    shipment: UpdateShipmentTrackingEntity,
+    now: Date,
+  ): Promise<void> {
+    for (const shipmentItem of shipment.items) {
+      const reservation = await client.inventoryReservation.findUnique({
+        where: { orderItemId: shipmentItem.orderItemId },
+      });
+      if (!reservation || reservation.reservationStatus !== 'Active') {
+        throw new BadRequestException({
+          code: 'INVENTORY_RESERVATION_INVALID',
+          message: 'Active inventory reservation was not found',
+          details: [{ orderItemId: shipmentItem.orderItemId.toString() }],
+        });
+      }
+
+      await client.inventoryReservation.update({
+        where: { id: reservation.id },
+        data: { reservationStatus: 'Returned', returnedAt: now },
+      });
+      const update = await client.productInventory.updateMany({
+        where: {
+          id: reservation.productInventoryId,
+          quantityReserved: { gte: reservation.quantity },
+        },
+        data: {
+          quantityReserved: { decrement: reservation.quantity },
+          quantityAvailable: { increment: reservation.quantity },
+          updatedAt: now,
+        },
+      });
+      if (update.count !== 1) {
+        throw new BadRequestException({
+          code: 'INVENTORY_RESERVATION_INVALID',
+          message: 'Reserved inventory is not enough to return shipment',
+          details: [{ orderItemId: shipmentItem.orderItemId.toString() }],
+        });
+      }
+      const inventory = await client.productInventory.findUniqueOrThrow({
+        where: { id: reservation.productInventoryId },
+      });
+      await client.inventoryTransaction.create({
+        data: {
+          productInventoryId: inventory.id,
+          transactionType: 'ReturnOrder',
+          quantityChange: reservation.quantity,
+          quantityAfter: inventory.quantityAvailable,
+          referenceType: INVENTORY_REFERENCE_TYPE_ORDER_ITEM,
+          referenceId: shipmentItem.orderItemId,
+          note: `Returned ${reservation.quantity} unit(s) to available stock`,
+          createdByUserId: user.id,
+          createdAt: now,
         },
       });
     }

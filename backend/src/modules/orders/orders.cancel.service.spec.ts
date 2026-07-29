@@ -23,6 +23,9 @@ type PrismaMock = {
   inventoryTransaction: {
     create: jest.Mock;
   };
+  inventoryReservation: {
+    updateMany: jest.Mock;
+  };
   payment: {
     updateMany: jest.Mock;
   };
@@ -115,6 +118,9 @@ function createPrismaMock(): PrismaMock {
     inventoryTransaction: {
       create: jest.fn().mockResolvedValue({}),
     },
+    inventoryReservation: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     payment: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
@@ -184,6 +190,14 @@ describe('OrdersService customer cancellation', () => {
       paymentStatus: 'Cancelled',
     });
     expect(prisma.shopOrder.updateMany).toHaveBeenCalledTimes(2);
+    expect(prisma.inventoryReservation.updateMany).toHaveBeenCalledTimes(2);
+    expect(prisma.inventoryReservation.updateMany).toHaveBeenCalledWith({
+      where: { orderItemId: 801n, reservationStatus: 'Active' },
+      data: {
+        reservationStatus: 'Released',
+        releasedAt: expect.any(Date) as Date,
+      },
+    });
     const inventoryUpdate = callArgument<{
       where: {
         productVariantId: bigint;

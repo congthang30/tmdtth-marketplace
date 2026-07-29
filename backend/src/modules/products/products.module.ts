@@ -8,7 +8,11 @@ import { SellerProductsController } from './seller-products.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule],
-  controllers: [ProductsController, SellerProductsController, AdminProductsController],
+  controllers: [
+    ProductsController,
+    SellerProductsController,
+    AdminProductsController,
+  ],
   providers: [ProductsService],
 })
 export class ProductsModule {}

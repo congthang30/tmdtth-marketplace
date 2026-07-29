@@ -195,6 +195,7 @@ type ProductLookup = {
   shopId?: bigint;
   basePrice?: Prisma.Decimal;
   compareAtPrice?: Prisma.Decimal | null;
+  slug?: string;
 };
 
 type ProductVariantEntity = {
@@ -230,6 +231,8 @@ type ProductInventoryEntity = {
   quantityOnHand: number;
   quantityReserved: number;
   quantityAvailable: number;
+  quantityDamaged: number;
+  quantityIncoming: number;
   lowStockThreshold: number;
   updatedAt: Date;
 };
@@ -274,6 +277,8 @@ type ProductInventoryDelegateMock = {
     Promise<ProductInventoryEntity>,
     [ProductInventoryUpdateArgs]
   >;
+  updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+  findUniqueOrThrow: jest.Mock<Promise<ProductInventoryEntity>, [unknown]>;
 };
 
 type InventoryTransactionDelegateMock = {
@@ -409,6 +414,8 @@ function createInventoryEntity(
     quantityOnHand: 10,
     quantityReserved: 2,
     quantityAvailable: 8,
+    quantityDamaged: 0,
+    quantityIncoming: 0,
     lowStockThreshold: 5,
     updatedAt: new Date('2026-07-03T00:00:00.000Z'),
     ...overrides,
@@ -482,6 +489,11 @@ describe('ProductsService', () => {
         update: jest.fn<
           Promise<ProductInventoryEntity>,
           [ProductInventoryUpdateArgs]
+        >(),
+        updateMany: jest.fn<Promise<{ count: number }>, [unknown]>(),
+        findUniqueOrThrow: jest.fn<
+          Promise<ProductInventoryEntity>,
+          [unknown]
         >(),
       },
       inventoryTransaction: {
@@ -713,59 +725,83 @@ describe('ProductsService', () => {
     expect(result.isDeleted).toBe(true);
   });
 
-  it('creates a variant for an owned product', async () => {
+  it('generates SKU and atomically creates variant inventory', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
+      slug: 'den-ban-go',
       basePrice: new Prisma.Decimal('159000'),
       compareAtPrice: null,
     });
     prisma.productVariant.findFirst.mockResolvedValue(null);
     prisma.productVariant.create.mockResolvedValue(createVariantEntity());
+    prisma.productInventory.create.mockResolvedValue(
+      createInventoryEntity({
+        quantityOnHand: 8,
+        quantityReserved: 0,
+        quantityAvailable: 8,
+      }),
+    );
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
 
     const result = await service.createSellerProductVariant(sellerUser, '100', {
-      sku: 'DEN-BAN-GO',
       variantName: 'Màu gỗ',
       variantOptionJson: '{"color":"wood"}',
       price: '159000',
       compareAtPrice: '199000',
       weightGram: 450,
+      quantityOnHand: 8,
     });
     const createArgs = prisma.productVariant.create.mock.calls[0][0];
+    const inventoryArgs = prisma.productInventory.create.mock.calls[0][0];
 
     expect(createArgs.data.productId).toBe(100n);
-    expect(createArgs.data.sku).toBe('DEN-BAN-GO');
-    expect(createArgs.data.variantOptionJson).toBe('{"color":"wood"}');
-    expect(createArgs.data.price.toString()).toBe('159000');
-    expect(createArgs.data.compareAtPrice?.toString()).toBe('199000');
-    expect(createArgs.data.variantStatus).toBe('Active');
+    expect(createArgs.data.sku).toMatch(/^DENBANGO-[A-F0-9]{8}$/);
+    expect(inventoryArgs.data).toMatchObject({
+      productId: 100n,
+      productVariantId: 200n,
+      quantityOnHand: 8,
+      quantityReserved: 0,
+      quantityAvailable: 8,
+    });
+    expect(prisma.inventoryTransaction.create).toHaveBeenCalled();
     expect(result.quantityAvailable).toBe(8);
-    expect(result.variantStatus).toBe('Active');
   });
 
-  it('rejects duplicate variant SKU inside the product', async () => {
+  it('creates zero inventory without a zero-change transaction', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
+      slug: 'den-ban-go',
       basePrice: new Prisma.Decimal('159000'),
       compareAtPrice: null,
     });
-    prisma.productVariant.findFirst.mockResolvedValue({ id: 200n });
-
-    await expect(
-      service.createSellerProductVariant(sellerUser, '100', {
-        sku: 'DEN-BAN-GO',
-        variantName: 'Màu gỗ',
-        price: '159000',
+    prisma.productVariant.findFirst.mockResolvedValue(null);
+    prisma.productVariant.create.mockResolvedValue(createVariantEntity());
+    prisma.productInventory.create.mockResolvedValue(
+      createInventoryEntity({
+        quantityOnHand: 0,
+        quantityReserved: 0,
+        quantityAvailable: 0,
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(prisma.productVariant.create).not.toHaveBeenCalled();
+    );
+
+    const result = await service.createSellerProductVariant(sellerUser, '100', {
+      variantName: 'Màu gỗ',
+      price: '159000',
+      quantityOnHand: 0,
+    });
+
+    expect(prisma.productInventory.create).toHaveBeenCalled();
+    expect(prisma.inventoryTransaction.create).not.toHaveBeenCalled();
+    expect(result.quantityAvailable).toBe(0);
   });
 
   it('rejects invalid variant option JSON', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
+      slug: 'den-ban-go',
       basePrice: new Prisma.Decimal('159000'),
       compareAtPrice: null,
     });
@@ -773,10 +809,10 @@ describe('ProductsService', () => {
 
     await expect(
       service.createSellerProductVariant(sellerUser, '100', {
-        sku: 'DEN-BAN-GO',
         variantName: 'Màu gỗ',
         variantOptionJson: '{bad-json}',
         price: '159000',
+        quantityOnHand: 1,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.productVariant.create).not.toHaveBeenCalled();
@@ -1002,7 +1038,7 @@ describe('ProductsService', () => {
     });
   });
 
-  it('creates inventory and transaction log for a seller variant', async () => {
+  it('creates inventory and transaction log for the first received batch', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
@@ -1016,19 +1052,16 @@ describe('ProductsService', () => {
         quantityOnHand: 12,
         quantityReserved: 0,
         quantityAvailable: 12,
-        lowStockThreshold: 3,
+        lowStockThreshold: 5,
       }),
     );
     prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
 
-    const result = await service.setSellerVariantInventory(
+    const result = await service.receiveSellerVariantInventory(
       sellerUser,
       '100',
       '200',
-      {
-        quantityOnHand: 12,
-        lowStockThreshold: 3,
-      },
+      { quantityReceived: 12 },
     );
     const createArgs = prisma.productInventory.create.mock.calls[0][0];
     const transactionArgs = prisma.inventoryTransaction.create.mock.calls[0][0];
@@ -1039,11 +1072,13 @@ describe('ProductsService', () => {
       quantityOnHand: 12,
       quantityReserved: 0,
       quantityAvailable: 12,
-      lowStockThreshold: 3,
+      quantityDamaged: 0,
+      quantityIncoming: 0,
+      lowStockThreshold: 5,
     });
     expect(transactionArgs.data).toMatchObject({
       productInventoryId: 400n,
-      transactionType: 'SELLER_SET_STOCK',
+      transactionType: 'RECEIVE_STOCK',
       quantityChange: 12,
       quantityAfter: 12,
       referenceType: 'PRODUCT_VARIANT',
@@ -1053,7 +1088,7 @@ describe('ProductsService', () => {
     expect(result.quantityAvailable).toBe(12);
   });
 
-  it('updates inventory without allowing on-hand below reserved', async () => {
+  it('atomically adds a received batch without changing reserved stock', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
@@ -1063,18 +1098,162 @@ describe('ProductsService', () => {
     prisma.productVariant.findFirst.mockResolvedValue(createVariantEntity());
     prisma.productInventory.findUnique.mockResolvedValue(
       createInventoryEntity({
-        quantityOnHand: 10,
-        quantityReserved: 4,
-        quantityAvailable: 6,
+        quantityOnHand: 100,
+        quantityReserved: 5,
+        quantityAvailable: 95,
       }),
+    );
+    prisma.productInventory.update.mockResolvedValue(
+      createInventoryEntity({
+        quantityOnHand: 120,
+        quantityReserved: 5,
+        quantityAvailable: 115,
+      }),
+    );
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
+
+    const result = await service.receiveSellerVariantInventory(
+      sellerUser,
+      '100',
+      '200',
+      { quantityReceived: 20 },
+    );
+    const updateArgs = prisma.productInventory.update.mock.calls[0][0];
+
+    expect(updateArgs.data).toMatchObject({
+      quantityOnHand: { increment: 20 },
+      quantityAvailable: { increment: 20 },
+    });
+    expect(updateArgs.data).not.toHaveProperty('quantityReserved');
+    expect(updateArgs.data).not.toHaveProperty('quantityDamaged');
+    expect(result).toMatchObject({
+      quantityOnHand: 120,
+      quantityReserved: 5,
+      quantityAvailable: 115,
+    });
+  });
+
+  it('moves available stock to damaged without changing on-hand or reserved', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(createVariantEntity());
+    prisma.productInventory.updateMany.mockResolvedValue({ count: 1 });
+    prisma.productInventory.findUniqueOrThrow.mockResolvedValue(
+      createInventoryEntity({
+        quantityOnHand: 100,
+        quantityAvailable: 92,
+        quantityReserved: 5,
+        quantityDamaged: 3,
+      }),
+    );
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
+
+    const result = await service.markSellerVariantInventoryDamaged(
+      sellerUser,
+      '100',
+      '200',
+      { quantity: 3, reason: 'Bao bì rách' },
+    );
+    const updateArgs = prisma.productInventory.updateMany.mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+
+    expect(updateArgs).toMatchObject({
+      where: { productVariantId: 200n, quantityAvailable: { gte: 3 } },
+      data: {
+        quantityAvailable: { decrement: 3 },
+        quantityDamaged: { increment: 3 },
+      },
+    });
+    expect(updateArgs.data).not.toHaveProperty('quantityOnHand');
+    expect(updateArgs.data).not.toHaveProperty('quantityReserved');
+    expect(result).toMatchObject({
+      quantityOnHand: 100,
+      quantityAvailable: 92,
+      quantityReserved: 5,
+      quantityDamaged: 3,
+    });
+    const transactionArgs = prisma.inventoryTransaction.create.mock.calls[0][0];
+    expect(transactionArgs.data).toMatchObject({
+      transactionType: 'MARK_DAMAGED',
+      quantityChange: -3,
+      quantityAfter: 92,
+    });
+  });
+
+  it('rejects damaged quantity above available stock without movement', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(createVariantEntity());
+    prisma.productInventory.updateMany.mockResolvedValue({ count: 0 });
+    prisma.productInventory.findUnique.mockResolvedValue(
+      createInventoryEntity({ quantityAvailable: 2 }),
     );
 
     await expect(
-      service.setSellerVariantInventory(sellerUser, '100', '200', {
-        quantityOnHand: 3,
+      service.markSellerVariantInventoryDamaged(sellerUser, '100', '200', {
+        quantity: 3,
+        reason: 'Hàng bị vỡ',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.productInventory.update).not.toHaveBeenCalled();
     expect(prisma.inventoryTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('disposes damaged stock from on-hand without changing available or reserved', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(createVariantEntity());
+    prisma.productInventory.updateMany.mockResolvedValue({ count: 1 });
+    prisma.productInventory.findUniqueOrThrow.mockResolvedValue(
+      createInventoryEntity({
+        quantityOnHand: 98,
+        quantityAvailable: 92,
+        quantityReserved: 5,
+        quantityDamaged: 1,
+      }),
+    );
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 501n });
+
+    const result = await service.disposeSellerVariantDamagedInventory(
+      sellerUser,
+      '100',
+      '200',
+      { quantity: 2, reason: 'Đã bàn giao đơn vị tiêu hủy' },
+    );
+    const updateArgs = prisma.productInventory.updateMany.mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+
+    expect(updateArgs).toMatchObject({
+      where: {
+        productVariantId: 200n,
+        quantityDamaged: { gte: 2 },
+        quantityOnHand: { gte: 2 },
+      },
+      data: {
+        quantityDamaged: { decrement: 2 },
+        quantityOnHand: { decrement: 2 },
+      },
+    });
+    expect(updateArgs.data).not.toHaveProperty('quantityAvailable');
+    expect(updateArgs.data).not.toHaveProperty('quantityReserved');
+    expect(result).toMatchObject({
+      quantityOnHand: 98,
+      quantityAvailable: 92,
+      quantityReserved: 5,
+      quantityDamaged: 1,
+    });
   });
 });

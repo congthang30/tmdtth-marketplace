@@ -50,8 +50,30 @@ export type SellerProductInventoryResponse = {
   quantityOnHand: number;
   quantityReserved: number;
   quantityAvailable: number;
+  quantityDamaged: number;
+  quantityIncoming: number;
   lowStockThreshold: number;
   updatedAt: Date | null;
+};
+
+export type InventoryAffectedBucket =
+  | 'AVAILABLE'
+  | 'ON_HAND'
+  | 'RESERVED'
+  | 'UNKNOWN';
+
+export type SellerInventoryTransactionResponse = {
+  id: string;
+  idString: string;
+  transactionType: string;
+  affectedBucket: InventoryAffectedBucket;
+  quantityChange: number;
+  quantityAfter: number;
+  referenceType: string | null;
+  referenceId: string | null;
+  note: string | null;
+  createdBy: { id: string; email: string } | null;
+  createdAt: Date;
 };
 
 export type ProductListItemResponse = {

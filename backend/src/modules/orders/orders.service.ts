@@ -731,6 +731,7 @@ export class OrdersService {
             tx,
             user,
             sourceItem,
+            order,
             orderItem,
           );
           orderItems.push(this.toOrderItemResponse(orderItem));
@@ -906,6 +907,24 @@ export class OrdersService {
         });
 
         for (const item of shopOrder.items) {
+          const reservation = await tx.inventoryReservation.updateMany({
+            where: {
+              orderItemId: item.id,
+              reservationStatus: 'Active',
+            },
+            data: {
+              reservationStatus: 'Released',
+              releasedAt: now,
+            },
+          });
+          if (reservation.count !== 1) {
+            throw new BadRequestException({
+              code: 'INVENTORY_RESERVATION_INVALID',
+              message: 'Active inventory reservation was not found',
+              details: [{ orderItemId: item.id.toString() }],
+            });
+          }
+
           const inventoryUpdate = await tx.productInventory.updateMany({
             where: {
               productVariantId: item.productVariantId,
@@ -1206,7 +1225,9 @@ export class OrdersService {
             .map((item) => ({
               productId: item.productId,
               categoryId: item.product.categoryId,
-              shopCategoryIds: item.product.shopCategoryProducts.map((relation) => relation.shopCategoryId),
+              shopCategoryIds: item.product.shopCategoryProducts.map(
+                (relation) => relation.shopCategoryId,
+              ),
               amount: item.productVariant.price.mul(item.quantity),
             })),
           shippingAmount: this.toDecimal(
@@ -1251,7 +1272,9 @@ export class OrdersService {
         productLines: selectedItems.map((item) => ({
           productId: item.productId,
           categoryId: item.product.categoryId,
-          shopCategoryIds: item.product.shopCategoryProducts.map((relation) => relation.shopCategoryId),
+          shopCategoryIds: item.product.shopCategoryProducts.map(
+            (relation) => relation.shopCategoryId,
+          ),
           amount: item.productVariant.price.mul(item.quantity),
         })),
         shippingAmount,
@@ -1517,7 +1540,8 @@ export class OrdersService {
                   ? 'SHOP_NOT_APPROVED'
                   : item.shop.isDeleted
                     ? 'SHOP_DELETED'
-                    : item.shop.ownerUser.userStatus !== 'Active' || item.shop.ownerUser.isDeleted
+                    : item.shop.ownerUser.userStatus !== 'Active' ||
+                        item.shop.ownerUser.isDeleted
                       ? 'SELLER_SUSPENDED'
                       : this.isShopPaused(item.shop, new Date())
                         ? 'SHOP_PAUSED'
@@ -1540,9 +1564,22 @@ export class OrdersService {
     }
   }
 
-  private isShopPaused(shop: { operationMode: string; pauseStartsAt: Date | null; pauseEndsAt: Date | null }, now: Date): boolean {
+  private isShopPaused(
+    shop: {
+      operationMode: string;
+      pauseStartsAt: Date | null;
+      pauseEndsAt: Date | null;
+    },
+    now: Date,
+  ): boolean {
     if (shop.operationMode === 'PausedIndefinitely') return true;
-    return shop.operationMode === 'PausedUntil' && shop.pauseStartsAt !== null && shop.pauseEndsAt !== null && now >= shop.pauseStartsAt && now < shop.pauseEndsAt;
+    return (
+      shop.operationMode === 'PausedUntil' &&
+      shop.pauseStartsAt !== null &&
+      shop.pauseEndsAt !== null &&
+      now >= shop.pauseStartsAt &&
+      now < shop.pauseEndsAt
+    );
   }
 
   private buildShopGroups(
@@ -1848,6 +1885,7 @@ export class OrdersService {
     client: Prisma.TransactionClient,
     user: AuthenticatedUser,
     item: CheckoutCartItem,
+    order: { id: bigint },
     orderItem: { id: bigint },
   ): Promise<void> {
     const inventory = item.productVariant.inventoryRecords[0];
@@ -1883,6 +1921,17 @@ export class OrdersService {
     if (!updatedInventory) {
       throw new Error('Inventory record was not found after reserve.');
     }
+
+    await client.inventoryReservation.create({
+      data: {
+        productInventoryId: inventory.id,
+        orderId: order.id,
+        orderItemId: orderItem.id,
+        quantity: item.quantity,
+        reservationStatus: 'Active',
+        createdAt: new Date(),
+      },
+    });
 
     await client.inventoryTransaction.create({
       data: {

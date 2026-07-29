@@ -8,7 +8,13 @@ import {
 } from 'class-validator';
 
 const trackingPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
-const shipmentStatuses = ['PickedUp', 'InTransit', 'Delivered'] as const;
+const shipmentStatuses = [
+  'PickedUp',
+  'InTransit',
+  'Delivered',
+  'Failed',
+  'Returned',
+] as const;
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;

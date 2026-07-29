@@ -16,10 +16,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/types';
+import { AdjustDamagedInventoryDto } from './dto/adjust-damaged-inventory.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { SetProductInventoryDto } from './dto/set-product-inventory.dto';
+import { ReceiveProductInventoryDto } from './dto/set-product-inventory.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
@@ -171,14 +172,58 @@ export class SellerProductsController {
     );
   }
 
-  @Patch(':productId/variants/:variantId/inventory')
-  setSellerVariantInventory(
+  @Get(':productId/variants/:variantId/inventory/transactions')
+  listSellerVariantInventoryTransactions(
     @CurrentUser() user: AuthenticatedUser,
     @Param('productId') productId: string,
     @Param('variantId') variantId: string,
-    @Body() dto: SetProductInventoryDto,
+    @Query() query: PaginationQueryDto,
   ) {
-    return this.productsService.setSellerVariantInventory(
+    return this.productsService.listSellerVariantInventoryTransactions(
+      user,
+      productId,
+      variantId,
+      query,
+    );
+  }
+
+  @Patch(':productId/variants/:variantId/inventory')
+  receiveSellerVariantInventory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId') productId: string,
+    @Param('variantId') variantId: string,
+    @Body() dto: ReceiveProductInventoryDto,
+  ) {
+    return this.productsService.receiveSellerVariantInventory(
+      user,
+      productId,
+      variantId,
+      dto,
+    );
+  }
+  @Post(':productId/variants/:variantId/inventory/damaged')
+  markSellerVariantInventoryDamaged(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId') productId: string,
+    @Param('variantId') variantId: string,
+    @Body() dto: AdjustDamagedInventoryDto,
+  ) {
+    return this.productsService.markSellerVariantInventoryDamaged(
+      user,
+      productId,
+      variantId,
+      dto,
+    );
+  }
+
+  @Post(':productId/variants/:variantId/inventory/damaged/dispose')
+  disposeSellerVariantDamagedInventory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId') productId: string,
+    @Param('variantId') variantId: string,
+    @Body() dto: AdjustDamagedInventoryDto,
+  ) {
+    return this.productsService.disposeSellerVariantDamagedInventory(
       user,
       productId,
       variantId,

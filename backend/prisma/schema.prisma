@@ -538,12 +538,15 @@ model ProductInventory {
   quantityOnHand    Int      @default(0) @map("QuantityOnHand")
   quantityReserved  Int      @default(0) @map("QuantityReserved")
   quantityAvailable Int      @default(0) @map("QuantityAvailable")
+  quantityDamaged   Int      @default(0) @map("QuantityDamaged")
+  quantityIncoming  Int      @default(0) @map("QuantityIncoming")
   lowStockThreshold Int      @default(5) @map("LowStockThreshold")
   updatedAt         DateTime @default(now()) @map("UpdatedAt") @db.Timestamp(3)
 
   product        Product                @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   productVariant ProductVariant         @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   transactions   InventoryTransaction[]
+  reservations   InventoryReservation[]
 
   @@unique([productVariantId])
   @@index([productId])
@@ -568,6 +571,27 @@ model InventoryTransaction {
   @@index([productInventoryId])
   @@index([referenceType, referenceId])
   @@map("InventoryTransactions")
+}
+
+model InventoryReservation {
+  id                 BigInt    @id @default(autoincrement()) @map("InventoryReservationID")
+  productInventoryId BigInt    @map("ProductInventoryID")
+  orderId            BigInt    @map("OrderID")
+  orderItemId        BigInt    @unique @map("OrderItemID")
+  quantity           Int       @map("Quantity")
+  reservationStatus  String    @default("Active") @map("ReservationStatus") @db.VarChar(50)
+  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  completedAt        DateTime? @map("CompletedAt") @db.Timestamp(3)
+  releasedAt         DateTime? @map("ReleasedAt") @db.Timestamp(3)
+  returnedAt         DateTime? @map("ReturnedAt") @db.Timestamp(3)
+
+  productInventory ProductInventory @relation(fields: [productInventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order            Order            @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orderItem        OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productInventoryId, reservationStatus])
+  @@index([orderId, reservationStatus])
+  @@map("InventoryReservations")
 }
 
 model ProductAttribute {
@@ -698,16 +722,17 @@ model Order {
   shippingAddress Address?      @relation(fields: [shippingAddressId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  shopOrders      ShopOrder[]
-  items           OrderItem[]
-  statusHistories OrderStatusHistory[]
-  notes           OrderNote[]
-  cancellations   OrderCancellation[]
-  payments        Payment[]
-  voucherUsages   VoucherUsage[]
-  returnRequests  ReturnRequest[]
-  refundRequests  RefundRequest[]
-  complaints      Complaint[]
+  shopOrders            ShopOrder[]
+  items                 OrderItem[]
+  statusHistories       OrderStatusHistory[]
+  notes                 OrderNote[]
+  cancellations         OrderCancellation[]
+  payments              Payment[]
+  voucherUsages         VoucherUsage[]
+  returnRequests        ReturnRequest[]
+  refundRequests        RefundRequest[]
+  complaints            Complaint[]
+  inventoryReservations InventoryReservation[]
 
   @@index([userId])
   @@index([shippingAddressId])
@@ -782,9 +807,10 @@ model OrderItem {
   product        Product        @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  shipmentItems      ShipmentItem[]
-  productReviews     ProductReview[]
-  returnRequestItems ReturnRequestItem[]
+  shipmentItems        ShipmentItem[]
+  productReviews       ProductReview[]
+  returnRequestItems   ReturnRequestItem[]
+  inventoryReservation InventoryReservation?
 
   @@index([orderId])
   @@index([shopOrderId])

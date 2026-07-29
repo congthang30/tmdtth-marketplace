@@ -29,16 +29,12 @@ import { formatMoney, formatStatus } from "@/utils/format";
 import { sellerProductsApi } from "../api";
 import { sellerSaleCampaignsApi } from "@/features/shops/sale-api";
 import type { SaleCampaign } from "@/features/shops/sale-api";
-import type { SellerVariant, VariantRequest } from "../types";
+import type { SellerVariant, VariantCreateRequest, VariantUpdateRequest } from "../types";
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
 const integerPattern = /^\d*$/;
 
 const variantSchema = z.object({
-  sku: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "SKU không hợp lệ"),
   variantName: z
     .string()
     .trim()
@@ -60,18 +56,21 @@ const variantSchema = z.object({
     .string()
     .regex(integerPattern, "Khối lượng phải là số nguyên không âm")
     .optional(),
+  quantityOnHand: z
+    .string()
+    .regex(/^\d+$/, "Tồn kho ban đầu phải là số nguyên không âm"),
   variantStatus: z.enum(["Active", "Inactive"]),
 });
 
 type VariantFormValues = z.infer<typeof variantSchema>;
 
 const defaultValues: VariantFormValues = {
-  sku: "",
   variantName: "",
   variantOptionJson: "",
   price: "",
   compareAtPrice: "",
   weightGram: "",
+  quantityOnHand: "0",
   variantStatus: "Active",
 };
 
@@ -80,8 +79,7 @@ const optionalString = (value: string | undefined) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const toRequest = (values: VariantFormValues): VariantRequest => ({
-  sku: values.sku.trim(),
+const toUpdateRequest = (values: VariantFormValues): VariantUpdateRequest => ({
   variantName: values.variantName.trim(),
   variantOptionJson: optionalString(values.variantOptionJson),
   price: values.price.trim(),
@@ -93,12 +91,12 @@ const toRequest = (values: VariantFormValues): VariantRequest => ({
 });
 
 const toFormValues = (variant: SellerVariant): VariantFormValues => ({
-  sku: variant.sku,
   variantName: variant.variantName,
   variantOptionJson: variant.variantOptionJson ?? "",
   price: variant.price,
   compareAtPrice: variant.compareAtPrice ?? "",
   weightGram: String(variant.weightGram ?? ""),
+  quantityOnHand: String(variant.quantityAvailable),
   variantStatus: variant.variantStatus === "Inactive" ? "Inactive" : "Active",
 });
 
@@ -186,7 +184,7 @@ export function SellerProductVariantsPage() {
   const saveMutation = useMutation({
     mutationFn: (values: VariantFormValues) => {
       const request = {
-        ...toRequest(values),
+        ...toUpdateRequest(values),
         variantOptionJson: serializeAttributes(attributes),
       };
       return editingVariant
@@ -195,7 +193,10 @@ export function SellerProductVariantsPage() {
             editingVariant.id,
             request,
           )
-        : sellerProductsApi.createVariant(productId, request);
+        : sellerProductsApi.createVariant(productId, {
+            ...request,
+            quantityOnHand: Number(values.quantityOnHand),
+          } as VariantCreateRequest);
     },
     onSuccess: async (variant) => {
       await invalidate();
@@ -395,11 +396,11 @@ export function SellerProductVariantsPage() {
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
         >
-          <TextInput
-            label="SKU"
-            error={form.formState.errors.sku?.message}
-            {...form.register("sku")}
-          />
+          {editingVariant ? (
+            <TextInput label="SKU" value={editingVariant.sku} readOnly />
+          ) : (
+            <Alert tone="info">SKU sẽ được hệ thống tự động tạo sau khi lưu.</Alert>
+          )}
           <TextInput
             label="Tên phân loại"
             error={form.formState.errors.variantName?.message}
@@ -439,6 +440,17 @@ export function SellerProductVariantsPage() {
             error={form.formState.errors.weightGram?.message}
             {...form.register("weightGram")}
           />
+          {!editingVariant ? (
+            <div>
+              <TextInput
+                label="Tồn kho ban đầu"
+                inputMode="numeric"
+                error={form.formState.errors.quantityOnHand?.message}
+                {...form.register("quantityOnHand")}
+              />
+              <p className="mt-1 text-xs text-muted">Sản phẩm chỉ hiển thị để bán khi phân loại đang hoạt động và tồn kho lớn hơn 0.</p>
+            </div>
+          ) : null}
           <SelectInput
             label="Trạng thái"
             error={form.formState.errors.variantStatus?.message}

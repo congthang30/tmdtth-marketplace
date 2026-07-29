@@ -12,7 +12,6 @@ import {
 } from 'class-validator';
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
-const skuPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -23,12 +22,6 @@ function normalizeStringInput(value: unknown): unknown {
 }
 
 export class CreateProductVariantDto {
-  @Transform(({ value }) => trimString(value))
-  @IsString()
-  @Matches(skuPattern)
-  @MaxLength(100)
-  sku!: string;
-
   @Transform(({ value }) => trimString(value))
   @IsString()
   @MinLength(1)
@@ -58,6 +51,12 @@ export class CreateProductVariantDto {
   @Min(0)
   @Max(100000000)
   weightGram?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000000)
+  quantityOnHand!: number;
 
   @IsOptional()
   @IsIn(['Active', 'Inactive'])

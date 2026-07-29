@@ -85,15 +85,19 @@ export type SellerVariant = {
   updatedAt: string | null;
 };
 
-export type VariantRequest = {
-  sku: string;
-  variantName: string;
+export type VariantUpdateRequest = {
+  variantName?: string;
   variantOptionJson?: string;
-  price: string;
+  price?: string;
   compareAtPrice?: string;
   weightGram?: number;
   variantStatus?: 'Active' | 'Inactive';
 };
+
+export type VariantCreateRequest = Required<Pick<VariantUpdateRequest, 'variantName' | 'price'>> &
+  VariantUpdateRequest & {
+    quantityOnHand: number;
+  };
 
 export type SellerImage = ProductImage & {
   productId: string;
@@ -121,13 +125,40 @@ export type SellerInventory = {
   quantityOnHand: number;
   quantityReserved: number;
   quantityAvailable: number;
+  quantityDamaged: number;
+  quantityIncoming: number;
   lowStockThreshold: number;
   updatedAt: string | null;
 };
 
 export type InventoryRequest = {
-  quantityOnHand: number;
-  lowStockThreshold?: number;
+  quantityReceived: number;
+};
+
+export type DamagedInventoryRequest = {
+  quantity: number;
+  reason: string;
+};
+
+export type InventoryAffectedBucket = "AVAILABLE" | "ON_HAND" | "RESERVED" | "UNKNOWN";
+
+export type SellerInventoryTransaction = {
+  id: string;
+  idString: string;
+  transactionType: string;
+  affectedBucket: InventoryAffectedBucket;
+  quantityChange: number;
+  quantityAfter: number;
+  referenceType: string | null;
+  referenceId: string | null;
+  note: string | null;
+  createdBy: { id: string; email: string } | null;
+  createdAt: string;
+};
+
+export type SellerInventoryTransactionListResponse = {
+  items: SellerInventoryTransaction[];
+  meta?: { page?: number; limit?: number; total?: number; totalPages?: number };
 };
 
 export type SellerShopOrder = {

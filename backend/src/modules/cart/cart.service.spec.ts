@@ -396,7 +396,9 @@ describe('CartService', () => {
     );
     prisma.cart.findFirst.mockResolvedValue(createCartEntity());
 
-    await expect(service.addItem(customerUser, { productVariantId: '250', quantity: 1 })).rejects.toMatchObject({
+    await expect(
+      service.addItem(customerUser, { productVariantId: '250', quantity: 1 }),
+    ).rejects.toMatchObject({
       response: { code: 'PRODUCT_VARIANT_NOT_FOUND' },
     });
     expect(prisma.cartItem.create).not.toHaveBeenCalled();
@@ -408,11 +410,21 @@ describe('CartService', () => {
     const base = createPurchasableVariantEntity();
     prisma.productVariant.findUnique.mockResolvedValue({
       ...base,
-      product: { ...base.product, shop: { ...base.product.shop, operationMode: 'PausedUntil', pauseStartsAt: startsAt, pauseEndsAt: endsAt } },
+      product: {
+        ...base.product,
+        shop: {
+          ...base.product.shop,
+          operationMode: 'PausedUntil',
+          pauseStartsAt: startsAt,
+          pauseEndsAt: endsAt,
+        },
+      },
     });
     prisma.cart.findFirst.mockResolvedValue(createCartEntity());
 
-    await expect(service.addItem(customerUser, { productVariantId: '250', quantity: 1 })).rejects.toMatchObject({
+    await expect(
+      service.addItem(customerUser, { productVariantId: '250', quantity: 1 }),
+    ).rejects.toMatchObject({
       response: { code: 'PRODUCT_VARIANT_NOT_FOUND' },
     });
     expect(prisma.cartItem.create).not.toHaveBeenCalled();

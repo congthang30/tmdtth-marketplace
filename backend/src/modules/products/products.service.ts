@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -12,11 +13,12 @@ import {
 } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { AdjustDamagedInventoryDto } from './dto/adjust-damaged-inventory.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
-import { SetProductInventoryDto } from './dto/set-product-inventory.dto';
+import { ReceiveProductInventoryDto } from './dto/set-product-inventory.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
@@ -25,6 +27,7 @@ import {
   ProductListImageResponse,
   ProductListItemResponse,
   ProductListVariantResponse,
+  SellerInventoryTransactionResponse,
   SellerProductImageResponse,
   SellerProductInventoryResponse,
   SellerProductListItemResponse,
@@ -56,6 +59,9 @@ const DEFAULT_PRODUCT_STATUS = 'Draft';
 const DELETED_PRODUCT_STATUS = 'Deleted';
 const INACTIVE_VARIANT_STATUS = 'Inactive';
 const INVENTORY_TRANSACTION_SELLER_SET_STOCK = 'SELLER_SET_STOCK';
+const INVENTORY_TRANSACTION_RECEIVE_STOCK = 'RECEIVE_STOCK';
+const INVENTORY_TRANSACTION_MARK_DAMAGED = 'MARK_DAMAGED';
+const INVENTORY_TRANSACTION_DISPOSE_DAMAGED = 'DISPOSE_DAMAGED';
 const INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT = 'PRODUCT_VARIANT';
 
 @Injectable()
@@ -77,22 +83,48 @@ export class ProductsService {
 
   private async recordSearchTerm(term: string) {
     const displayTerm = term.trim().replace(/\s+/g, ' ').slice(0, 100);
-    const normalized = displayTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLocaleLowerCase('vi');
+    const normalized = displayTerm
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLocaleLowerCase('vi');
     if (normalized.length < 2) return;
-    await this.prisma.searchTermStat.upsert({ where: { normalized }, create: { normalized, displayTerm }, update: { displayTerm, searchCount: { increment: 1 }, lastSearchedAt: new Date() } });
+    await this.prisma.searchTermStat.upsert({
+      where: { normalized },
+      create: { normalized, displayTerm },
+      update: {
+        displayTerm,
+        searchCount: { increment: 1 },
+        lastSearchedAt: new Date(),
+      },
+    });
   }
 
   async listTopSearchedProducts(limit = 6) {
-    const terms = await this.prisma.searchTermStat.findMany({ orderBy: [{ searchCount: 'desc' }, { lastSearchedAt: 'desc' }], take: Math.min(limit * 3, 30) });
-    const results: Array<{ product: ProductListItemResponse; searchCount: string }> = [];
+    const terms = await this.prisma.searchTermStat.findMany({
+      orderBy: [{ searchCount: 'desc' }, { lastSearchedAt: 'desc' }],
+      take: Math.min(limit * 3, 30),
+    });
+    const results: Array<{
+      product: ProductListItemResponse;
+      searchCount: string;
+    }> = [];
     const seen = new Set<string>();
     for (const term of terms) {
       if (results.length >= limit) break;
-      const { items } = await this.findPublicProducts({ q: term.displayTerm, page: 1, limit: 1 } as ProductListQueryDto);
+      const { items } = await this.findPublicProducts({
+        q: term.displayTerm,
+        page: 1,
+        limit: 1,
+      });
       const product = items[0];
       if (!product || seen.has(product.id.toString())) continue;
       seen.add(product.id.toString());
-      results.push({ product: this.toListItem(product), searchCount: term.searchCount.toString() });
+      results.push({
+        product: this.toListItem(product),
+        searchCount: term.searchCount.toString(),
+      });
     }
     return results;
   }
@@ -166,20 +198,74 @@ export class ProductsService {
 
   async listAdminProducts(query: PaginationQueryDto & { status?: string }) {
     const { page, limit, skip, take } = getPaginationParams(query);
-    const where = { isDeleted: false, ...(query.status ? { productStatus: query.status } : {}) };
+    const where = {
+      isDeleted: false,
+      ...(query.status ? { productStatus: query.status } : {}),
+    };
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({ where, orderBy: [{ createdAt: 'desc' }], skip, take, include: { shop: { select: { id: true, shopName: true, slug: true } }, category: { select: { id: true, categoryName: true, slug: true } }, images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] }, variants: { orderBy: [{ price: 'asc' }], include: { inventoryRecords: true } } } }),
+      this.prisma.product.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }],
+        skip,
+        take,
+        include: {
+          shop: { select: { id: true, shopName: true, slug: true } },
+          category: { select: { id: true, categoryName: true, slug: true } },
+          images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] },
+          variants: {
+            orderBy: [{ price: 'asc' }],
+            include: { inventoryRecords: true },
+          },
+        },
+      }),
       this.prisma.product.count({ where }),
     ]);
-    return createPaginatedResult({ items: items.map((product) => this.toSellerListItem(product)), page, limit, total });
+    return createPaginatedResult({
+      items: items.map((product) => this.toSellerListItem(product)),
+      page,
+      limit,
+      total,
+    });
   }
 
-  async moderateProduct(user: AuthenticatedUser, productId: string, approved: boolean) {
+  async moderateProduct(
+    user: AuthenticatedUser,
+    productId: string,
+    approved: boolean,
+  ) {
     const id = this.parseId(productId, 'productId');
-    const product = await this.prisma.product.findFirst({ where: { id, isDeleted: false } });
-    if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: 'Không tìm thấy sản phẩm', details: [] });
-    if (product.productStatus !== 'PendingApproval') throw new BadRequestException({ code: 'PRODUCT_NOT_PENDING', message: 'Sản phẩm không ở trạng thái chờ duyệt', details: [] });
-    const updated = await this.prisma.product.update({ where: { id }, data: { productStatus: approved ? 'Published' : 'Rejected', updatedByUserId: user.id, updatedAt: new Date() }, include: { shop: { select: { id: true, shopName: true, slug: true } }, category: { select: { id: true, categoryName: true, slug: true } }, images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] }, variants: { orderBy: [{ price: 'asc' }], include: { inventoryRecords: true } } } });
+    const product = await this.prisma.product.findFirst({
+      where: { id, isDeleted: false },
+    });
+    if (!product)
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Không tìm thấy sản phẩm',
+        details: [],
+      });
+    if (product.productStatus !== 'PendingApproval')
+      throw new BadRequestException({
+        code: 'PRODUCT_NOT_PENDING',
+        message: 'Sản phẩm không ở trạng thái chờ duyệt',
+        details: [],
+      });
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: {
+        productStatus: approved ? 'Published' : 'Rejected',
+        updatedByUserId: user.id,
+        updatedAt: new Date(),
+      },
+      include: {
+        shop: { select: { id: true, shopName: true, slug: true } },
+        category: { select: { id: true, categoryName: true, slug: true } },
+        images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] },
+        variants: {
+          orderBy: [{ price: 'asc' }],
+          include: { inventoryRecords: true },
+        },
+      },
+    });
     return this.toSellerListItem(updated);
   }
 
@@ -284,7 +370,10 @@ export class ProductsService {
         compareAtPrice,
         warrantyMonths: dto.warrantyMonths ?? 0,
         weightGram: dto.weightGram ?? 0,
-        productStatus: dto.productStatus === 'Published' ? 'PendingApproval' : DEFAULT_PRODUCT_STATUS,
+        productStatus:
+          dto.productStatus === 'Published'
+            ? 'PendingApproval'
+            : DEFAULT_PRODUCT_STATUS,
         isViolation: false,
         isDeleted: false,
         createdByUserId: user.id,
@@ -439,8 +528,12 @@ export class ProductsService {
     }
 
     if (dto.productStatus !== undefined) {
-      data.productStatus = dto.productStatus === 'Published' ? 'PendingApproval' : 'Draft';
-    } else if (product.productStatus === 'Published' || product.productStatus === 'Rejected') {
+      data.productStatus =
+        dto.productStatus === 'Published' ? 'PendingApproval' : 'Draft';
+    } else if (
+      product.productStatus === 'Published' ||
+      product.productStatus === 'Rejected'
+    ) {
       data.productStatus = 'PendingApproval';
     }
 
@@ -547,35 +640,68 @@ export class ProductsService {
     dto: CreateProductVariantDto,
   ): Promise<SellerProductVariantResponse> {
     const parsedProductId = this.parseId(productId, 'productId');
-
-    await this.requireSellerProduct(user, parsedProductId);
-    await this.ensureSkuAvailable(parsedProductId, dto.sku);
-
+    const product = await this.requireSellerProduct(user, parsedProductId);
+    const sku = await this.generateVariantSku(parsedProductId, product.slug);
     const price = this.parsePositiveMoney(dto.price, 'price');
     const compareAtPrice = this.parseOptionalCompareAtPrice(
       dto.compareAtPrice,
       price,
     );
     const now = new Date();
-    const variant = await this.prisma.productVariant.create({
-      data: {
-        productId: parsedProductId,
-        sku: dto.sku,
-        variantName: dto.variantName,
-        variantOptionJson: this.normalizeVariantOptionJson(
-          dto.variantOptionJson,
-        ),
-        price,
-        compareAtPrice,
-        weightGram: dto.weightGram ?? 0,
-        variantStatus: dto.variantStatus ?? PUBLIC_VARIANT_STATUS,
-        createdAt: now,
-        updatedAt: now,
-      },
-      include: { inventoryRecords: true },
-    });
 
-    return this.toSellerVariantResponse(variant);
+    return this.prisma.$transaction(async (tx) => {
+      const variant = await tx.productVariant.create({
+        data: {
+          productId: parsedProductId,
+          sku,
+          variantName: dto.variantName,
+          variantOptionJson: this.normalizeVariantOptionJson(
+            dto.variantOptionJson,
+          ),
+          price,
+          compareAtPrice,
+          weightGram: dto.weightGram ?? 0,
+          variantStatus: dto.variantStatus ?? PUBLIC_VARIANT_STATUS,
+          createdAt: now,
+          updatedAt: now,
+        },
+        include: { inventoryRecords: true },
+      });
+      const inventory = await tx.productInventory.create({
+        data: {
+          productId: parsedProductId,
+          productVariantId: variant.id,
+          quantityOnHand: dto.quantityOnHand,
+          quantityReserved: 0,
+          quantityAvailable: dto.quantityOnHand,
+          quantityDamaged: 0,
+          quantityIncoming: 0,
+          lowStockThreshold: 5,
+          updatedAt: now,
+        },
+      });
+
+      if (dto.quantityOnHand > 0) {
+        await tx.inventoryTransaction.create({
+          data: {
+            productInventoryId: inventory.id,
+            transactionType: INVENTORY_TRANSACTION_SELLER_SET_STOCK,
+            quantityChange: dto.quantityOnHand,
+            quantityAfter: dto.quantityOnHand,
+            referenceType: INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT,
+            referenceId: variant.id,
+            note: 'Seller set initial inventory quantity',
+            createdByUserId: user.id,
+            createdAt: now,
+          },
+        });
+      }
+
+      return this.toSellerVariantResponse({
+        ...variant,
+        inventoryRecords: [{ quantityAvailable: inventory.quantityAvailable }],
+      });
+    });
   }
 
   async updateSellerProductVariant(
@@ -594,11 +720,6 @@ export class ProductsService {
     const data: Prisma.ProductVariantUpdateInput = {
       updatedAt: new Date(),
     };
-
-    if (dto.sku !== undefined && dto.sku !== variant.sku) {
-      await this.ensureSkuAvailable(parsedProductId, dto.sku, parsedVariantId);
-      data.sku = dto.sku;
-    }
 
     if (dto.variantName !== undefined) {
       data.variantName = dto.variantName;
@@ -834,11 +955,74 @@ export class ProductsService {
     );
   }
 
-  async setSellerVariantInventory(
+  async listSellerVariantInventoryTransactions(
     user: AuthenticatedUser,
     productId: string,
     variantId: string,
-    dto: SetProductInventoryDto,
+    query: PaginationQueryDto,
+  ) {
+    const parsedProductId = this.parseId(productId, 'productId');
+    const parsedVariantId = this.parseId(variantId, 'variantId');
+    await this.requireSellerVariant(user, parsedProductId, parsedVariantId);
+    const { page, limit, skip, take } = getPaginationParams(query);
+    const inventory = await this.prisma.productInventory.findUnique({
+      where: { productVariantId: parsedVariantId },
+      select: { id: true },
+    });
+    if (!inventory) {
+      return createPaginatedResult<SellerInventoryTransactionResponse>({
+        items: [],
+        page,
+        limit,
+        total: 0,
+      });
+    }
+
+    const [transactions, total] = await this.prisma.$transaction([
+      this.prisma.inventoryTransaction.findMany({
+        where: { productInventoryId: inventory.id },
+        include: { createdByUser: { select: { id: true, email: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+      }),
+      this.prisma.inventoryTransaction.count({
+        where: { productInventoryId: inventory.id },
+      }),
+    ]);
+
+    return createPaginatedResult<SellerInventoryTransactionResponse>({
+      items: transactions.map((transaction) => ({
+        id: transaction.id.toString(),
+        idString: transaction.id.toString(),
+        transactionType: transaction.transactionType,
+        affectedBucket: this.getInventoryTransactionAffectedBucket(
+          transaction.transactionType,
+        ),
+        quantityChange: transaction.quantityChange,
+        quantityAfter: transaction.quantityAfter,
+        referenceType: transaction.referenceType,
+        referenceId: transaction.referenceId?.toString() ?? null,
+        note: transaction.note,
+        createdBy: transaction.createdByUser
+          ? {
+              id: transaction.createdByUser.id.toString(),
+              email: transaction.createdByUser.email,
+            }
+          : null,
+        createdAt: transaction.createdAt,
+      })),
+      page,
+      limit,
+      total,
+    });
+  }
+
+  async receiveSellerVariantInventory(
+    user: AuthenticatedUser,
+    productId: string,
+    variantId: string,
+    dto: ReceiveProductInventoryDto,
   ): Promise<SellerProductInventoryResponse> {
     const parsedProductId = this.parseId(productId, 'productId');
     const parsedVariantId = this.parseId(variantId, 'variantId');
@@ -846,37 +1030,16 @@ export class ProductsService {
     await this.requireSellerVariant(user, parsedProductId, parsedVariantId);
 
     return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const existingInventory = await tx.productInventory.findUnique({
         where: { productVariantId: parsedVariantId },
       });
-      const quantityReserved = existingInventory?.quantityReserved ?? 0;
-
-      if (dto.quantityOnHand < quantityReserved) {
-        throw new BadRequestException({
-          code: 'INVALID_INVENTORY_QUANTITY',
-          message: 'Quantity on hand cannot be lower than reserved quantity',
-          details: [
-            {
-              field: 'quantityOnHand',
-              quantityReserved,
-            },
-          ],
-        });
-      }
-
-      const now = new Date();
-      const previousQuantityAvailable =
-        existingInventory?.quantityAvailable ?? 0;
-      const quantityAvailable = dto.quantityOnHand - quantityReserved;
-      const lowStockThreshold =
-        dto.lowStockThreshold ?? existingInventory?.lowStockThreshold ?? 5;
       const inventory = existingInventory
         ? await tx.productInventory.update({
             where: { id: existingInventory.id },
             data: {
-              quantityOnHand: dto.quantityOnHand,
-              quantityAvailable,
-              lowStockThreshold,
+              quantityOnHand: { increment: dto.quantityReceived },
+              quantityAvailable: { increment: dto.quantityReceived },
               updatedAt: now,
             },
           })
@@ -884,10 +1047,12 @@ export class ProductsService {
             data: {
               productId: parsedProductId,
               productVariantId: parsedVariantId,
-              quantityOnHand: dto.quantityOnHand,
-              quantityReserved,
-              quantityAvailable,
-              lowStockThreshold,
+              quantityOnHand: dto.quantityReceived,
+              quantityReserved: 0,
+              quantityAvailable: dto.quantityReceived,
+              quantityDamaged: 0,
+              quantityIncoming: 0,
+              lowStockThreshold: 5,
               updatedAt: now,
             },
           });
@@ -895,12 +1060,12 @@ export class ProductsService {
       await tx.inventoryTransaction.create({
         data: {
           productInventoryId: inventory.id,
-          transactionType: INVENTORY_TRANSACTION_SELLER_SET_STOCK,
-          quantityChange: quantityAvailable - previousQuantityAvailable,
-          quantityAfter: quantityAvailable,
+          transactionType: INVENTORY_TRANSACTION_RECEIVE_STOCK,
+          quantityChange: dto.quantityReceived,
+          quantityAfter: inventory.quantityAvailable,
           referenceType: INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT,
           referenceId: parsedVariantId,
-          note: 'Seller updated inventory quantity',
+          note: `Seller received ${dto.quantityReceived} unit(s) into stock`,
           createdByUserId: user.id,
           createdAt: now,
         },
@@ -934,6 +1099,7 @@ export class ProductsService {
         basePrice: true,
         compareAtPrice: true,
         productStatus: true,
+        slug: true,
       },
     });
 
@@ -1012,6 +1178,29 @@ export class ProductsService {
     await this.requireSellerVariant(user, productId, parsedVariantId);
 
     return parsedVariantId;
+  }
+
+  private async generateVariantSku(productId: bigint, productSlug: string) {
+    const prefix =
+      productSlug
+        .replace(/[^a-z0-9]/gi, '')
+        .slice(0, 12)
+        .toUpperCase() || 'SP';
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const sku = `${prefix}-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`;
+      const existing = await this.prisma.productVariant.findFirst({
+        where: { productId, sku },
+        select: { id: true },
+      });
+      if (!existing) return sku;
+    }
+
+    throw new ConflictException({
+      code: 'PRODUCT_VARIANT_SKU_GENERATION_FAILED',
+      message: 'Không thể tạo mã SKU. Vui lòng thử lại.',
+      details: [],
+    });
   }
 
   private async ensureSkuAvailable(
@@ -1103,8 +1292,14 @@ export class ProductsService {
           },
           OR: [
             { operationMode: ShopOperationMode.Open },
-            { operationMode: ShopOperationMode.PausedUntil, pauseStartsAt: { gt: new Date() } },
-            { operationMode: ShopOperationMode.PausedUntil, pauseEndsAt: { lte: new Date() } },
+            {
+              operationMode: ShopOperationMode.PausedUntil,
+              pauseStartsAt: { gt: new Date() },
+            },
+            {
+              operationMode: ShopOperationMode.PausedUntil,
+              pauseEndsAt: { lte: new Date() },
+            },
           ],
         },
         category: {
@@ -1199,15 +1394,55 @@ export class ProductsService {
               .slice(0, 8)
               .map((token) => ({
                 OR: [
-                  { productName: { contains: token, mode: 'insensitive' as const } },
+                  {
+                    productName: {
+                      contains: token,
+                      mode: 'insensitive' as const,
+                    },
+                  },
                   { brand: { contains: token, mode: 'insensitive' as const } },
-                  { description: { contains: token, mode: 'insensitive' as const } },
-                  { category: { categoryName: { contains: token, mode: 'insensitive' as const } } },
-                  { shop: { shopName: { contains: token, mode: 'insensitive' as const } } },
-                  { variants: { some: { OR: [
-                    { sku: { contains: token, mode: 'insensitive' as const } },
-                    { variantName: { contains: token, mode: 'insensitive' as const } },
-                  ] } } },
+                  {
+                    description: {
+                      contains: token,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                  {
+                    category: {
+                      categoryName: {
+                        contains: token,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                  {
+                    shop: {
+                      shopName: {
+                        contains: token,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                  {
+                    variants: {
+                      some: {
+                        OR: [
+                          {
+                            sku: {
+                              contains: token,
+                              mode: 'insensitive' as const,
+                            },
+                          },
+                          {
+                            variantName: {
+                              contains: token,
+                              mode: 'insensitive' as const,
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
                 ],
               })),
           }
@@ -1221,8 +1456,14 @@ export class ProductsService {
         },
         OR: [
           { operationMode: ShopOperationMode.Open },
-          { operationMode: ShopOperationMode.PausedUntil, pauseStartsAt: { gt: new Date() } },
-          { operationMode: ShopOperationMode.PausedUntil, pauseEndsAt: { lte: new Date() } },
+          {
+            operationMode: ShopOperationMode.PausedUntil,
+            pauseStartsAt: { gt: new Date() },
+          },
+          {
+            operationMode: ShopOperationMode.PausedUntil,
+            pauseEndsAt: { lte: new Date() },
+          },
         ],
       },
       category: {
@@ -1411,6 +1652,140 @@ export class ProductsService {
     };
   }
 
+  async markSellerVariantInventoryDamaged(
+    user: AuthenticatedUser,
+    productId: string,
+    variantId: string,
+    dto: AdjustDamagedInventoryDto,
+  ): Promise<SellerProductInventoryResponse> {
+    const parsedProductId = this.parseId(productId, 'productId');
+    const parsedVariantId = this.parseId(variantId, 'variantId');
+    await this.requireSellerVariant(user, parsedProductId, parsedVariantId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const update = await tx.productInventory.updateMany({
+        where: {
+          productVariantId: parsedVariantId,
+          quantityAvailable: { gte: dto.quantity },
+        },
+        data: {
+          quantityAvailable: { decrement: dto.quantity },
+          quantityDamaged: { increment: dto.quantity },
+          updatedAt: now,
+        },
+      });
+      if (update.count !== 1) {
+        const current = await tx.productInventory.findUnique({
+          where: { productVariantId: parsedVariantId },
+        });
+        throw new BadRequestException({
+          code: 'INSUFFICIENT_AVAILABLE_INVENTORY',
+          message: 'Available inventory is not enough to mark as damaged',
+          details: [{ quantityAvailable: current?.quantityAvailable ?? 0 }],
+        });
+      }
+      const inventory = await tx.productInventory.findUniqueOrThrow({
+        where: { productVariantId: parsedVariantId },
+      });
+      await tx.inventoryTransaction.create({
+        data: {
+          productInventoryId: inventory.id,
+          transactionType: INVENTORY_TRANSACTION_MARK_DAMAGED,
+          quantityChange: -dto.quantity,
+          quantityAfter: inventory.quantityAvailable,
+          referenceType: INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT,
+          referenceId: parsedVariantId,
+          note: `Marked ${dto.quantity} unit(s) as damaged: ${dto.reason}`,
+          createdByUserId: user.id,
+          createdAt: now,
+        },
+      });
+      return this.toInventoryResponse(
+        inventory,
+        parsedProductId,
+        parsedVariantId,
+      );
+    });
+  }
+
+  async disposeSellerVariantDamagedInventory(
+    user: AuthenticatedUser,
+    productId: string,
+    variantId: string,
+    dto: AdjustDamagedInventoryDto,
+  ): Promise<SellerProductInventoryResponse> {
+    const parsedProductId = this.parseId(productId, 'productId');
+    const parsedVariantId = this.parseId(variantId, 'variantId');
+    await this.requireSellerVariant(user, parsedProductId, parsedVariantId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const update = await tx.productInventory.updateMany({
+        where: {
+          productVariantId: parsedVariantId,
+          quantityDamaged: { gte: dto.quantity },
+          quantityOnHand: { gte: dto.quantity },
+        },
+        data: {
+          quantityDamaged: { decrement: dto.quantity },
+          quantityOnHand: { decrement: dto.quantity },
+          updatedAt: now,
+        },
+      });
+      if (update.count !== 1) {
+        const current = await tx.productInventory.findUnique({
+          where: { productVariantId: parsedVariantId },
+        });
+        throw new BadRequestException({
+          code: 'INSUFFICIENT_DAMAGED_INVENTORY',
+          message: 'Damaged inventory is not enough to dispose',
+          details: [{ quantityDamaged: current?.quantityDamaged ?? 0 }],
+        });
+      }
+      const inventory = await tx.productInventory.findUniqueOrThrow({
+        where: { productVariantId: parsedVariantId },
+      });
+      await tx.inventoryTransaction.create({
+        data: {
+          productInventoryId: inventory.id,
+          transactionType: INVENTORY_TRANSACTION_DISPOSE_DAMAGED,
+          quantityChange: -dto.quantity,
+          quantityAfter: inventory.quantityOnHand,
+          referenceType: INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT,
+          referenceId: parsedVariantId,
+          note: `Disposed ${dto.quantity} damaged unit(s): ${dto.reason}`,
+          createdByUserId: user.id,
+          createdAt: now,
+        },
+      });
+      return this.toInventoryResponse(
+        inventory,
+        parsedProductId,
+        parsedVariantId,
+      );
+    });
+  }
+
+  private getInventoryTransactionAffectedBucket(
+    transactionType: string,
+  ): 'AVAILABLE' | 'ON_HAND' | 'RESERVED' | 'UNKNOWN' {
+    if (transactionType === INVENTORY_TRANSACTION_DISPOSE_DAMAGED) {
+      return 'ON_HAND';
+    }
+    if (
+      transactionType === INVENTORY_TRANSACTION_RECEIVE_STOCK ||
+      transactionType === INVENTORY_TRANSACTION_MARK_DAMAGED ||
+      transactionType === INVENTORY_TRANSACTION_SELLER_SET_STOCK
+    ) {
+      return 'AVAILABLE';
+    }
+    if (transactionType.includes('RESERV')) {
+      return 'RESERVED';
+    }
+    return 'UNKNOWN';
+  }
+
   private toInventoryResponse(
     inventory: {
       id: bigint;
@@ -1419,6 +1794,8 @@ export class ProductsService {
       quantityOnHand: number;
       quantityReserved: number;
       quantityAvailable: number;
+      quantityDamaged: number;
+      quantityIncoming: number;
       lowStockThreshold: number;
       updatedAt: Date;
     } | null,
@@ -1436,6 +1813,8 @@ export class ProductsService {
         quantityOnHand: 0,
         quantityReserved: 0,
         quantityAvailable: 0,
+        quantityDamaged: 0,
+        quantityIncoming: 0,
         lowStockThreshold: 5,
         updatedAt: null,
       };
@@ -1451,6 +1830,8 @@ export class ProductsService {
       quantityOnHand: inventory.quantityOnHand,
       quantityReserved: inventory.quantityReserved,
       quantityAvailable: inventory.quantityAvailable,
+      quantityDamaged: inventory.quantityDamaged,
+      quantityIncoming: inventory.quantityIncoming,
       lowStockThreshold: inventory.lowStockThreshold,
       updatedAt: inventory.updatedAt,
     };

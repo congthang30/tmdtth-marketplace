@@ -171,6 +171,9 @@ type PrismaMock = {
   inventoryTransaction: {
     create: jest.Mock<Promise<unknown>, [unknown]>;
   };
+  inventoryReservation: {
+    create: jest.Mock<Promise<unknown>, [unknown]>;
+  };
   payment: {
     create: jest.Mock<Promise<PaymentEntity>, [unknown]>;
   };
@@ -403,6 +406,9 @@ describe('OrdersService create order', () => {
       inventoryTransaction: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
       },
+      inventoryReservation: {
+        create: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       payment: {
         create: jest.fn<Promise<PaymentEntity>, [unknown]>(),
       },
@@ -479,6 +485,7 @@ describe('OrdersService create order', () => {
       .mockResolvedValueOnce({ id: 300n, quantityAvailable: 6 })
       .mockResolvedValueOnce({ id: 301n, quantityAvailable: 2 });
     prisma.inventoryTransaction.create.mockResolvedValue({ id: 1n });
+    prisma.inventoryReservation.create.mockResolvedValue({ id: 1n });
     prisma.payment.create.mockResolvedValue(createPayment());
     prisma.paymentStatusHistory.create.mockResolvedValue({ id: 1n });
     prisma.orderStatusHistory.create.mockResolvedValue({ id: 1n });
@@ -602,6 +609,24 @@ describe('OrdersService create order', () => {
         quantityReserved: { increment: 2 },
         quantityAvailable: { decrement: 2 },
       },
+    });
+    expect(prisma.inventoryReservation.create).toHaveBeenCalledTimes(2);
+    const firstReservationArgs = prisma.inventoryReservation.create.mock
+      .calls[0][0] as {
+      data: {
+        productInventoryId: bigint;
+        orderId: bigint;
+        orderItemId: bigint;
+        quantity: number;
+        reservationStatus: string;
+      };
+    };
+    expect(firstReservationArgs.data).toMatchObject({
+      productInventoryId: 300n,
+      orderId: 900n,
+      orderItemId: 700n,
+      quantity: 2,
+      reservationStatus: 'Active',
     });
     expect(firstInventoryTransactionArgs.data).toMatchObject({
       productInventoryId: 300n,

@@ -219,6 +219,12 @@ type InventoryTransactionDelegateMock = {
   create: jest.Mock<Promise<unknown>, [unknown]>;
 };
 
+type InventoryReservationDelegateMock = {
+  updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+  findUnique: jest.Mock<Promise<any>, [unknown]>;
+  update: jest.Mock<Promise<unknown>, [unknown]>;
+};
+
 type ProductDelegateMock = {
   update: jest.Mock<Promise<unknown>, [unknown]>;
 };
@@ -237,6 +243,7 @@ type PrismaMock = {
   orderItem: OrderItemDelegateMock;
   productInventory: ProductInventoryDelegateMock;
   inventoryTransaction: InventoryTransactionDelegateMock;
+  inventoryReservation: InventoryReservationDelegateMock;
   product: ProductDelegateMock;
   $transaction: jest.Mock<
     Promise<unknown>,
@@ -553,6 +560,13 @@ describe('ShippingService', () => {
       },
       inventoryTransaction: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      inventoryReservation: {
+        updateMany: jest
+          .fn<Promise<{ count: number }>, [unknown]>()
+          .mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn<Promise<any>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
       },
       product: {
         update: jest.fn<Promise<unknown>, [unknown]>(),

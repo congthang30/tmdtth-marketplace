@@ -9,11 +9,14 @@ import {
 import type { ApiResponse } from '@/types/api';
 import type { OrderShipment } from '@/features/orders/types';
 import type {
+  DamagedInventoryRequest,
   InventoryRequest,
   ProductImageRequest,
   ProductRequest,
   SellerImage,
   SellerInventory,
+  SellerInventoryTransaction,
+  SellerInventoryTransactionListResponse,
   SellerOrderListResponse,
   SellerProduct,
   SellerProductListResponse,
@@ -27,7 +30,8 @@ import type {
   ShopRequest,
   UploadListResponse,
   UploadedFile,
-  VariantRequest,
+  VariantCreateRequest,
+  VariantUpdateRequest,
 } from './types';
 import type {
   PauseShopIndefinitelyRequest,
@@ -87,14 +91,14 @@ export const sellerProductsApi = {
   listVariants(productId: string) {
     return apiGet<SellerVariant[]>(`/seller/products/${productId}/variants`);
   },
-  createVariant(productId: string, body: VariantRequest) {
-    return apiPost<SellerVariant, VariantRequest>(
+  createVariant(productId: string, body: VariantCreateRequest) {
+    return apiPost<SellerVariant, VariantCreateRequest>(
       `/seller/products/${productId}/variants`,
       body,
     );
   },
-  updateVariant(productId: string, variantId: string, body: Partial<VariantRequest>) {
-    return apiPatch<SellerVariant, Partial<VariantRequest>>(
+  updateVariant(productId: string, variantId: string, body: VariantUpdateRequest) {
+    return apiPatch<SellerVariant, VariantUpdateRequest>(
       `/seller/products/${productId}/variants/${variantId}`,
       body,
     );
@@ -134,6 +138,30 @@ export const sellerProductsApi = {
       `/seller/products/${productId}/variants/${variantId}/inventory`,
       body,
     );
+  },
+  markDamaged(productId: string, variantId: string, body: DamagedInventoryRequest) {
+    return apiPost<SellerInventory, DamagedInventoryRequest>(
+      `/seller/products/${productId}/variants/${variantId}/inventory/damaged`,
+      body,
+    );
+  },
+  disposeDamaged(productId: string, variantId: string, body: DamagedInventoryRequest) {
+    return apiPost<SellerInventory, DamagedInventoryRequest>(
+      `/seller/products/${productId}/variants/${variantId}/inventory/damaged/dispose`,
+      body,
+    );
+  },
+  async listInventoryTransactions(
+    productId: string,
+    variantId: string,
+    page = 1,
+    limit = 10,
+  ): Promise<SellerInventoryTransactionListResponse> {
+    const response = await apiGetResponse<SellerInventoryTransaction[]>(
+      `/seller/products/${productId}/variants/${variantId}/inventory/transactions`,
+      { params: { page, limit } },
+    );
+    return { items: response.data, meta: response.meta };
   },
 };
 
