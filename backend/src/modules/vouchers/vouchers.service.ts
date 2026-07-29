@@ -47,8 +47,14 @@ type VoucherRow = {
   voucherStatus: string;
   discountTarget: string;
   productScope: string;
-  voucherShopCategories: Array<{ shopCategoryId: bigint; shopCategory: { id: bigint; categoryName: string; slug: string } }>;
-  voucherProducts: Array<{ productId: bigint; product: { id: bigint; productName: string; slug: string } }>;
+  voucherShopCategories: Array<{
+    shopCategoryId: bigint;
+    shopCategory: { id: bigint; categoryName: string; slug: string };
+  }>;
+  voucherProducts: Array<{
+    productId: bigint;
+    product: { id: bigint; productName: string; slug: string };
+  }>;
   voucherCategories: Array<{
     categoryId: bigint;
     category: { id: bigint; categoryName: string; slug: string };
@@ -140,8 +146,8 @@ export class VouchersService {
       orderBy: [{ createdAt: 'desc' }],
       include: {
         voucherCategories: { include: { category: true } },
-          voucherProducts: { include: { product: true } },
-          voucherShopCategories: { include: { shopCategory: true } },
+        voucherProducts: { include: { product: true } },
+        voucherShopCategories: { include: { shopCategory: true } },
       },
     });
 
@@ -187,7 +193,15 @@ export class VouchersService {
         discountTarget:
           voucher.discountTarget as VoucherSummary['discountTarget'],
         productScope: voucher.productScope as VoucherSummary['productScope'],
-        categories: voucher.shopId === null ? this.toCategorySummaries(voucher.voucherCategories) : voucher.voucherShopCategories.map(({ shopCategory }) => ({ id: shopCategory.id.toString(), idString: shopCategory.id.toString(), categoryName: shopCategory.categoryName, slug: shopCategory.slug })),
+        categories:
+          voucher.shopId === null
+            ? this.toCategorySummaries(voucher.voucherCategories)
+            : voucher.voucherShopCategories.map(({ shopCategory }) => ({
+                id: shopCategory.id.toString(),
+                idString: shopCategory.id.toString(),
+                categoryName: shopCategory.categoryName,
+                slug: shopCategory.slug,
+              })),
         products: this.toProductSummaries(voucher.voucherProducts),
         eligibleAmount: subtotal?.toFixed(2) ?? '0.00',
       });
@@ -225,8 +239,8 @@ export class VouchersService {
       where: { voucherCode: voucherCode.trim().toUpperCase() },
       include: {
         voucherCategories: { include: { category: true } },
-          voucherProducts: { include: { product: true } },
-          voucherShopCategories: { include: { shopCategory: true } },
+        voucherProducts: { include: { product: true } },
+        voucherShopCategories: { include: { shopCategory: true } },
       },
     });
 
@@ -293,7 +307,8 @@ export class VouchersService {
         discountTarget:
           voucher.discountTarget as VoucherValidationResult['voucher']['discountTarget'],
         categoryIds: voucher.voucherCategories.map((item) => item.categoryId),
-        productScope: voucher.productScope as VoucherValidationResult['voucher']['productScope'],
+        productScope:
+          voucher.productScope as VoucherValidationResult['voucher']['productScope'],
         productIds: voucher.voucherProducts.map((item) => item.productId),
       },
       eligibleAmount: eligibleAmount.toFixed(2),
@@ -449,13 +464,25 @@ export class VouchersService {
     const categoryIds = new Set(
       voucher.voucherCategories.map((item) => item.categoryId.toString()),
     );
-    const shopCategoryIds = new Set(voucher.voucherShopCategories.map((item) => item.shopCategoryId.toString()));
-    const productIds = new Set(voucher.voucherProducts.map((item) => item.productId.toString()));
+    const shopCategoryIds = new Set(
+      voucher.voucherShopCategories.map((item) =>
+        item.shopCategoryId.toString(),
+      ),
+    );
+    const productIds = new Set(
+      voucher.voucherProducts.map((item) => item.productId.toString()),
+    );
     return context.productLines.reduce(
       (total, line) =>
         voucher.productScope === 'AllProducts' ||
-        (voucher.productScope === 'Categories' && (voucher.shopId === null ? categoryIds.has(line.categoryId.toString()) : line.shopCategoryIds.some((id) => shopCategoryIds.has(id.toString())))) ||
-        (voucher.productScope === 'SpecificProducts' && productIds.has(line.productId.toString()))
+        (voucher.productScope === 'Categories' &&
+          (voucher.shopId === null
+            ? categoryIds.has(line.categoryId.toString())
+            : line.shopCategoryIds.some((id) =>
+                shopCategoryIds.has(id.toString()),
+              ))) ||
+        (voucher.productScope === 'SpecificProducts' &&
+          productIds.has(line.productId.toString()))
           ? total.add(line.amount)
           : total,
       new Prisma.Decimal(0),
@@ -574,7 +601,10 @@ export class VouchersService {
         shopId,
         discountType: dto.discountType,
         discountTarget: dto.discountTarget,
-        productScope: dto.discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING ? 'AllProducts' : dto.productScope,
+        productScope:
+          dto.discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING
+            ? 'AllProducts'
+            : dto.productScope,
         discountValue: dto.discountValue,
         maxDiscountAmount: dto.maxDiscountAmount ?? null,
         minOrderAmount: dto.minOrderAmount ?? 0,
@@ -584,17 +614,35 @@ export class VouchersService {
         endAt: dto.endAt,
         voucherStatus: VOUCHER_STATUS_ACTIVE,
         createdAt: new Date(),
-        voucherProducts: dto.productIds?.length ? { create: dto.productIds.map((productId) => ({ productId: BigInt(productId) })) } : undefined,
-        voucherShopCategories: shopId !== null && dto.categoryIds?.length ? { create: dto.categoryIds.map((shopCategoryId) => ({ shopCategoryId: BigInt(shopCategoryId) })) } : undefined,
-        voucherCategories: shopId === null && dto.categoryIds?.length
+        voucherProducts: dto.productIds?.length
           ? {
-              create: dto.categoryIds.map((categoryId) => ({
-                categoryId: BigInt(categoryId),
+              create: dto.productIds.map((productId) => ({
+                productId: BigInt(productId),
               })),
             }
           : undefined,
+        voucherShopCategories:
+          shopId !== null && dto.categoryIds?.length
+            ? {
+                create: dto.categoryIds.map((shopCategoryId) => ({
+                  shopCategoryId: BigInt(shopCategoryId),
+                })),
+              }
+            : undefined,
+        voucherCategories:
+          shopId === null && dto.categoryIds?.length
+            ? {
+                create: dto.categoryIds.map((categoryId) => ({
+                  categoryId: BigInt(categoryId),
+                })),
+              }
+            : undefined,
       },
-      include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
+      include: {
+        voucherCategories: { include: { category: true } },
+        voucherProducts: { include: { product: true } },
+        voucherShopCategories: { include: { shopCategory: true } },
+      },
     });
 
     return this.toVoucherResponse(voucher);
@@ -670,25 +718,47 @@ export class VouchersService {
             : {}),
           ...(dto.startAt !== undefined ? { startAt: dto.startAt } : {}),
           ...(dto.endAt !== undefined ? { endAt: dto.endAt } : {}),
-          ...(dto.productScope !== undefined ? { productScope: dto.productScope } : {}),
+          ...(dto.productScope !== undefined
+            ? { productScope: dto.productScope }
+            : {}),
           ...(dto.discountTarget !== undefined
             ? { discountTarget: dto.discountTarget }
             : {}),
           ...(dto.voucherStatus !== undefined
             ? { voucherStatus: dto.voucherStatus }
             : {}),
-          ...(dto.productIds?.length ? { voucherProducts: { create: dto.productIds.map((productId) => ({ productId: BigInt(productId) })) } } : {}),
-          ...(dto.categoryIds?.length
-            ? shopId === null ? {
-                voucherCategories: {
-                  create: dto.categoryIds.map((categoryId) => ({
-                    categoryId: BigInt(categoryId),
+          ...(dto.productIds?.length
+            ? {
+                voucherProducts: {
+                  create: dto.productIds.map((productId) => ({
+                    productId: BigInt(productId),
                   })),
                 },
-              } : { voucherShopCategories: { create: dto.categoryIds.map((shopCategoryId) => ({ shopCategoryId: BigInt(shopCategoryId) })) } }
+              }
+            : {}),
+          ...(dto.categoryIds?.length
+            ? shopId === null
+              ? {
+                  voucherCategories: {
+                    create: dto.categoryIds.map((categoryId) => ({
+                      categoryId: BigInt(categoryId),
+                    })),
+                  },
+                }
+              : {
+                  voucherShopCategories: {
+                    create: dto.categoryIds.map((shopCategoryId) => ({
+                      shopCategoryId: BigInt(shopCategoryId),
+                    })),
+                  },
+                }
             : {}),
         },
-        include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
+        include: {
+          voucherCategories: { include: { category: true } },
+          voucherProducts: { include: { product: true } },
+          voucherShopCategories: { include: { shopCategory: true } },
+        },
       });
     });
 
@@ -705,7 +775,11 @@ export class VouchersService {
     const updated = await this.prisma.voucher.update({
       where: { id },
       data: { voucherStatus: VOUCHER_STATUS_INACTIVE },
-      include: { voucherCategories: { include: { category: true } }, voucherProducts: { include: { product: true } }, voucherShopCategories: { include: { shopCategory: true } } },
+      include: {
+        voucherCategories: { include: { category: true } },
+        voucherProducts: { include: { product: true } },
+        voucherShopCategories: { include: { shopCategory: true } },
+      },
     });
 
     return this.toVoucherResponse(updated);
@@ -718,11 +792,27 @@ export class VouchersService {
     productIds: string[] | undefined,
     shopId: bigint | null,
   ): Promise<void> {
-    if (shopId !== null && discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING) {
-      throw new BadRequestException({ code: 'VOUCHER_SHOP_SHIPPING_NOT_SUPPORTED', message: 'Gian hàng chỉ có thể tạo voucher giảm tiền hàng.', details: [{ field: 'discountTarget' }] });
+    if (
+      shopId !== null &&
+      discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING
+    ) {
+      throw new BadRequestException({
+        code: 'VOUCHER_SHOP_SHIPPING_NOT_SUPPORTED',
+        message: 'Gian hàng chỉ có thể tạo voucher giảm tiền hàng.',
+        details: [{ field: 'discountTarget' }],
+      });
     }
-    if (discountTarget !== VOUCHER_DISCOUNT_TARGET_SHIPPING && ((productScope === 'Categories') !== Boolean(categoryIds?.length) || (productScope === 'SpecificProducts') !== Boolean(productIds?.length))) {
-      throw new BadRequestException({ code: 'VOUCHER_PRODUCT_SCOPE_INVALID', message: 'Phạm vi áp dụng và danh sách sản phẩm hoặc danh mục chưa phù hợp.', details: [{ field: 'productScope' }] });
+    if (
+      discountTarget !== VOUCHER_DISCOUNT_TARGET_SHIPPING &&
+      ((productScope === 'Categories') !== Boolean(categoryIds?.length) ||
+        (productScope === 'SpecificProducts') !== Boolean(productIds?.length))
+    ) {
+      throw new BadRequestException({
+        code: 'VOUCHER_PRODUCT_SCOPE_INVALID',
+        message:
+          'Phạm vi áp dụng và danh sách sản phẩm hoặc danh mục chưa phù hợp.',
+        details: [{ field: 'productScope' }],
+      });
     }
     if (
       discountTarget === VOUCHER_DISCOUNT_TARGET_SHIPPING &&
@@ -736,15 +826,35 @@ export class VouchersService {
     }
     if (productIds?.length) {
       const ids = productIds.map((id) => BigInt(id));
-      const count = await this.prisma.product.count({ where: { id: { in: ids }, isDeleted: false, ...(shopId !== null ? { shopId } : {}) } });
-      if (count !== ids.length) throw new BadRequestException({ code: 'VOUCHER_PRODUCT_INVALID', message: 'Một hoặc nhiều sản phẩm không tồn tại hoặc không thuộc gian hàng.', details: [{ field: 'productIds' }] });
+      const count = await this.prisma.product.count({
+        where: {
+          id: { in: ids },
+          isDeleted: false,
+          ...(shopId !== null ? { shopId } : {}),
+        },
+      });
+      if (count !== ids.length)
+        throw new BadRequestException({
+          code: 'VOUCHER_PRODUCT_INVALID',
+          message:
+            'Một hoặc nhiều sản phẩm không tồn tại hoặc không thuộc gian hàng.',
+          details: [{ field: 'productIds' }],
+        });
     }
     if (!categoryIds?.length) return;
 
     const ids = categoryIds.map((id) => BigInt(id));
     if (shopId !== null) {
-      const categories = await this.prisma.shopCategory.findMany({ where: { id: { in: ids }, shopId, isActive: true }, select: { id: true } });
-      if (categories.length !== ids.length) throw new BadRequestException({ code: 'VOUCHER_SHOP_CATEGORY_INVALID', message: 'Một hoặc nhiều danh mục không thuộc gian hàng.', details: [{ field: 'categoryIds' }] });
+      const categories = await this.prisma.shopCategory.findMany({
+        where: { id: { in: ids }, shopId, isActive: true },
+        select: { id: true },
+      });
+      if (categories.length !== ids.length)
+        throw new BadRequestException({
+          code: 'VOUCHER_SHOP_CATEGORY_INVALID',
+          message: 'Một hoặc nhiều danh mục không thuộc gian hàng.',
+          details: [{ field: 'categoryIds' }],
+        });
       return;
     }
     const categories = await this.prisma.category.findMany({
@@ -768,7 +878,12 @@ export class VouchersService {
   }
 
   private toProductSummaries(items: VoucherRow['voucherProducts']) {
-    return items.map(({ product }) => ({ id: product.id.toString(), idString: product.id.toString(), productName: product.productName, slug: product.slug }));
+    return items.map(({ product }) => ({
+      id: product.id.toString(),
+      idString: product.id.toString(),
+      productName: product.productName,
+      slug: product.slug,
+    }));
   }
 
   private toCategorySummaries(items: VoucherRow['voucherCategories']) {
@@ -860,7 +975,15 @@ export class VouchersService {
       discountTarget:
         voucher.discountTarget as VoucherResponse['discountTarget'],
       productScope: voucher.productScope as VoucherResponse['productScope'],
-      categories: voucher.shopId === null ? this.toCategorySummaries(voucher.voucherCategories) : voucher.voucherShopCategories.map(({ shopCategory }) => ({ id: shopCategory.id.toString(), idString: shopCategory.id.toString(), categoryName: shopCategory.categoryName, slug: shopCategory.slug })),
+      categories:
+        voucher.shopId === null
+          ? this.toCategorySummaries(voucher.voucherCategories)
+          : voucher.voucherShopCategories.map(({ shopCategory }) => ({
+              id: shopCategory.id.toString(),
+              idString: shopCategory.id.toString(),
+              categoryName: shopCategory.categoryName,
+              slug: shopCategory.slug,
+            })),
       products: this.toProductSummaries(voucher.voucherProducts),
       createdAt: voucher.createdAt,
     };

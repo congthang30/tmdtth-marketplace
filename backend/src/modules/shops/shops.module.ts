@@ -10,7 +10,12 @@ import { ShopsService } from './shops.service';
 
 @Module({
   imports: [PrismaModule, AuthModule],
-  controllers: [ShopsController, AdminShopsController, SellerShopCategoriesController, SellerSaleCampaignsController],
+  controllers: [
+    ShopsController,
+    AdminShopsController,
+    SellerShopCategoriesController,
+    SellerSaleCampaignsController,
+  ],
   providers: [ShopsService, SaleCampaignsService],
 })
 export class ShopsModule {}

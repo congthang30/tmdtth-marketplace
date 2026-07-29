@@ -37,17 +37,35 @@ describe('UsersService seller suspension', () => {
     const prisma = prismaMock();
     prisma.user.findUnique
       .mockResolvedValueOnce({ id: 7n, isDeleted: false })
-      .mockResolvedValueOnce({ id: 7n, email: 'seller@example.com', phoneNumber: null, userStatus: 'Suspended', profile: null, ownedShops: [{ id: 101n, shopName: 'A', shopStatus: 'Suspended' }, { id: 102n, shopName: 'B', shopStatus: 'Suspended' }], createdAt: new Date(), lastLoginAt: null });
+      .mockResolvedValueOnce({
+        id: 7n,
+        email: 'seller@example.com',
+        phoneNumber: null,
+        userStatus: 'Suspended',
+        profile: null,
+        ownedShops: [
+          { id: 101n, shopName: 'A', shopStatus: 'Suspended' },
+          { id: 102n, shopName: 'B', shopStatus: 'Suspended' },
+        ],
+        createdAt: new Date(),
+        lastLoginAt: null,
+      });
     prisma.user.update.mockResolvedValue({});
     prisma.shop.updateMany.mockResolvedValue({ count: 2 });
 
-    const result = await new UsersService(prisma as unknown as PrismaService).setUserStatus(admin, '7', 'Suspended');
+    const result = await new UsersService(
+      prisma as unknown as PrismaService,
+    ).setUserStatus(admin, '7', 'Suspended');
 
     expect(prisma.shop.updateMany).toHaveBeenCalledWith({
       where: { ownerUserId: 7n, isDeleted: false },
       data: { shopStatus: 'Suspended', updatedAt: expect.any(Date) },
     });
-    expect(result.shops.every((shop: { shopStatus: string }) => shop.shopStatus === 'Suspended')).toBe(true);
+    expect(
+      result.shops.every(
+        (shop: { shopStatus: string }) => shop.shopStatus === 'Suspended',
+      ),
+    ).toBe(true);
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
     expect(prisma.order.deleteMany).not.toHaveBeenCalled();
   });
@@ -56,10 +74,21 @@ describe('UsersService seller suspension', () => {
     const prisma = prismaMock();
     prisma.user.findUnique
       .mockResolvedValueOnce({ id: 7n, isDeleted: false })
-      .mockResolvedValueOnce({ id: 7n, email: 'seller@example.com', phoneNumber: null, userStatus: 'Active', profile: null, ownedShops: [{ id: 101n, shopName: 'A', shopStatus: 'Suspended' }], createdAt: new Date(), lastLoginAt: null });
+      .mockResolvedValueOnce({
+        id: 7n,
+        email: 'seller@example.com',
+        phoneNumber: null,
+        userStatus: 'Active',
+        profile: null,
+        ownedShops: [{ id: 101n, shopName: 'A', shopStatus: 'Suspended' }],
+        createdAt: new Date(),
+        lastLoginAt: null,
+      });
     prisma.user.update.mockResolvedValue({});
 
-    const result = await new UsersService(prisma as unknown as PrismaService).setUserStatus(admin, '7', 'Active');
+    const result = await new UsersService(
+      prisma as unknown as PrismaService,
+    ).setUserStatus(admin, '7', 'Active');
 
     expect(prisma.shop.updateMany).not.toHaveBeenCalled();
     expect(result.userStatus).toBe('Active');
@@ -68,7 +97,13 @@ describe('UsersService seller suspension', () => {
 
   it('prevents an admin from suspending itself', async () => {
     const prisma = prismaMock();
-    await expect(new UsersService(prisma as unknown as PrismaService).setUserStatus(admin, '99', 'Suspended')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      new UsersService(prisma as unknown as PrismaService).setUserStatus(
+        admin,
+        '99',
+        'Suspended',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });

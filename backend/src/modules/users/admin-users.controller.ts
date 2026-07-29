@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AppRole } from '../auth/app-role.enum';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -21,7 +30,11 @@ export class AdminUsersController {
   }
 
   @Patch(':id')
-  update(@CurrentUser() admin: AuthenticatedUser, @Param('id') id: string, @Body() dto: AdminUpdateUserDto) {
+  update(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateUserDto,
+  ) {
     return this.usersService.adminUpdateUser(admin, id, dto);
   }
 

@@ -50,7 +50,6 @@ export class AdminSellerVerificationController {
     });
   }
 
-
   @Patch(':id/request-revision')
   requestRevision(
     @CurrentUser() user: AuthenticatedUser,

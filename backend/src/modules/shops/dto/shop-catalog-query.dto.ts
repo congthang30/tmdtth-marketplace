@@ -1,5 +1,13 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class ShopCatalogQueryDto {
   @IsOptional()
@@ -21,7 +29,9 @@ export class ShopCatalogQueryDto {
   limit = 12;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @MaxLength(100)
   search?: string;

@@ -119,7 +119,9 @@ export class SellerVerificationService {
       businessRegistrationNumberLast4: dto.businessRegistrationNumber
         ? this.crypto.last4(dto.businessRegistrationNumber)
         : null,
-      businessRegistrationIssuedAt: this.toDate(dto.businessRegistrationIssuedAt),
+      businessRegistrationIssuedAt: this.toDate(
+        dto.businessRegistrationIssuedAt,
+      ),
       businessRegistrationIssuedBy: dto.businessRegistrationIssuedBy ?? null,
       legalRepresentativeName: dto.legalRepresentativeName ?? null,
       registeredAddress: dto.registeredAddress,
@@ -147,28 +149,69 @@ export class SellerVerificationService {
       return this.toProfileResponse(profile);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
-        const hashes = [data.identityNumberHash, data.taxCodeHash, data.businessRegistrationNumberHash].filter((value): value is string => Boolean(value));
+        const hashes = [
+          data.identityNumberHash,
+          data.taxCodeHash,
+          data.businessRegistrationNumberHash,
+        ].filter((value): value is string => Boolean(value));
         const legacy = hashes.length
           ? await this.prisma.sellerVerificationProfile.findFirst({
               where: {
                 verificationStatus: { in: EDITABLE_STATUSES },
                 shop: { ownerUserId: user.id, isDeleted: false },
                 OR: [
-                  ...(data.identityNumberHash ? [{ identityNumberHash: data.identityNumberHash }] : []),
-                  ...(data.taxCodeHash ? [{ taxCodeHash: data.taxCodeHash }] : []),
-                  ...(data.businessRegistrationNumberHash ? [{ businessRegistrationNumberHash: data.businessRegistrationNumberHash }] : []),
+                  ...(data.identityNumberHash
+                    ? [{ identityNumberHash: data.identityNumberHash }]
+                    : []),
+                  ...(data.taxCodeHash
+                    ? [{ taxCodeHash: data.taxCodeHash }]
+                    : []),
+                  ...(data.businessRegistrationNumberHash
+                    ? [
+                        {
+                          businessRegistrationNumberHash:
+                            data.businessRegistrationNumberHash,
+                        },
+                      ]
+                    : []),
                 ],
               },
-              include: { shop: { select: { id: true, shopStatus: true, _count: { select: { products: true, shopOrders: true } } } } },
+              include: {
+                shop: {
+                  select: {
+                    id: true,
+                    shopStatus: true,
+                    _count: { select: { products: true, shopOrders: true } },
+                  },
+                },
+              },
             })
           : null;
-        if (legacy && legacy.shopId !== shop.id && legacy.shop._count.products === 0 && legacy.shop._count.shopOrders === 0) {
+        if (
+          legacy &&
+          legacy.shopId !== shop.id &&
+          legacy.shop._count.products === 0 &&
+          legacy.shop._count.shopOrders === 0
+        ) {
           // ponytail: compatibility for pre-draft-lifecycle junk; remove after legacy onboarding records are cleaned.
-          const profile = await this.prisma.$transaction(async (transaction) => {
-            const moved = await transaction.sellerVerificationProfile.update({ where: { id: legacy.id }, data: { ...data, shopId: shop.id } });
-            await transaction.shop.update({ where: { id: legacy.shopId }, data: { isDeleted: true, shopStatus: 'Deleted', deletedAt: now, updatedAt: now } });
-            return moved;
-          });
+          const profile = await this.prisma.$transaction(
+            async (transaction) => {
+              const moved = await transaction.sellerVerificationProfile.update({
+                where: { id: legacy.id },
+                data: { ...data, shopId: shop.id },
+              });
+              await transaction.shop.update({
+                where: { id: legacy.shopId },
+                data: {
+                  isDeleted: true,
+                  shopStatus: 'Deleted',
+                  deletedAt: now,
+                  updatedAt: now,
+                },
+              });
+              return moved;
+            },
+          );
           return this.toProfileResponse(profile);
         }
         throw new ConflictException({
@@ -183,9 +226,15 @@ export class SellerVerificationService {
 
   async saveContact(user: AuthenticatedUser, dto: SaveSellerContactDto) {
     const shop = await this.findOwnedShop(user.id);
-    const profile = await this.prisma.sellerVerificationProfile.findUnique({ where: { shopId: shop.id } });
+    const profile = await this.prisma.sellerVerificationProfile.findUnique({
+      where: { shopId: shop.id },
+    });
     if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
-      throw new ConflictException({ code: 'SELLER_VERIFICATION_NOT_EDITABLE', message: 'Hồ sơ không ở trạng thái cho phép cập nhật liên hệ.', details: [] });
+      throw new ConflictException({
+        code: 'SELLER_VERIFICATION_NOT_EDITABLE',
+        message: 'Hồ sơ không ở trạng thái cho phép cập nhật liên hệ.',
+        details: [],
+      });
     }
     const email = dto.contactEmail.trim().toLowerCase();
     const updated = await this.prisma.sellerVerificationProfile.update({
@@ -193,7 +242,10 @@ export class SellerVerificationService {
       data: {
         contactName: dto.contactName,
         contactEmail: email,
-        contactEmailVerifiedAt: profile.contactEmail?.toLowerCase() === email ? profile.contactEmailVerifiedAt : null,
+        contactEmailVerifiedAt:
+          profile.contactEmail?.toLowerCase() === email
+            ? profile.contactEmailVerifiedAt
+            : null,
         contactPhone: dto.contactPhone,
         useAccountPhone: dto.useAccountPhone,
         updatedAt: new Date(),
@@ -202,18 +254,29 @@ export class SellerVerificationService {
     return this.toProfileResponse(updated);
   }
 
-
   async confirmContactEmail(user: AuthenticatedUser, email: string) {
     const shop = await this.findOwnedShop(user.id);
-    const profile = await this.prisma.sellerVerificationProfile.findUnique({ where: { shopId: shop.id } });
+    const profile = await this.prisma.sellerVerificationProfile.findUnique({
+      where: { shopId: shop.id },
+    });
     if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
-      throw new ConflictException({ code: 'SELLER_VERIFICATION_NOT_EDITABLE', message: 'Hồ sơ không ở trạng thái cho phép xác minh email.', details: [] });
+      throw new ConflictException({
+        code: 'SELLER_VERIFICATION_NOT_EDITABLE',
+        message: 'Hồ sơ không ở trạng thái cho phép xác minh email.',
+        details: [],
+      });
     }
     const normalizedEmail = email.trim().toLowerCase();
-    return this.prisma.sellerVerificationProfile.update({
-      where: { id: profile.id },
-      data: { contactEmail: normalizedEmail, contactEmailVerifiedAt: new Date(), updatedAt: new Date() },
-    }).then((updated) => this.toProfileResponse(updated));
+    return this.prisma.sellerVerificationProfile
+      .update({
+        where: { id: profile.id },
+        data: {
+          contactEmail: normalizedEmail,
+          contactEmailVerifiedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+      .then((updated) => this.toProfileResponse(updated));
   }
 
   async submitMine(user: AuthenticatedUser) {
@@ -223,7 +286,6 @@ export class SellerVerificationService {
       include: { documents: { where: { isDeleted: false } } },
     });
 
-
     if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
       throw new ConflictException({
         code: 'SELLER_VERIFICATION_NOT_SUBMITTABLE',
@@ -231,20 +293,38 @@ export class SellerVerificationService {
         details: [],
       });
     }
-    if (!profile.contactEmail || !profile.contactEmailVerifiedAt || !profile.contactPhone) {
+    if (
+      !profile.contactEmail ||
+      !profile.contactEmailVerifiedAt ||
+      !profile.contactPhone
+    ) {
       throw new BadRequestException({
         code: 'SELLER_CONTACT_VERIFICATION_REQUIRED',
-        message: 'Hãy xác minh email và cung cấp số điện thoại liên hệ trước khi gửi hồ sơ.',
+        message:
+          'Hãy xác minh email và cung cấp số điện thoại liên hệ trước khi gửi hồ sơ.',
         details: [{ field: 'contact' }],
       });
     }
 
     const requiredDocuments =
       profile.sellerType === SellerType.Individual
-        ? [SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack, SellerDocumentType.FaceVerification]
+        ? [
+            SellerDocumentType.IdentityFront,
+            SellerDocumentType.IdentityBack,
+            SellerDocumentType.FaceVerification,
+          ]
         : profile.businessType === 'HouseholdBusiness'
-          ? [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack, SellerDocumentType.FaceVerification]
-          : [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack];
+          ? [
+              SellerDocumentType.BusinessRegistration,
+              SellerDocumentType.IdentityFront,
+              SellerDocumentType.IdentityBack,
+              SellerDocumentType.FaceVerification,
+            ]
+          : [
+              SellerDocumentType.BusinessRegistration,
+              SellerDocumentType.IdentityFront,
+              SellerDocumentType.IdentityBack,
+            ];
     const uploadedTypes = new Set(
       profile.documents
         .filter((item) => item.documentStatus !== 'Rejected')
@@ -298,17 +378,30 @@ export class SellerVerificationService {
         });
         await transaction.shop.update({
           where: { id: shop.id },
-          data: { slug: publicSlug, shopStatus: 'PendingApproval', rejectionReason: null, updatedAt: now },
+          data: {
+            slug: publicSlug,
+            shopStatus: 'PendingApproval',
+            rejectionReason: null,
+            updatedAt: now,
+          },
         });
         return result;
       });
       if (updated.contactEmail) {
-        await this.emailService.sendSubmissionReceived(updated.contactEmail, updated.contactName ?? updated.legalName, shop.shopName);
+        await this.emailService.sendSubmissionReceived(
+          updated.contactEmail,
+          updated.contactName ?? updated.legalName,
+          shop.shopName,
+        );
       }
       return this.toProfileResponse(updated);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
-        throw new ConflictException({ code: 'SHOP_SLUG_EXISTS', message: 'Tên gian hàng đã được sử dụng. Hãy chọn tên khác.', details: [{ field: 'shopName', slug: publicSlug }] });
+        throw new ConflictException({
+          code: 'SHOP_SLUG_EXISTS',
+          message: 'Tên gian hàng đã được sử dụng. Hãy chọn tên khác.',
+          details: [{ field: 'shopName', slug: publicSlug }],
+        });
       }
       throw error;
     }
@@ -332,8 +425,19 @@ export class SellerVerificationService {
       });
     }
     if (documentType === SellerDocumentType.BusinessRegistration) {
-      const count = await this.prisma.sellerVerificationDocument.count({ where: { verificationProfileId: profile.id, documentType, isDeleted: false } });
-      if (count >= 3) throw new BadRequestException({ code: 'SELLER_DOCUMENT_LIMIT_REACHED', message: 'Chỉ được tải tối đa 3 ảnh giấy chứng nhận đăng ký.', details: [{ field: 'file', documentType }] });
+      const count = await this.prisma.sellerVerificationDocument.count({
+        where: {
+          verificationProfileId: profile.id,
+          documentType,
+          isDeleted: false,
+        },
+      });
+      if (count >= 3)
+        throw new BadRequestException({
+          code: 'SELLER_DOCUMENT_LIMIT_REACHED',
+          message: 'Chỉ được tải tối đa 3 ảnh giấy chứng nhận đăng ký.',
+          details: [{ field: 'file', documentType }],
+        });
     }
     const checksum = this.crypto.checksum(file.buffer);
     const duplicate = await this.prisma.sellerVerificationDocument.findFirst({
@@ -372,7 +476,10 @@ export class SellerVerificationService {
         },
       });
       if (documentType === SellerDocumentType.FaceVerification) {
-        await this.prisma.sellerVerificationProfile.update({ where: { id: profile.id }, data: { faceVerified: true, updatedAt: new Date() } });
+        await this.prisma.sellerVerificationProfile.update({
+          where: { id: profile.id },
+          data: { faceVerified: true, updatedAt: new Date() },
+        });
       }
       return this.toDocumentResponse(document);
     } catch (error) {
@@ -425,8 +532,18 @@ export class SellerVerificationService {
       data: { isDeleted: true, deletedAt: new Date(), updatedAt: new Date() },
     });
     if (document.documentType === SellerDocumentType.FaceVerification) {
-      const remaining = await this.prisma.sellerVerificationDocument.count({ where: { verificationProfileId: profile.id, documentType: SellerDocumentType.FaceVerification, isDeleted: false } });
-      if (remaining === 0) await this.prisma.sellerVerificationProfile.update({ where: { id: profile.id }, data: { faceVerified: false, updatedAt: new Date() } });
+      const remaining = await this.prisma.sellerVerificationDocument.count({
+        where: {
+          verificationProfileId: profile.id,
+          documentType: SellerDocumentType.FaceVerification,
+          isDeleted: false,
+        },
+      });
+      if (remaining === 0)
+        await this.prisma.sellerVerificationProfile.update({
+          where: { id: profile.id },
+          data: { faceVerified: false, updatedAt: new Date() },
+        });
     }
     return { deleted: true };
   }
@@ -547,7 +664,9 @@ export class SellerVerificationService {
       identityIssuedAt: profile.identityIssuedAt,
       identityIssuedBy: profile.identityIssuedBy,
       identityExpiresAt: profile.identityExpiresAt,
-      taxCodeMasked: profile.taxCodeLast4 ? this.crypto.mask(profile.taxCodeLast4 as string) : null,
+      taxCodeMasked: profile.taxCodeLast4
+        ? this.crypto.mask(profile.taxCodeLast4 as string)
+        : null,
       businessRegistrationNumberMasked: this.crypto.mask(
         profile.businessRegistrationNumberLast4 as string | null,
       ),
@@ -569,7 +688,6 @@ export class SellerVerificationService {
       reviews: profile.reviews ?? [],
     };
   }
-
 
   private isUniqueConstraintError(error: unknown): boolean {
     return (

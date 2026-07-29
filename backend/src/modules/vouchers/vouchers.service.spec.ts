@@ -25,8 +25,14 @@ type VoucherEntity = {
   voucherStatus: string;
   discountTarget: string;
   productScope: string;
-  voucherProducts: Array<{ productId: bigint; product: { id: bigint; productName: string; slug: string } }>;
-  voucherShopCategories: Array<{ shopCategoryId: bigint; shopCategory: { id: bigint; categoryName: string; slug: string } }>;
+  voucherProducts: Array<{
+    productId: bigint;
+    product: { id: bigint; productName: string; slug: string };
+  }>;
+  voucherShopCategories: Array<{
+    shopCategoryId: bigint;
+    shopCategory: { id: bigint; categoryName: string; slug: string };
+  }>;
   voucherCategories: Array<{
     categoryId: bigint;
     category: { id: bigint; categoryName: string; slug: string };
@@ -130,7 +136,14 @@ describe('VouchersService.validateVoucher', () => {
       'sale10',
       {
         orderShopId: null,
-        productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+        productLines: [
+          {
+            productId: 1n,
+            categoryId: 1n,
+            shopCategoryIds: [],
+            amount: money('500000'),
+          },
+        ],
         shippingAmount: money('0'),
       },
       now,
@@ -159,7 +172,14 @@ describe('VouchersService.validateVoucher', () => {
         'SALE10',
         {
           orderShopId: 7n,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('500000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,
@@ -185,7 +205,14 @@ describe('VouchersService.validateVoucher', () => {
       'SALE10',
       {
         orderShopId: 5n,
-        productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+        productLines: [
+          {
+            productId: 1n,
+            categoryId: 1n,
+            shopCategoryIds: [],
+            amount: money('500000'),
+          },
+        ],
         shippingAmount: money('0'),
       },
       now,
@@ -206,7 +233,14 @@ describe('VouchersService.validateVoucher', () => {
         'MISSING',
         {
           orderShopId: null,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('100000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('100000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,
@@ -228,7 +262,14 @@ describe('VouchersService.validateVoucher', () => {
         'SALE10',
         {
           orderShopId: null,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('500000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,
@@ -250,7 +291,14 @@ describe('VouchersService.validateVoucher', () => {
         'SALE10',
         {
           orderShopId: null,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('500000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,
@@ -270,7 +318,14 @@ describe('VouchersService.validateVoucher', () => {
         'SALE10',
         {
           orderShopId: null,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('50000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('50000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,
@@ -291,7 +346,14 @@ describe('VouchersService.validateVoucher', () => {
         'SALE10',
         {
           orderShopId: null,
-          productLines: [{ productId: 1n, categoryId: 1n, shopCategoryIds: [], amount: money('500000') }],
+          productLines: [
+            {
+              productId: 1n,
+              categoryId: 1n,
+              shopCategoryIds: [],
+              amount: money('500000'),
+            },
+          ],
           shippingAmount: money('0'),
         },
         now,

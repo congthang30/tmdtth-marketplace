@@ -25,7 +25,10 @@ import {
   SaveSellerVerificationDto,
 } from './dto/save-seller-verification.dto';
 import { UploadSellerDocumentDto } from './dto/upload-seller-document.dto';
-import { SendSellerEmailCodeDto, VerifySellerEmailCodeDto } from './dto/seller-email-verification.dto';
+import {
+  SendSellerEmailCodeDto,
+  VerifySellerEmailCodeDto,
+} from './dto/seller-email-verification.dto';
 import { SellerVerificationEmailService } from './seller-verification-email.service';
 import { SellerVerificationService } from './seller-verification.service';
 
@@ -75,7 +78,6 @@ export class SellerVerificationController {
     return this.service.saveContact(user, dto);
   }
 
-
   @Post('verification/me/documents')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -119,14 +121,36 @@ export class SellerVerificationController {
   }
 
   @Post('verification/me/email/send-code')
-  sendEmailCode(@CurrentUser() user: AuthenticatedUser, @Body() dto: SendSellerEmailCodeDto, @Req() request: Request) {
-    return this.emailService.sendCode(user.id, dto.email, request.ip?.slice(0, 64) ?? 'unknown');
+  sendEmailCode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SendSellerEmailCodeDto,
+    @Req() request: Request,
+  ) {
+    return this.emailService.sendCode(
+      user.id,
+      dto.email,
+      request.ip?.slice(0, 64) ?? 'unknown',
+    );
   }
 
   @Post('verification/me/email/verify-code')
-  async verifyEmailCode(@CurrentUser() user: AuthenticatedUser, @Body() dto: VerifySellerEmailCodeDto) {
-    if (!(await this.emailService.verifyCode(user.id, dto.email, dto.challengeId, dto.code))) {
-      throw new BadRequestException({ code: 'EMAIL_VERIFICATION_CODE_INVALID', message: 'Mã xác minh không đúng hoặc đã hết hạn.', details: [{ field: 'code' }] });
+  async verifyEmailCode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VerifySellerEmailCodeDto,
+  ) {
+    if (
+      !(await this.emailService.verifyCode(
+        user.id,
+        dto.email,
+        dto.challengeId,
+        dto.code,
+      ))
+    ) {
+      throw new BadRequestException({
+        code: 'EMAIL_VERIFICATION_CODE_INVALID',
+        message: 'Mã xác minh không đúng hoặc đã hết hạn.',
+        details: [{ field: 'code' }],
+      });
     }
     return this.service.confirmContactEmail(user, dto.email);
   }

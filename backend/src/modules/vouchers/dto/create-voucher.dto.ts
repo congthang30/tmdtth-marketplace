@@ -32,7 +32,11 @@ const discountTargets = [
   VOUCHER_DISCOUNT_TARGET_SHIPPING,
 ] as const;
 
-const productScopes = ['AllProducts', 'Categories', 'SpecificProducts'] as const;
+const productScopes = [
+  'AllProducts',
+  'Categories',
+  'SpecificProducts',
+] as const;
 
 function trimString({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.trim() : value;

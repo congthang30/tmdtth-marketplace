@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types';
@@ -17,18 +27,33 @@ export class SellerShopCategoriesController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpsertShopCategoryDto) {
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpsertShopCategoryDto,
+  ) {
     return this.shopsService.createOwnedShopCategory(user, dto);
   }
 
   @Patch(':id')
-  update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpsertShopCategoryDto) {
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpsertShopCategoryDto,
+  ) {
     return this.shopsService.updateOwnedShopCategory(user, id, dto);
   }
 
   @Put(':id/products')
-  assignProducts(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: AssignShopCategoryProductsDto) {
-    return this.shopsService.assignOwnedShopCategoryProducts(user, id, dto.productIds);
+  assignProducts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: AssignShopCategoryProductsDto,
+  ) {
+    return this.shopsService.assignOwnedShopCategoryProducts(
+      user,
+      id,
+      dto.productIds,
+    );
   }
 
   @Delete(':id')

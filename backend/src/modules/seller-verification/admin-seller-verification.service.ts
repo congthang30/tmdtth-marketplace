@@ -60,7 +60,16 @@ export class AdminSellerVerificationService {
       this.prisma.sellerVerificationProfile.findMany({
         where,
         include: {
-          shop: { select: { id: true, shopName: true, shopStatus: true, province: true, ward: true, streetAddress: true } },
+          shop: {
+            select: {
+              id: true,
+              shopName: true,
+              shopStatus: true,
+              province: true,
+              ward: true,
+              streetAddress: true,
+            },
+          },
           _count: { select: { documents: true } },
         },
         orderBy,
@@ -99,7 +108,16 @@ export class AdminSellerVerificationService {
     const profile = await this.prisma.sellerVerificationProfile.findUnique({
       where: { id },
       include: {
-        shop: { select: { id: true, shopName: true, shopStatus: true, province: true, ward: true, streetAddress: true } },
+        shop: {
+          select: {
+            id: true,
+            shopName: true,
+            shopStatus: true,
+            province: true,
+            ward: true,
+            streetAddress: true,
+          },
+        },
         documents: {
           where: { isDeleted: false },
           orderBy: { createdAt: 'asc' },
@@ -208,7 +226,6 @@ export class AdminSellerVerificationService {
     return this.storage.signedUrl(document);
   }
 
-
   requestRevision(
     user: AuthenticatedUser,
     profileId: string,
@@ -294,11 +311,38 @@ export class AdminSellerVerificationService {
           where: { verificationProfileId: id, isDeleted: false },
           data: { documentStatus: 'Accepted', updatedAt: now },
         });
-        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Approved', approvedByUserId: user.id, approvedAt: now, rejectionReason: null, updatedAt: now } });
+        await transaction.shop.update({
+          where: { id: profile.shopId },
+          data: {
+            shopStatus: 'Approved',
+            approvedByUserId: user.id,
+            approvedAt: now,
+            rejectionReason: null,
+            updatedAt: now,
+          },
+        });
       } else if (toStatus === VerificationStatus.NeedsRevision) {
-        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Draft', approvedByUserId: null, approvedAt: null, rejectionReason: reason ?? null, updatedAt: now } });
+        await transaction.shop.update({
+          where: { id: profile.shopId },
+          data: {
+            shopStatus: 'Draft',
+            approvedByUserId: null,
+            approvedAt: null,
+            rejectionReason: reason ?? null,
+            updatedAt: now,
+          },
+        });
       } else if (toStatus === VerificationStatus.Rejected) {
-        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Rejected', approvedByUserId: null, approvedAt: null, rejectionReason: reason ?? null, updatedAt: now } });
+        await transaction.shop.update({
+          where: { id: profile.shopId },
+          data: {
+            shopStatus: 'Rejected',
+            approvedByUserId: null,
+            approvedAt: null,
+            rejectionReason: reason ?? null,
+            updatedAt: now,
+          },
+        });
       }
       return {
         id: updated.id.toString(),
@@ -309,11 +353,25 @@ export class AdminSellerVerificationService {
     if (profile.contactEmail) {
       const recipientName = profile.contactName ?? profile.legalName;
       if (toStatus === VerificationStatus.Approved) {
-        await this.emailService.sendApproved(profile.contactEmail, recipientName, profile.shop.shopName);
+        await this.emailService.sendApproved(
+          profile.contactEmail,
+          recipientName,
+          profile.shop.shopName,
+        );
       } else if (toStatus === VerificationStatus.NeedsRevision && reason) {
-        await this.emailService.sendRevisionRequested(profile.contactEmail, recipientName, profile.shop.shopName, reason);
+        await this.emailService.sendRevisionRequested(
+          profile.contactEmail,
+          recipientName,
+          profile.shop.shopName,
+          reason,
+        );
       } else if (toStatus === VerificationStatus.Rejected && reason) {
-        await this.emailService.sendRejected(profile.contactEmail, recipientName, profile.shop.shopName, reason);
+        await this.emailService.sendRejected(
+          profile.contactEmail,
+          recipientName,
+          profile.shop.shopName,
+          reason,
+        );
       }
     }
     return result;

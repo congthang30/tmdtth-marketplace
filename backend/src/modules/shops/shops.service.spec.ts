@@ -205,7 +205,11 @@ describe('ShopsService', () => {
     it('creates a draft shop without reserving the public slug', async () => {
       prisma.shop.findFirst.mockResolvedValue(null);
       prisma.shop.create.mockResolvedValue(
-        createShopEntity({ ownerUserId: sellerUser.id, shopStatus: 'Draft', slug: 'draft-7' }),
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Draft',
+          slug: 'draft-7',
+        }),
       );
 
       const result = await service.createShop(sellerUser, {
@@ -242,9 +246,17 @@ describe('ShopsService', () => {
 
     it('does not reject a display name already used by another draft', async () => {
       prisma.shop.findFirst.mockResolvedValue(null);
-      prisma.shop.create.mockResolvedValue(createShopEntity({ ownerUserId: sellerUser.id, shopStatus: 'Draft', slug: 'draft-7' }));
+      prisma.shop.create.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Draft',
+          slug: 'draft-7',
+        }),
+      );
 
-      await expect(service.createShop(sellerUser, { shopName: 'Seller Home' })).resolves.toBeDefined();
+      await expect(
+        service.createShop(sellerUser, { shopName: 'Seller Home' }),
+      ).resolves.toBeDefined();
       expect(prisma.shop.findUnique).not.toHaveBeenCalled();
       expect(prisma.shop.create).toHaveBeenCalledTimes(1);
     });
@@ -365,22 +377,42 @@ describe('ShopsService', () => {
         pauseStartsAt: startsAt,
         pauseEndsAt: endsAt,
       });
-      const predicate = (service as unknown as {
-        isOperationPaused: (value: ShopEntity, now: Date) => boolean;
-      }).isOperationPaused;
+      const predicate = (
+        service as unknown as {
+          isOperationPaused: (value: ShopEntity, now: Date) => boolean;
+        }
+      ).isOperationPaused;
 
-      expect(predicate.call(service, shop, new Date('2026-07-27T09:59:59.999Z'))).toBe(false);
+      expect(
+        predicate.call(service, shop, new Date('2026-07-27T09:59:59.999Z')),
+      ).toBe(false);
       expect(predicate.call(service, shop, startsAt)).toBe(true);
-      expect(predicate.call(service, shop, new Date('2026-07-27T11:00:00.000Z'))).toBe(true);
+      expect(
+        predicate.call(service, shop, new Date('2026-07-27T11:00:00.000Z')),
+      ).toBe(true);
       expect(predicate.call(service, shop, endsAt)).toBe(false);
-      expect(predicate.call(service, { ...shop, operationMode: 'PausedIndefinitely' }, endsAt)).toBe(true);
+      expect(
+        predicate.call(
+          service,
+          { ...shop, operationMode: 'PausedIndefinitely' },
+          endsAt,
+        ),
+      ).toBe(true);
     });
 
     it('does not report a non-approved shop as accepting orders', () => {
-      const toOperationResponse = (service as unknown as {
-        toOperationResponse: (value: ShopEntity, now: Date) => { isAcceptingOrders: boolean };
-      }).toOperationResponse;
-      expect(toOperationResponse.call(service, createShopEntity(), new Date()).isAcceptingOrders).toBe(false);
+      const toOperationResponse = (
+        service as unknown as {
+          toOperationResponse: (
+            value: ShopEntity,
+            now: Date,
+          ) => { isAcceptingOrders: boolean };
+        }
+      ).toOperationResponse;
+      expect(
+        toOperationResponse.call(service, createShopEntity(), new Date())
+          .isAcceptingOrders,
+      ).toBe(false);
     });
   });
 });

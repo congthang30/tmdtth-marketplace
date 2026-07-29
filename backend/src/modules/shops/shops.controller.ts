@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types';
@@ -26,13 +35,19 @@ export class ShopsController {
 
   @Patch('me/operation/pause-scheduled')
   @UseGuards(JwtAuthGuard)
-  scheduleMyShopPause(@CurrentUser() user: AuthenticatedUser, @Body() dto: ScheduleShopPauseDto) {
+  scheduleMyShopPause(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ScheduleShopPauseDto,
+  ) {
     return this.shopsService.scheduleMyShopPause(user, dto);
   }
 
   @Patch('me/operation/pause-indefinitely')
   @UseGuards(JwtAuthGuard)
-  pauseMyShopIndefinitely(@CurrentUser() user: AuthenticatedUser, @Body() dto: PauseShopIndefinitelyDto) {
+  pauseMyShopIndefinitely(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: PauseShopIndefinitelyDto,
+  ) {
     return this.shopsService.pauseMyShopIndefinitely(user, dto);
   }
 
@@ -43,7 +58,10 @@ export class ShopsController {
   }
 
   @Get(':slug')
-  getPublicShop(@Param('slug') slug: string, @Query() query: ShopCatalogQueryDto) {
+  getPublicShop(
+    @Param('slug') slug: string,
+    @Query() query: ShopCatalogQueryDto,
+  ) {
     return this.shopsService.getPublicShopCatalog(slug, query);
   }
 

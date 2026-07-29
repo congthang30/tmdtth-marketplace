@@ -16,15 +16,27 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
   function setup() {
     const transaction = {
-      sellerVerificationProfile: { update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...nowProfile, ...data })) },
+      sellerVerificationProfile: {
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ ...nowProfile, ...data }),
+          ),
+      },
       sellerVerificationReview: { create: jest.fn().mockResolvedValue({}) },
       sellerVerificationHistory: { create: jest.fn().mockResolvedValue({}) },
-      sellerVerificationDocument: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+      sellerVerificationDocument: {
+        updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+      },
       shop: { update: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      sellerVerificationProfile: { findUnique: jest.fn().mockResolvedValue(nowProfile) },
-      $transaction: jest.fn().mockImplementation((callback) => callback(transaction)),
+      sellerVerificationProfile: {
+        findUnique: jest.fn().mockResolvedValue(nowProfile),
+      },
+      $transaction: jest
+        .fn()
+        .mockImplementation((callback) => callback(transaction)),
     };
     const emailService = {
       sendApproved: jest.fn().mockResolvedValue(undefined),
@@ -46,10 +58,30 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.approve(admin, '11');
 
-    expect(transaction.sellerVerificationProfile.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ verificationStatus: VerificationStatus.Approved }) }));
-    expect(transaction.shop.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shopStatus: 'Approved', approvedByUserId: 99n, rejectionReason: null }) }));
-    expect(transaction.sellerVerificationReview.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reviewStatus: ReviewStatus.Approved }) }));
-    expect(transaction.sellerVerificationDocument.updateMany).toHaveBeenCalledWith({
+    expect(transaction.sellerVerificationProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          verificationStatus: VerificationStatus.Approved,
+        }),
+      }),
+    );
+    expect(transaction.shop.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          shopStatus: 'Approved',
+          approvedByUserId: 99n,
+          rejectionReason: null,
+        }),
+      }),
+    );
+    expect(transaction.sellerVerificationReview.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ reviewStatus: ReviewStatus.Approved }),
+      }),
+    );
+    expect(
+      transaction.sellerVerificationDocument.updateMany,
+    ).toHaveBeenCalledWith({
       where: { verificationProfileId: 11n, isDeleted: false },
       data: { documentStatus: 'Accepted', updatedAt: expect.any(Date) },
     });
@@ -62,8 +94,22 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.requestRevision(admin, '11', { reason });
 
-    expect(transaction.shop.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shopStatus: 'Draft', approvedAt: null, approvedByUserId: null, rejectionReason: reason }) }));
-    expect(emailService.sendRevisionRequested).toHaveBeenCalledWith('seller@example.com', 'Nguyen Van A', 'Nong San Xanh', reason);
+    expect(transaction.shop.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          shopStatus: 'Draft',
+          approvedAt: null,
+          approvedByUserId: null,
+          rejectionReason: reason,
+        }),
+      }),
+    );
+    expect(emailService.sendRevisionRequested).toHaveBeenCalledWith(
+      'seller@example.com',
+      'Nguyen Van A',
+      'Nong San Xanh',
+      reason,
+    );
   });
 
   it('rejects the shop and notifies the seller with the reason', async () => {
@@ -72,7 +118,19 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.reject(admin, '11', { reason });
 
-    expect(transaction.shop.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shopStatus: 'Rejected', rejectionReason: reason }) }));
-    expect(emailService.sendRejected).toHaveBeenCalledWith('seller@example.com', 'Nguyen Van A', 'Nong San Xanh', reason);
+    expect(transaction.shop.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          shopStatus: 'Rejected',
+          rejectionReason: reason,
+        }),
+      }),
+    );
+    expect(emailService.sendRejected).toHaveBeenCalledWith(
+      'seller@example.com',
+      'Nguyen Van A',
+      'Nong San Xanh',
+      reason,
+    );
   });
 });
