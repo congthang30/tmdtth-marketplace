@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  PayoutStatus,
+  BusinessType,
   SellerDocumentAccessRole,
   SellerDocumentType,
   SellerType,
@@ -15,7 +15,7 @@ import { getSellerDocumentSignedUrlTtlSeconds } from '../../config/seller-verifi
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
 import {
-  SaveSellerPayoutAccountDto,
+  SaveSellerContactDto,
   SaveSellerVerificationDto,
 } from './dto/save-seller-verification.dto';
 import { SellerDataCryptoService } from './seller-data-crypto.service';
@@ -54,10 +54,6 @@ export class SellerVerificationService {
         reviews: { orderBy: { createdAt: 'desc' } },
       },
     });
-    const payout = await this.prisma.sellerPayoutAccount.findUnique({
-      where: { shopId: shop.id },
-    });
-
     return {
       shop: {
         id: shop.id.toString(),
@@ -65,7 +61,6 @@ export class SellerVerificationService {
         shopStatus: shop.shopStatus,
       },
       profile: profile ? this.toProfileResponse(profile) : null,
-      payoutAccount: payout ? this.toPayoutResponse(payout) : null,
     };
   }
 
@@ -96,7 +91,8 @@ export class SellerVerificationService {
         dto.sellerType === SellerType.Business ? dto.businessType : null,
       legalName: dto.legalName,
       identityDocumentType:
-        dto.sellerType === SellerType.Individual
+        dto.sellerType === SellerType.Individual ||
+        dto.businessType === BusinessType.HouseholdBusiness
           ? dto.identityDocumentType
           : null,
       identityNumberEncrypted: dto.identityNumber
@@ -151,6 +147,30 @@ export class SellerVerificationService {
       return this.toProfileResponse(profile);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
+        const hashes = [data.identityNumberHash, data.taxCodeHash, data.businessRegistrationNumberHash].filter((value): value is string => Boolean(value));
+        const legacy = hashes.length
+          ? await this.prisma.sellerVerificationProfile.findFirst({
+              where: {
+                verificationStatus: { in: EDITABLE_STATUSES },
+                shop: { ownerUserId: user.id, isDeleted: false },
+                OR: [
+                  ...(data.identityNumberHash ? [{ identityNumberHash: data.identityNumberHash }] : []),
+                  ...(data.taxCodeHash ? [{ taxCodeHash: data.taxCodeHash }] : []),
+                  ...(data.businessRegistrationNumberHash ? [{ businessRegistrationNumberHash: data.businessRegistrationNumberHash }] : []),
+                ],
+              },
+              include: { shop: { select: { id: true, shopStatus: true, _count: { select: { products: true, shopOrders: true } } } } },
+            })
+          : null;
+        if (legacy && legacy.shopId !== shop.id && legacy.shop._count.products === 0 && legacy.shop._count.shopOrders === 0) {
+          // ponytail: compatibility for pre-draft-lifecycle junk; remove after legacy onboarding records are cleaned.
+          const profile = await this.prisma.$transaction(async (transaction) => {
+            const moved = await transaction.sellerVerificationProfile.update({ where: { id: legacy.id }, data: { ...data, shopId: shop.id } });
+            await transaction.shop.update({ where: { id: legacy.shopId }, data: { isDeleted: true, shopStatus: 'Deleted', deletedAt: now, updatedAt: now } });
+            return moved;
+          });
+          return this.toProfileResponse(profile);
+        }
         throw new ConflictException({
           code: 'SELLER_LEGAL_DATA_ALREADY_USED',
           message: 'Thông tin định danh hoặc mã số thuế đã được sử dụng.',
@@ -161,49 +181,27 @@ export class SellerVerificationService {
     }
   }
 
-  async savePayout(user: AuthenticatedUser, dto: SaveSellerPayoutAccountDto) {
+  async saveContact(user: AuthenticatedUser, dto: SaveSellerContactDto) {
     const shop = await this.findOwnedShop(user.id);
-    const profile = await this.prisma.sellerVerificationProfile.findUnique({
-      where: { shopId: shop.id },
-    });
+    const profile = await this.prisma.sellerVerificationProfile.findUnique({ where: { shopId: shop.id } });
     if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
-      throw new ConflictException({
-        code: 'SELLER_VERIFICATION_NOT_EDITABLE',
-        message:
-          'Hãy tạo hồ sơ có thể chỉnh sửa trước khi lưu tài khoản nhận tiền.',
-        details: [],
-      });
+      throw new ConflictException({ code: 'SELLER_VERIFICATION_NOT_EDITABLE', message: 'Hồ sơ không ở trạng thái cho phép cập nhật liên hệ.', details: [] });
     }
-
-    const now = new Date();
-    const account = await this.prisma.sellerPayoutAccount.upsert({
-      where: { shopId: shop.id },
-      create: {
-        shopId: shop.id,
-        bankCode: dto.bankCode,
-        bankNameSnapshot: dto.bankName,
-        accountNumberEncrypted: this.crypto.encrypt(dto.accountNumber),
-        accountNumberHash: this.crypto.hash(dto.accountNumber),
-        accountNumberLast4: this.crypto.last4(dto.accountNumber),
-        accountHolderName: dto.accountHolderName,
-        createdAt: now,
-      },
-      update: {
-        bankCode: dto.bankCode,
-        bankNameSnapshot: dto.bankName,
-        accountNumberEncrypted: this.crypto.encrypt(dto.accountNumber),
-        accountNumberHash: this.crypto.hash(dto.accountNumber),
-        accountNumberLast4: this.crypto.last4(dto.accountNumber),
-        accountHolderName: dto.accountHolderName,
-        payoutStatus: PayoutStatus.Draft,
-        verifiedAt: null,
-        verifiedByUserId: null,
-        isActive: true,
-        updatedAt: now,
+    const email = dto.contactEmail.trim().toLowerCase();
+    const updated = await this.prisma.sellerVerificationProfile.update({
+      where: { id: profile.id },
+      data: {
+        contactName: dto.contactName,
+        contactEmail: email,
+        contactEmailVerifiedAt: profile.contactEmail?.toLowerCase() === email ? profile.contactEmailVerifiedAt : null,
+        contactPhone: dto.contactPhone,
+        useAccountPhone: dto.useAccountPhone,
+        updatedAt: new Date(),
       },
     });
-    return this.toPayoutResponse(account);
+    return this.toProfileResponse(updated);
   }
+
 
   async confirmContactEmail(user: AuthenticatedUser, email: string) {
     const shop = await this.findOwnedShop(user.id);
@@ -224,9 +222,7 @@ export class SellerVerificationService {
       where: { shopId: shop.id },
       include: { documents: { where: { isDeleted: false } } },
     });
-    const payout = await this.prisma.sellerPayoutAccount.findUnique({
-      where: { shopId: shop.id },
-    });
+
 
     if (!profile || !EDITABLE_STATUSES.includes(profile.verificationStatus)) {
       throw new ConflictException({
@@ -235,14 +231,24 @@ export class SellerVerificationService {
         details: [],
       });
     }
+    if (!profile.contactEmail || !profile.contactEmailVerifiedAt || !profile.contactPhone) {
+      throw new BadRequestException({
+        code: 'SELLER_CONTACT_VERIFICATION_REQUIRED',
+        message: 'Hãy xác minh email và cung cấp số điện thoại liên hệ trước khi gửi hồ sơ.',
+        details: [{ field: 'contact' }],
+      });
+    }
+
     const requiredDocuments =
       profile.sellerType === SellerType.Individual
         ? [SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack, SellerDocumentType.FaceVerification]
         : profile.businessType === 'HouseholdBusiness'
-          ? [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack]
-          : [SellerDocumentType.BusinessRegistration];
+          ? [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack, SellerDocumentType.FaceVerification]
+          : [SellerDocumentType.BusinessRegistration, SellerDocumentType.IdentityFront, SellerDocumentType.IdentityBack];
     const uploadedTypes = new Set(
-      profile.documents.map((item) => item.documentType),
+      profile.documents
+        .filter((item) => item.documentStatus !== 'Rejected')
+        .map((item) => item.documentType),
     );
     const missing = requiredDocuments.filter(
       (type) => !uploadedTypes.has(type),
@@ -263,30 +269,49 @@ export class SellerVerificationService {
       VerificationStatus.Submitted,
     );
     const now = new Date();
-    const updated = await this.prisma.$transaction(async (transaction) => {
-      const result = await transaction.sellerVerificationProfile.update({
-        where: { id: profile.id },
-        data: {
-          verificationStatus: VerificationStatus.Submitted,
-          submittedAt: now,
-          updatedAt: now,
-        },
+    const publicSlug = shop.shopName
+      .replace(/[đĐ]/g, 'd')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 180);
+    try {
+      const updated = await this.prisma.$transaction(async (transaction) => {
+        const result = await transaction.sellerVerificationProfile.update({
+          where: { id: profile.id },
+          data: {
+            verificationStatus: VerificationStatus.Submitted,
+            submittedAt: now,
+            updatedAt: now,
+          },
+        });
+        await transaction.sellerVerificationHistory.create({
+          data: {
+            verificationProfileId: profile.id,
+            fromStatus: profile.verificationStatus,
+            toStatus: VerificationStatus.Submitted,
+            changedByUserId: user.id,
+            createdAt: now,
+          },
+        });
+        await transaction.shop.update({
+          where: { id: shop.id },
+          data: { slug: publicSlug, shopStatus: 'PendingApproval', rejectionReason: null, updatedAt: now },
+        });
+        return result;
       });
-      await transaction.sellerVerificationHistory.create({
-        data: {
-          verificationProfileId: profile.id,
-          fromStatus: profile.verificationStatus,
-          toStatus: VerificationStatus.Submitted,
-          changedByUserId: user.id,
-          createdAt: now,
-        },
-      });
-      return result;
-    });
-    if (updated.contactEmail) {
-      await this.emailService.sendSubmissionReceived(updated.contactEmail, updated.contactName ?? updated.legalName, shop.shopName);
+      if (updated.contactEmail) {
+        await this.emailService.sendSubmissionReceived(updated.contactEmail, updated.contactName ?? updated.legalName, shop.shopName);
+      }
+      return this.toProfileResponse(updated);
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException({ code: 'SHOP_SLUG_EXISTS', message: 'Tên gian hàng đã được sử dụng. Hãy chọn tên khác.', details: [{ field: 'shopName', slug: publicSlug }] });
+      }
+      throw error;
     }
-    return this.toProfileResponse(updated);
   }
 
   async uploadDocument(
@@ -346,6 +371,9 @@ export class SellerVerificationService {
           uploadedByUserId: user.id,
         },
       });
+      if (documentType === SellerDocumentType.FaceVerification) {
+        await this.prisma.sellerVerificationProfile.update({ where: { id: profile.id }, data: { faceVerified: true, updatedAt: new Date() } });
+      }
       return this.toDocumentResponse(document);
     } catch (error) {
       await this.storage.delete({
@@ -396,6 +424,10 @@ export class SellerVerificationService {
       where: { id: document.id },
       data: { isDeleted: true, deletedAt: new Date(), updatedAt: new Date() },
     });
+    if (document.documentType === SellerDocumentType.FaceVerification) {
+      const remaining = await this.prisma.sellerVerificationDocument.count({ where: { verificationProfileId: profile.id, documentType: SellerDocumentType.FaceVerification, isDeleted: false } });
+      if (remaining === 0) await this.prisma.sellerVerificationProfile.update({ where: { id: profile.id }, data: { faceVerified: false, updatedAt: new Date() } });
+    }
     return { deleted: true };
   }
 
@@ -473,6 +505,18 @@ export class SellerVerificationService {
         details: [],
       });
     }
+    if (dto.dateOfBirth) {
+      const birthDate = new Date(dto.dateOfBirth);
+      const minimumBirthDate = new Date(today);
+      minimumBirthDate.setFullYear(minimumBirthDate.getFullYear() - 18);
+      if (birthDate > minimumBirthDate) {
+        throw new BadRequestException({
+          code: 'SELLER_MINIMUM_AGE_REQUIRED',
+          message: 'Người đăng ký phải đủ 18 tuổi.',
+          details: [{ field: 'dateOfBirth' }],
+        });
+      }
+    }
     if (
       dto.identityExpiresAt &&
       dto.identityIssuedAt &&
@@ -526,18 +570,6 @@ export class SellerVerificationService {
     };
   }
 
-  private toPayoutResponse(account: Record<string, unknown>) {
-    return {
-      id: String(account.id),
-      bankCode: account.bankCode,
-      bankName: account.bankNameSnapshot,
-      accountNumberMasked: this.crypto.mask(
-        account.accountNumberLast4 as string,
-      ),
-      accountHolderName: account.accountHolderName,
-      payoutStatus: account.payoutStatus,
-    };
-  }
 
   private isUniqueConstraintError(error: unknown): boolean {
     return (

@@ -40,11 +40,11 @@ export class SellerDocumentStorageService {
     storagePublicId: string;
     resourceType: string;
     format: string;
-  }): { url: string; expiresAt: string } {
+  }): { signedUrl: string; expiresIn: number; expiresAt: string } {
     this.assertConfigured();
     const expiresAt =
       Math.floor(Date.now() / 1000) + getSellerDocumentSignedUrlTtlSeconds();
-    const url = cloudinary.url(asset.storagePublicId, {
+    const signedUrl = cloudinary.url(asset.storagePublicId, {
       type: 'authenticated',
       resource_type: asset.resourceType,
       format: asset.format,
@@ -52,7 +52,11 @@ export class SellerDocumentStorageService {
       secure: true,
       expires_at: expiresAt,
     });
-    return { url, expiresAt: new Date(expiresAt * 1000).toISOString() };
+    return {
+      signedUrl,
+      expiresIn: getSellerDocumentSignedUrlTtlSeconds(),
+      expiresAt: new Date(expiresAt * 1000).toISOString(),
+    };
   }
 
   async delete(asset: {

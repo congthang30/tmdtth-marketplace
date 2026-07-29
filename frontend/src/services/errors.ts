@@ -58,6 +58,44 @@ const apiErrorMessages: Record<string, string> = {
   PRODUCT_SLUG_EXISTS: "Đường dẫn sản phẩm đã tồn tại trong gian hàng.",
   PRODUCT_VARIANT_NOT_FOUND: "Không tìm thấy phân loại sản phẩm.",
   PRODUCT_VARIANT_SKU_EXISTS: "Mã SKU đã tồn tại trong sản phẩm này.",
+  SELLER_LEGAL_DATA_ALREADY_USED:
+    "Số CCCD, mã số thuế hoặc mã đăng ký kinh doanh này đã được dùng cho một hồ sơ khác. Vui lòng kiểm tra lại hoặc liên hệ bộ phận hỗ trợ.",
+  SELLER_CONTACT_VERIFICATION_REQUIRED:
+    "Chưa thể gửi hồ sơ. Vui lòng xác minh email và nhập số điện thoại liên hệ.",
+  SELLER_DOCUMENT_CONTENT_INVALID:
+    "Nội dung tệp không đúng định dạng ảnh. Vui lòng chọn một tệp JPG hoặc PNG hợp lệ.",
+  SELLER_DOCUMENT_DUPLICATE:
+    "Ảnh này đã được tải lên. Vui lòng chọn ảnh khác hoặc giữ ảnh hiện có.",
+  SELLER_DOCUMENT_EMPTY:
+    "Tệp đã chọn không có nội dung. Vui lòng chọn lại ảnh giấy tờ.",
+  SELLER_DOCUMENT_EXTENSION_INVALID:
+    "Đuôi tệp không khớp với định dạng ảnh. Vui lòng chọn tệp JPG hoặc PNG hợp lệ.",
+  SELLER_DOCUMENT_ID_INVALID: "Mã tài liệu không hợp lệ. Vui lòng tải lại trang.",
+  SELLER_DOCUMENT_ISSUED_IN_FUTURE:
+    "Ngày cấp giấy tờ không được sau ngày hiện tại. Vui lòng kiểm tra lại ngày cấp.",
+  SELLER_DOCUMENT_LIMIT_REACHED:
+    "Đã đủ 3 ảnh giấy chứng nhận đăng ký. Hãy xóa một ảnh trước khi tải ảnh khác.",
+  SELLER_DOCUMENT_MIME_INVALID:
+    "Định dạng tệp không được hỗ trợ. Vui lòng chọn ảnh JPG hoặc PNG.",
+  SELLER_DOCUMENT_NOT_FOUND:
+    "Không tìm thấy tài liệu này. Tài liệu có thể đã bị xóa; vui lòng tải lại trang.",
+  SELLER_DOCUMENT_REQUIRED: "Vui lòng chọn ảnh giấy tờ cần tải lên.",
+  SELLER_DOCUMENT_TOO_LARGE:
+    "Ảnh vượt quá dung lượng cho phép. Vui lòng giảm dung lượng hoặc chọn ảnh khác.",
+  SELLER_DOCUMENT_EXPIRY_INVALID:
+    "Ngày hết hạn phải sau ngày cấp giấy tờ. Vui lòng kiểm tra lại hai ngày.",
+  SELLER_DOCUMENTS_REQUIRED: "Hồ sơ còn thiếu tài liệu bắt buộc.",
+  SELLER_VERIFICATION_ID_INVALID: "Mã hồ sơ xác minh không hợp lệ.",
+  SELLER_VERIFICATION_NOT_FOUND: "Không tìm thấy hồ sơ xác minh người bán.",
+  SELLER_VERIFICATION_NOT_SUBMITTABLE:
+    "Hồ sơ hiện không thể gửi xét duyệt. Vui lòng tải lại trang để kiểm tra trạng thái mới nhất.",
+  SELLER_VERIFICATION_TRANSITION_INVALID:
+    "Không thể đổi hồ sơ sang trạng thái này từ trạng thái hiện tại.",
+  SELLER_MINIMUM_AGE_REQUIRED: "Người đăng ký phải đủ 18 tuổi. Vui lòng kiểm tra lại ngày sinh.",
+  SELLER_VERIFICATION_NOT_EDITABLE:
+    "Hồ sơ đã được gửi xét duyệt nên hiện không thể chỉnh sửa.",
+  EMAIL_VERIFICATION_CODE_INVALID:
+    "Mã xác minh email không đúng hoặc đã hết hạn. Vui lòng kiểm tra mã hoặc gửi mã mới.",
   PROFILE_FULL_NAME_REQUIRED: "Vui lòng nhập họ và tên.",
   SHIPMENT_INVALID_STATUS_TRANSITION:
     "Không thể chuyển vận đơn sang trạng thái đã chọn.",
@@ -108,6 +146,52 @@ const apiErrorMessages: Record<string, string> = {
   VOUCHER_NO_LONGER_AVAILABLE: "Mã giảm giá đã hết lượt sử dụng.",
   VOUCHER_SHOP_MISMATCH: "Mã giảm giá này không áp dụng cho gian hàng này.",
 };
+
+const documentNames: Record<string, string> = {
+  BusinessRegistration: "giấy chứng nhận đăng ký",
+  IdentityFront: "mặt trước giấy tờ tùy thân",
+  IdentityBack: "mặt sau giấy tờ tùy thân",
+  FaceVerification: "ảnh khuôn mặt",
+  LegalRepresentativeIdentity: "giấy tờ người đại diện pháp luật",
+  Passport: "hộ chiếu",
+};
+
+const fieldNames: Record<string, string> = {
+  shopName: "tên cửa hàng",
+  legalName: "họ tên hoặc tên pháp lý",
+  identityNumber: "số CCCD/số định danh",
+  dateOfBirth: "ngày sinh",
+  registeredAddress: "địa chỉ cư trú hoặc đăng ký",
+  businessRegistrationNumber: "mã số đăng ký kinh doanh",
+  legalRepresentativeName: "người đại diện pháp luật",
+  contactName: "người liên hệ",
+  contactEmail: "địa chỉ email",
+  contactPhone: "số điện thoại",
+  code: "mã xác minh email",
+};
+
+type ErrorDetail = { field?: unknown; documentType?: unknown; message?: unknown };
+
+function detailObjects(details: unknown[]): ErrorDetail[] {
+  return details.filter((detail): detail is ErrorDetail => typeof detail === "object" && detail !== null);
+}
+
+function getDetailedApiErrorMessage(code: string, details: unknown[], status?: number) {
+  const parsedDetails = detailObjects(details);
+  if (code === "SELLER_DOCUMENTS_REQUIRED") {
+    const missing = parsedDetails
+      .map((detail) => typeof detail.documentType === "string" ? documentNames[detail.documentType] : undefined)
+      .filter((name): name is string => Boolean(name));
+    if (missing.length) return `Hồ sơ còn thiếu ${missing.join(", ")}. Vui lòng tải đủ trước khi gửi xét duyệt.`;
+  }
+  if (code === "VALIDATION_ERROR") {
+    const fields = parsedDetails
+      .map((detail) => typeof detail.field === "string" ? fieldNames[detail.field] : undefined)
+      .filter((name): name is string => Boolean(name));
+    if (fields.length) return `Thông tin ${[...new Set(fields)].join(", ")} chưa hợp lệ. Vui lòng kiểm tra lại.`;
+  }
+  return getApiErrorMessage(code, status);
+}
 
 function getApiErrorMessage(code: string, status?: number) {
   if (apiErrorMessages[code]) {
@@ -170,7 +254,7 @@ export function normalizeApiError(error: unknown) {
     if (isApiErrorPayload(payload)) {
       return new ApiClientError({
         code: payload.error.code,
-        message: getApiErrorMessage(payload.error.code, status),
+        message: getDetailedApiErrorMessage(payload.error.code, payload.error.details ?? [], status),
         status,
         details: payload.error.details,
       });
@@ -191,8 +275,8 @@ export function normalizeApiError(error: unknown) {
 
   if (error instanceof Error) {
     return new ApiClientError({
-      code: "UNKNOWN_ERROR",
-      message: "Đã xảy ra lỗi. Vui lòng thử lại.",
+      code: "CLIENT_ERROR",
+      message: error.message || "Không thể hoàn tất thao tác. Vui lòng thử lại.",
     });
   }
 

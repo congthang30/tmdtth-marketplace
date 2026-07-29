@@ -17,12 +17,20 @@ export type Shop = {
   streetAddress: string | null;
   taxCode: string | null;
   shopStatus: string;
+  operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+  pauseStartsAt: string | null;
+  pauseEndsAt: string | null;
+  pauseReason: string | null;
+  operationUpdatedAt: string | null;
+  isAcceptingOrders: boolean;
   approvedByUserId: string | null;
   approvedByUserIdString: string | null;
   approvedAt: string | null;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string | null;
+  sellerVerificationId?: string | null;
+  verificationStatus?: string | null;
 };
 
 export type ShopRequest = {

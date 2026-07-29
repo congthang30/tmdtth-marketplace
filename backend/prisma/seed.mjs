@@ -74,292 +74,65 @@ const users = [
     phoneNumber: '0900000003',
     fullName: 'Customer Demo',
   },
+  ...Array.from({ length: 9 }, (_, index) => ({ email: `seller${index + 2}@example.com`, phoneNumber: `09100000${String(index + 2).padStart(2, '0')}`, fullName: `Seller Demo ${index + 2}` })),
 ];
 
-const categoryTree = [
-  {
-    name: 'Đồ nhà bếp',
-    slug: 'do-nha-bep',
-    sortOrder: 10,
-    children: [
-      { name: 'Nồi/chảo', slug: 'noi-chao', sortOrder: 11 },
-      { name: 'Máy xay', slug: 'may-xay', sortOrder: 12 },
-      {
-        name: 'Hộp đựng thực phẩm',
-        slug: 'hop-dung-thuc-pham',
-        sortOrder: 13,
-      },
-    ],
-  },
-  {
-    name: 'Đồ phòng khách',
-    slug: 'do-phong-khach',
-    sortOrder: 20,
-    children: [
-      { name: 'Đèn trang trí', slug: 'den-trang-tri', sortOrder: 21 },
-      { name: 'Kệ/tủ', slug: 'ke-tu', sortOrder: 22 },
-    ],
-  },
-  {
-    name: 'Đồ phòng ngủ',
-    slug: 'do-phong-ngu',
-    sortOrder: 30,
-    children: [
-      { name: 'Chăn ga gối', slug: 'chan-ga-goi', sortOrder: 31 },
-      { name: 'Đèn ngủ', slug: 'den-ngu', sortOrder: 32 },
-    ],
-  },
-  {
-    name: 'Đồ vệ sinh',
-    slug: 'do-ve-sinh',
-    sortOrder: 40,
-    children: [
-      { name: 'Kệ nhà tắm', slug: 'ke-nha-tam', sortOrder: 41 },
-      { name: 'Dụng cụ vệ sinh', slug: 'dung-cu-ve-sinh', sortOrder: 42 },
-    ],
-  },
-  {
-    name: 'Thiết bị gia dụng nhỏ',
-    slug: 'thiet-bi-gia-dung-nho',
-    sortOrder: 50,
-    children: [
-      { name: 'Máy hút bụi', slug: 'may-hut-bui', sortOrder: 51 },
-      { name: 'Bàn ủi', slug: 'ban-ui', sortOrder: 52 },
-      { name: 'Máy sấy', slug: 'may-say', sortOrder: 53 },
-    ],
-  },
+const categoryCatalog = [
+  ['Thời trang nam', 'thoi-trang-nam', 'mens-fashion-shirt'],
+  ['Điện thoại & phụ kiện', 'dien-thoai-phu-kien', 'smartphone-accessories'],
+  ['Thiết bị điện tử', 'thiet-bi-dien-tu', 'television-electronics'],
+  ['Máy tính & laptop', 'may-tinh-laptop', 'laptop-computer'],
+  ['Máy ảnh & máy quay phim', 'may-anh-may-quay', 'camera-photography'],
+  ['Đồng hồ', 'dong-ho', 'wrist-watch'],
+  ['Giày dép nam', 'giay-dep-nam', 'mens-shoes-sneakers'],
+  ['Thiết bị điện gia dụng', 'thiet-bi-dien-gia-dung', 'home-appliance-kettle'],
+  ['Thể thao & du lịch', 'the-thao-du-lich', 'sports-football'],
+  ['Ô tô & xe máy & xe đạp', 'o-to-xe-may-xe-dap', 'motorcycle-bicycle'],
+  ['Thời trang nữ', 'thoi-trang-nu', 'womens-fashion-dress'],
+  ['Mẹ & bé', 'me-va-be', 'baby-products'],
+  ['Nhà cửa & đời sống', 'nha-cua-doi-song', 'cookware-home'],
+  ['Sắc đẹp', 'sac-dep', 'makeup-cosmetics'],
+  ['Sức khỏe', 'suc-khoe', 'health-supplements'],
+  ['Giày dép nữ', 'giay-dep-nu', 'womens-high-heels'],
+  ['Túi ví nữ', 'tui-vi-nu', 'womens-handbag'],
+  ['Phụ kiện & trang sức nữ', 'phu-kien-trang-suc-nu', 'womens-jewelry'],
+  ['Bách hóa online', 'bach-hoa-online', 'groceries-food'],
+  ['Nhà sách online', 'nha-sach-online', 'books-stationery'],
+  ['Balo & túi ví nam', 'balo-tui-vi-nam', 'mens-backpack'],
+  ['Đồ chơi', 'do-choi', 'teddy-bear-toys'],
+  ['Chăm sóc thú cưng', 'cham-soc-thu-cung', 'pet-food-bowl'],
+  ['Dụng cụ & thiết bị tiện ích', 'dung-cu-thiet-bi-tien-ich', 'home-tools'],
+  ['Thời trang trẻ em', 'thoi-trang-tre-em', 'kids-clothing'],
+  ['Giặt giũ & chăm sóc nhà cửa', 'giat-giu-cham-soc-nha-cua', 'laundry-detergent'],
+  ['Voucher & dịch vụ', 'voucher-dich-vu', 'gift-voucher'],
 ];
+const imageUrl = (keyword, index) => `https://loremflickr.com/640/640/${keyword}?lock=${index + 100}`;
+const categoryTree = categoryCatalog.map(([name, slug, keyword], index) => ({
+  name, slug, imageUrl: imageUrl(keyword, index), sortOrder: (index + 1) * 10, children: [],
+}));
+const attributeSeeds = [];
 
-const attributeSeeds = [
-  {
-    categorySlug: 'noi-chao',
-    attributeName: 'Chất liệu',
-    dataType: 'text',
-    isRequired: true,
-  },
-  {
-    categorySlug: 'noi-chao',
-    attributeName: 'Đường kính',
-    dataType: 'number',
-    unit: 'cm',
-  },
-  {
-    categorySlug: 'den-trang-tri',
-    attributeName: 'Màu ánh sáng',
-    dataType: 'text',
-  },
-  {
-    categorySlug: 'den-ngu',
-    attributeName: 'Màu sắc',
-    dataType: 'text',
-  },
-  {
-    categorySlug: 'den-ngu',
-    attributeName: 'Công suất',
-    dataType: 'number',
-    unit: 'W',
-  },
-  {
-    categorySlug: 'chan-ga-goi',
-    attributeName: 'Kích thước',
-    dataType: 'text',
-    isRequired: true,
-  },
-  {
-    categorySlug: 'thiet-bi-gia-dung-nho',
-    attributeName: 'Công suất',
-    dataType: 'number',
-    unit: 'W',
-  },
-];
+const productSeeds = Array.from({ length: 200 }, (_, index) => {
+  const categoryIndex = index % categoryCatalog.length;
+  const [categoryName, categorySlug, keyword] = categoryCatalog[categoryIndex];
+  const number = String(index + 1).padStart(3, '0');
+  const price = 79000 + (index % 20) * 35000;
+  const productName = `${categoryName} cao cấp ${number}`;
+  return {
+    categorySlug,
+    productName,
+    slug: `${categorySlug}-san-pham-${number}`,
+    description: `${productName} là sản phẩm demo thuộc danh mục ${categoryName}, có thông tin và tồn kho đầy đủ.`,
+    brand: ['Nova', 'Lumi', 'An Gia', 'Mộc Việt', 'VinaHome'][index % 5],
+    basePrice: String(price), compareAtPrice: String(Math.round(price * 1.15)),
+    warrantyMonths: index % 3 === 0 ? 12 : 6, weightGram: 300 + (index % 15) * 100,
+    images: [{ imageUrl: imageUrl(keyword, index + 1000), altText: productName, sortOrder: 1, isThumbnail: true }],
+    variants: [{ sku: `DEMO-${number}`, variantName: 'Tiêu chuẩn', variantOptionJson: JSON.stringify({ version: 'standard' }), price: String(price), compareAtPrice: String(Math.round(price * 1.15)), weightGram: 300 + (index % 15) * 100, stock: 20 + (index % 81), attributes: {} }],
+  };
+});
 
-// Carriers are a fixed registry (not user-owned): GHN (Giao Hang Nhanh) via
-// its real sandbox/test API. serviceCode is our internal identifier;
-// carrierServiceCode is what gets sent to the carrier API (GHN
-// service_type_id).
-const shippingCompanySeeds = [
-  {
-    provider: 'GHN',
-    companyName: 'Giao Hàng Nhanh (GHN)',
-    slug: 'ghn',
-    email: 'api@ghn.vn',
-    phoneNumber: '19001234',
-    taxCode: null,
-    addressText: null,
-    services: [
-      {
-        serviceCode: 'GHN_STANDARD',
-        serviceName: 'GHN Chuẩn',
-        carrierServiceCode: '2',
-        estimatedMinDays: 2,
-        estimatedMaxDays: 4,
-      },
-      {
-        serviceCode: 'GHN_EXPRESS',
-        serviceName: 'GHN Nhanh',
-        carrierServiceCode: '5',
-        estimatedMinDays: 1,
-        estimatedMaxDays: 2,
-      },
-    ],
-  },
-];
-
-const voucherSeeds = [
-  {
-    voucherCode: 'SAN10',
-    voucherName: 'Ưu đãi toàn hệ thống 10%',
-    scope: 'Platform',
-    discountTarget: 'Product',
-    discountType: 'Percentage',
-    discountValue: '10',
-    maxDiscountAmount: '50000',
-    minOrderAmount: '200000',
-    usageLimit: 1000,
-  },
-  {
-    voucherCode: 'SAN50K',
-    voucherName: 'Ưu đãi toàn hệ thống 50.000đ',
-    scope: 'Platform',
-    discountTarget: 'Product',
-    discountType: 'FixedAmount',
-    discountValue: '50000',
-    maxDiscountAmount: null,
-    minOrderAmount: '500000',
-    usageLimit: 500,
-  },
-  {
-    voucherCode: 'SHOP15',
-    voucherName: 'Giảm 15% tại Gia Dụng Thắng Nguyễn',
-    scope: 'Shop',
-    discountTarget: 'Product',
-    discountType: 'Percentage',
-    discountValue: '15',
-    maxDiscountAmount: '60000',
-    minOrderAmount: '150000',
-    usageLimit: 500,
-  },
-  {
-    voucherCode: 'SHOP100K',
-    voucherName: 'Giảm 100.000đ cho đơn gian hàng từ 1 triệu',
-    scope: 'Shop',
-    discountTarget: 'Product',
-    discountType: 'FixedAmount',
-    discountValue: '100000',
-    maxDiscountAmount: null,
-    minOrderAmount: '1000000',
-    usageLimit: 100,
-  },
-  {
-    voucherCode: 'FREESHIP30',
-    voucherName: 'Hỗ trợ phí vận chuyển tối đa 30.000đ',
-    scope: 'Platform',
-    discountTarget: 'Shipping',
-    discountType: 'FixedAmount',
-    discountValue: '30000',
-    maxDiscountAmount: null,
-    minOrderAmount: '0',
-    usageLimit: 1000,
-  },
-  {
-    voucherCode: 'BEP10',
-    voucherName: 'Giảm 10% sản phẩm đồ nhà bếp',
-    scope: 'Platform',
-    discountTarget: 'Product',
-    categorySlugs: ['do-nha-bep'],
-    discountType: 'Percentage',
-    discountValue: '10',
-    maxDiscountAmount: '50000',
-    minOrderAmount: '100000',
-    usageLimit: 1000,
-  },
-];
-
-const productSeeds = [
-  {
-    categorySlug: 'noi-chao',
-    productName: 'Nồi inox 3 lớp',
-    slug: 'noi-inox-3-lop',
-    description:
-      'Nồi inox 3 lớp dùng cho bếp gia đình, đáy truyền nhiệt đều và dễ vệ sinh.',
-    brand: 'Gia Dụng Demo',
-    basePrice: '299000',
-    compareAtPrice: '349000',
-    warrantyMonths: 12,
-    weightGram: 1500,
-    images: [
-      {
-        imageUrl: 'https://htmediagroup.vn/wp-content/uploads/2026/02/Anh-xoong-noi-1.jpg',
-        altText: 'Nồi inox 3 lớp',
-        sortOrder: 1,
-        isThumbnail: true,
-      },
-    ],
-    variants: [
-      {
-        sku: 'NOI-INOX-20CM',
-        variantName: '20cm',
-        variantOptionJson: JSON.stringify({ diameterCm: 20 }),
-        price: '299000',
-        compareAtPrice: '349000',
-        weightGram: 1500,
-        stock: 50,
-        attributes: {
-          'Chất liệu': 'Inox 304',
-          'Đường kính': '20',
-        },
-      },
-      {
-        sku: 'NOI-INOX-24CM',
-        variantName: '24cm',
-        variantOptionJson: JSON.stringify({ diameterCm: 24 }),
-        price: '399000',
-        compareAtPrice: '459000',
-        weightGram: 1900,
-        stock: 30,
-        attributes: {
-          'Chất liệu': 'Inox 304',
-          'Đường kính': '24',
-        },
-      },
-    ],
-  },
-  {
-    categorySlug: 'den-ngu',
-    productName: 'Đèn ngủ cảm ứng',
-    slug: 'den-ngu-cam-ung',
-    description:
-      'Đèn ngủ cảm ứng ánh sáng vàng ấm, phù hợp phòng ngủ và bàn đầu giường.',
-    brand: 'Gia Dụng Demo',
-    basePrice: '159000',
-    compareAtPrice: '199000',
-    warrantyMonths: 6,
-    weightGram: 450,
-    images: [
-      {
-        imageUrl: 'https://htmediagroup.vn/wp-content/uploads/2026/02/Anh-xoong-noi-1.jpg',
-        altText: 'Đèn ngủ cảm ứng',
-        sortOrder: 1,
-        isThumbnail: true,
-      },
-    ],
-    variants: [
-      {
-        sku: 'DEN-NGU-VANG',
-        variantName: 'Ánh sáng vàng',
-        variantOptionJson: JSON.stringify({ lightColor: 'warm-yellow' }),
-        price: '159000',
-        compareAtPrice: '199000',
-        weightGram: 450,
-        stock: 100,
-        attributes: {
-          'Màu sắc': 'Vàng',
-          'Công suất': '5',
-        },
-      },
-    ],
-  },
-];
+const shippingCompanySeeds = [{ provider: 'GHN', companyName: 'Giao Hàng Nhanh (GHN)', slug: 'ghn', email: 'api@ghn.vn', phoneNumber: '19001234', taxCode: null, addressText: null, services: [{ serviceCode: 'GHN_STANDARD', serviceName: 'GHN Chuẩn', carrierServiceCode: '2', estimatedMinDays: 2, estimatedMaxDays: 4 }, { serviceCode: 'GHN_EXPRESS', serviceName: 'GHN Nhanh', carrierServiceCode: '5', estimatedMinDays: 1, estimatedMaxDays: 2 }] }];
+const voucherSeeds = [{ voucherCode: 'SAN10', voucherName: 'Ưu đãi toàn hệ thống 10%', scope: 'Platform', discountTarget: 'Product', discountType: 'Percentage', discountValue: '10', maxDiscountAmount: '50000', minOrderAmount: '200000', usageLimit: 1000 }];
 
 async function upsertUser({ email, phoneNumber, fullName }, passwordHash) {
   const user = await prisma.user.upsert({
@@ -447,12 +220,13 @@ async function seedPaymentMethods() {
   });
 }
 
-async function upsertCategory({ name, slug, sortOrder, parentCategoryId = null }) {
+async function upsertCategory({ name, slug, imageUrl, sortOrder, parentCategoryId = null }) {
   return prisma.category.upsert({
     where: { slug },
     update: {
       parentCategoryId,
       categoryName: name,
+      imageUrl,
       sortOrder,
       isActive: true,
       updatedAt: now(),
@@ -461,6 +235,7 @@ async function upsertCategory({ name, slug, sortOrder, parentCategoryId = null }
       parentCategoryId,
       categoryName: name,
       slug,
+      imageUrl,
       sortOrder,
       isActive: true,
     },
@@ -599,52 +374,25 @@ async function seedShipping() {
   return companies;
 }
 
-async function seedDemoShop(seededUsers) {
+async function seedDemoShops(seededUsers) {
   const admin = seededUsers['admin@example.com'];
-  const seller = seededUsers['seller@example.com'];
-
-  return prisma.shop.upsert({
-    where: { slug: 'gia-dung-thang-nguyen' },
-    update: {
-      ownerUserId: seller.id,
-      shopName: 'Gia Dụng Thắng Nguyễn',
-      description: 'Shop demo cho sàn thương mại điện tử đồ gia dụng.',
-      email: 'seller@example.com',
-      phoneNumber: '0900000002',
-      province: 'Thành phố Hồ Chí Minh',
-      ward: 'Phường Bến Nghé',
-      streetAddress: '10 Đường Demo',
-      taxCode: 'SHOPDEMO001',
-      shopStatus: 'Approved',
-      approvedByUserId: admin.id,
-      approvedAt: now(),
-      isDeleted: false,
-      deletedAt: null,
-      updatedAt: now(),
-    },
-    create: {
-      ownerUserId: seller.id,
-      shopName: 'Gia Dụng Thắng Nguyễn',
-      slug: 'gia-dung-thang-nguyen',
-      description: 'Shop demo cho sàn thương mại điện tử đồ gia dụng.',
-      email: 'seller@example.com',
-      phoneNumber: '0900000002',
-      province: 'Thành phố Hồ Chí Minh',
-      ward: 'Phường Bến Nghé',
-      streetAddress: '10 Đường Demo',
-      taxCode: 'SHOPDEMO001',
-      shopStatus: 'Approved',
-      approvedByUserId: admin.id,
-      approvedAt: now(),
-    },
-  });
+  const sellers = ['seller@example.com', ...Array.from({ length: 9 }, (_, index) => `seller${index + 2}@example.com`)];
+  const shops = [];
+  for (const [index, email] of sellers.entries()) {
+    const number = index + 1;
+    shops.push(await prisma.shop.upsert({
+      where: { slug: `gian-hang-demo-${number}` },
+      update: { ownerUserId: seededUsers[email].id, shopName: `Gian Hàng Việt ${number}`, email, phoneNumber: `09110000${String(number).padStart(2, '0')}`, province: 'Thành phố Hồ Chí Minh', ward: 'Phường Bến Nghé', streetAddress: `${number} Đường Marketplace`, taxCode: `SHOPDEMO${String(number).padStart(3, '0')}`, shopStatus: 'Approved', approvedByUserId: admin.id, approvedAt: now(), isDeleted: false, deletedAt: null, updatedAt: now() },
+      create: { ownerUserId: seededUsers[email].id, shopName: `Gian Hàng Việt ${number}`, slug: `gian-hang-demo-${number}`, description: `Gian hàng demo số ${number} trên TMDTTH Marketplace.`, email, phoneNumber: `09110000${String(number).padStart(2, '0')}`, province: 'Thành phố Hồ Chí Minh', ward: 'Phường Bến Nghé', streetAddress: `${number} Đường Marketplace`, taxCode: `SHOPDEMO${String(number).padStart(3, '0')}`, shopStatus: 'Approved', approvedByUserId: admin.id, approvedAt: now() },
+    }));
+  }
+  return shops;
 }
 
 async function seedSellerVerification({ seededUsers, shop }) {
   const admin = seededUsers['admin@example.com'];
   const identityNumber = '079203012345';
   const taxCode = '0312345678';
-  const bankAccountNumber = '123456789012';
   const timestamp = now();
 
   const profile = await prisma.sellerVerificationProfile.upsert({
@@ -697,35 +445,6 @@ async function seedSellerVerification({ seededUsers, shop }) {
     },
   });
 
-  await prisma.sellerPayoutAccount.upsert({
-    where: { shopId: shop.id },
-    update: {
-      bankCode: 'VCB',
-      bankNameSnapshot: 'Ngân hàng TMCP Ngoại thương Việt Nam',
-      accountNumberEncrypted: encryptSellerValue(bankAccountNumber),
-      accountNumberHash: hashSellerValue(bankAccountNumber),
-      accountNumberLast4: bankAccountNumber.slice(-4),
-      accountHolderName: 'NGUYEN VAN SELLER',
-      payoutStatus: 'Verified',
-      verifiedByUserId: admin.id,
-      verifiedAt: timestamp,
-      isActive: true,
-      updatedAt: timestamp,
-    },
-    create: {
-      shopId: shop.id,
-      bankCode: 'VCB',
-      bankNameSnapshot: 'Ngân hàng TMCP Ngoại thương Việt Nam',
-      accountNumberEncrypted: encryptSellerValue(bankAccountNumber),
-      accountNumberHash: hashSellerValue(bankAccountNumber),
-      accountNumberLast4: bankAccountNumber.slice(-4),
-      accountHolderName: 'NGUYEN VAN SELLER',
-      payoutStatus: 'Verified',
-      verifiedByUserId: admin.id,
-      verifiedAt: timestamp,
-      isActive: true,
-    },
-  });
 
   return profile;
 }
@@ -830,11 +549,11 @@ async function seedProducts({
   categoryBySlug,
   attributeByCategoryAndName,
   seededUsers,
-  shop,
+  shops,
 }) {
-  const seller = seededUsers['seller@example.com'];
-
-  for (const productSeed of productSeeds) {
+  for (const [productIndex, productSeed] of productSeeds.entries()) {
+    const shop = shops[productIndex % shops.length];
+    const seller = seededUsers[productIndex % shops.length === 0 ? 'seller@example.com' : `seller${(productIndex % shops.length) + 1}@example.com`];
     const category = categoryBySlug[productSeed.categorySlug];
 
     if (!category) {
@@ -1034,14 +753,14 @@ async function main() {
   const categoryBySlug = await seedCategories();
   const attributeByCategoryAndName = await seedAttributes(categoryBySlug);
   await seedShipping();
-  const shop = await seedDemoShop(seededUsers);
-  await seedSellerVerification({ seededUsers, shop });
-  await seedVouchers(shop, categoryBySlug);
+  const shops = await seedDemoShops(seededUsers);
+  await seedSellerVerification({ seededUsers, shop: shops[0] });
+  await seedVouchers(shops[0], categoryBySlug);
   await seedProducts({
     categoryBySlug,
     attributeByCategoryAndName,
     seededUsers,
-    shop,
+    shops,
   });
 
   console.log('Seed completed.');

@@ -29,6 +29,11 @@ import type {
   UploadedFile,
   VariantRequest,
 } from './types';
+import type {
+  PauseShopIndefinitelyRequest,
+  ScheduleShopPauseRequest,
+  ShopOperationResponse,
+} from './shop-operation-types';
 
 const cleanParams = (params: Record<string, unknown>) =>
   Object.fromEntries(
@@ -38,6 +43,18 @@ const cleanParams = (params: Record<string, unknown>) =>
 export const sellerShopApi = {
   getMyShop() {
     return apiGet<Shop | null>('/shops/me');
+  },
+  getOperation() {
+    return apiGet<ShopOperationResponse>('/shops/me/operation');
+  },
+  schedulePause(body: ScheduleShopPauseRequest) {
+    return apiPatch<ShopOperationResponse, ScheduleShopPauseRequest>('/shops/me/operation/pause-scheduled', body);
+  },
+  pauseIndefinitely(body: PauseShopIndefinitelyRequest) {
+    return apiPatch<ShopOperationResponse, PauseShopIndefinitelyRequest>('/shops/me/operation/pause-indefinitely', body);
+  },
+  resume() {
+    return apiPatch<ShopOperationResponse>('/shops/me/operation/resume');
   },
   createShop(body: ShopRequest) {
     return apiPost<Shop, ShopRequest>('/shops', body);

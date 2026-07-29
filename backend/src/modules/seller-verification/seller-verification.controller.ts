@@ -21,7 +21,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types';
 import {
-  SaveSellerPayoutAccountDto,
+  SaveSellerContactDto,
   SaveSellerVerificationDto,
 } from './dto/save-seller-verification.dto';
 import { UploadSellerDocumentDto } from './dto/upload-seller-document.dto';
@@ -67,13 +67,14 @@ export class SellerVerificationController {
     return this.service.saveMine(user, dto);
   }
 
-  @Put('payout-account/me')
-  savePayout(
+  @Patch('verification/me/contact')
+  updateContact(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: SaveSellerPayoutAccountDto,
+    @Body() dto: SaveSellerContactDto,
   ) {
-    return this.service.savePayout(user, dto);
+    return this.service.saveContact(user, dto);
   }
+
 
   @Post('verification/me/documents')
   @UseInterceptors(

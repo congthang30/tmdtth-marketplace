@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, Landmark, ShieldCheck, Store } from 'lucide-react';
+import { CheckCircle2, FileText, ShieldCheck, Store } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import type { SellerVerificationOverview } from '../types';
 
@@ -8,7 +8,6 @@ const documentLabels: Record<string, string> = {
   Passport: 'Hộ chiếu',
   BusinessRegistration: 'Giấy đăng ký kinh doanh',
   LegalRepresentativeIdentity: 'Giấy tờ người đại diện',
-  BankAccountProof: 'Xác nhận tài khoản ngân hàng',
 };
 
 type SellerVerificationReviewProps = {
@@ -16,9 +15,9 @@ type SellerVerificationReviewProps = {
 };
 
 export function SellerVerificationReview({ overview }: SellerVerificationReviewProps) {
-  const { shop, profile, payoutAccount } = overview;
-  if (!profile || !payoutAccount) {
-    return <Alert tone="danger">Hồ sơ chưa đủ thông tin pháp lý hoặc tài khoản nhận tiền. Hãy quay lại kiểm tra.</Alert>;
+  const { shop, profile } = overview;
+  if (!profile) {
+    return <Alert tone="danger">Hồ sơ chưa đủ thông tin pháp lý. Hãy quay lại kiểm tra.</Alert>;
   }
 
   const rows = [
@@ -32,9 +31,6 @@ export function SellerVerificationReview({ overview }: SellerVerificationReviewP
         ? profile.identityNumberMasked
         : profile.businessRegistrationNumberMasked,
     },
-    { icon: Landmark, label: 'Ngân hàng', value: `${payoutAccount.bankName} (${payoutAccount.bankCode})` },
-    { icon: Landmark, label: 'Số tài khoản', value: payoutAccount.accountNumberMasked },
-    { icon: Landmark, label: 'Chủ tài khoản', value: payoutAccount.accountHolderName },
   ];
 
   return (

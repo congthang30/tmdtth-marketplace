@@ -36,6 +36,13 @@ export class CreateCategoryDto {
   @IsOptional()
   @Transform(trimString)
   @IsString()
+  @MaxLength(1000)
+  @Matches(/^https:\/\//)
+  imageUrl?: string | null;
+
+  @IsOptional()
+  @Transform(trimString)
+  @IsString()
   @Matches(/^\d+$/)
   parentCategoryId?: string | null;
 

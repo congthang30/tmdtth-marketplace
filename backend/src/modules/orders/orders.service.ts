@@ -65,6 +65,15 @@ const checkoutCartItemInclude = {
       slug: true,
       shopStatus: true,
       isDeleted: true,
+      operationMode: true,
+      pauseStartsAt: true,
+      pauseEndsAt: true,
+      ownerUser: {
+        select: {
+          userStatus: true,
+          isDeleted: true,
+        },
+      },
     },
   },
   product: {
@@ -1508,9 +1517,13 @@ export class OrdersService {
                   ? 'SHOP_NOT_APPROVED'
                   : item.shop.isDeleted
                     ? 'SHOP_DELETED'
-                    : item.shopId !== item.product.shopId
-                      ? 'SHOP_MISMATCH'
-                      : null;
+                    : item.shop.ownerUser.userStatus !== 'Active' || item.shop.ownerUser.isDeleted
+                      ? 'SELLER_SUSPENDED'
+                      : this.isShopPaused(item.shop, new Date())
+                        ? 'SHOP_PAUSED'
+                        : item.shopId !== item.product.shopId
+                          ? 'SHOP_MISMATCH'
+                          : null;
 
     if (unavailableReason) {
       throw new BadRequestException({
@@ -1525,6 +1538,11 @@ export class OrdersService {
         ],
       });
     }
+  }
+
+  private isShopPaused(shop: { operationMode: string; pauseStartsAt: Date | null; pauseEndsAt: Date | null }, now: Date): boolean {
+    if (shop.operationMode === 'PausedIndefinitely') return true;
+    return shop.operationMode === 'PausedUntil' && shop.pauseStartsAt !== null && shop.pauseEndsAt !== null && now >= shop.pauseStartsAt && now < shop.pauseEndsAt;
   }
 
   private buildShopGroups(

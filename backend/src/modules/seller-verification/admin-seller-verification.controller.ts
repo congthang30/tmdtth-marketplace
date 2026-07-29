@@ -50,13 +50,6 @@ export class AdminSellerVerificationController {
     });
   }
 
-  @Patch(':id/start-review')
-  startReview(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') profileId: string,
-  ) {
-    return this.service.startReview(user, profileId);
-  }
 
   @Patch(':id/request-revision')
   requestRevision(

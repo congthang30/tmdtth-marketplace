@@ -73,6 +73,7 @@ export class CategoriesService {
         categoryName: dto.categoryName,
         slug: dto.slug,
         description: this.normalizeNullableText(dto.description ?? null),
+        imageUrl: this.normalizeNullableText(dto.imageUrl ?? null),
         parentCategoryId,
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
@@ -140,6 +141,7 @@ export class CategoriesService {
       categoryName?: string;
       slug?: string;
       description?: string | null;
+      imageUrl?: string | null;
       parentCategoryId?: bigint | null;
       sortOrder?: number;
       isActive?: boolean;
@@ -156,6 +158,10 @@ export class CategoriesService {
 
     if (dto.description !== undefined) {
       data.description = this.normalizeNullableText(dto.description);
+    }
+
+    if (dto.imageUrl !== undefined) {
+      data.imageUrl = this.normalizeNullableText(dto.imageUrl);
     }
 
     if (dto.parentCategoryId !== undefined) {
@@ -272,6 +278,7 @@ export class CategoriesService {
       categoryName: category.categoryName,
       slug: category.slug,
       description: category.description,
+      imageUrl: category.imageUrl,
       sortOrder: category.sortOrder,
       children: [],
     };
@@ -285,6 +292,7 @@ export class CategoriesService {
       categoryName: category.categoryName,
       slug: category.slug,
       description: category.description,
+      imageUrl: category.imageUrl,
       sortOrder: category.sortOrder,
       isActive: category.isActive,
       createdAt: category.createdAt,

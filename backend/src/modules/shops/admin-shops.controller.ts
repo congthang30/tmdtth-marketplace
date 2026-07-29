@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -43,5 +44,20 @@ export class AdminShopsController {
     @Body() dto: RejectShopDto,
   ) {
     return this.shopsService.rejectShop(user, shopId, dto);
+  }
+
+  @Patch(':id/hide')
+  hideShop(@Param('id') shopId: string) {
+    return this.shopsService.setShopVisibility(shopId, false);
+  }
+
+  @Patch(':id/show')
+  showShop(@Param('id') shopId: string) {
+    return this.shopsService.setShopVisibility(shopId, true);
+  }
+
+  @Delete(':id')
+  deleteShop(@Param('id') shopId: string) {
+    return this.shopsService.deleteShop(shopId);
   }
 }

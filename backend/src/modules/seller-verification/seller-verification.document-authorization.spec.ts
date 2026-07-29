@@ -58,6 +58,7 @@ describe('SellerVerificationService document authorization', () => {
       storage,
       {} as SellerDocumentValidatorService,
       {} as VerificationTransitionService,
+      { sendSubmissionReceived: jest.fn() } as never,
     );
   });
 

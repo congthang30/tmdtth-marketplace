@@ -42,6 +42,7 @@ type CheckoutCartItemEntity = {
     slug: string;
     shopStatus: string;
     isDeleted: boolean;
+    ownerUser: { userStatus: string; isDeleted: boolean };
   };
   product: {
     id: bigint;
@@ -250,6 +251,7 @@ function createCartItem(
       slug: `shop-${shopId.toString()}`,
       shopStatus: 'Approved',
       isDeleted: false,
+      ownerUser: { userStatus: 'Active', isDeleted: false },
     },
     product: {
       id: productId,

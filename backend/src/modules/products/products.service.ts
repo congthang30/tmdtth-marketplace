@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ShopOperationMode } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import {
   createPaginatedResult,
@@ -31,9 +31,14 @@ import {
   SellerProductVariantResponse,
 } from './types';
 
-type ProductEntity = Awaited<
-  ReturnType<ProductsService['findPublicProducts']>
->['items'][number];
+type ProductEntity = Prisma.ProductGetPayload<{
+  include: {
+    shop: { select: { id: true; shopName: true; slug: true } };
+    category: { select: { id: true; categoryName: true; slug: true } };
+    images: true;
+    variants: { include: { inventoryRecords: true } };
+  };
+}>;
 type ProductImageEntity = ProductEntity['images'][number];
 type VariantResponseSource = {
   id: bigint;
@@ -58,6 +63,7 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listPublicProducts(query: ProductListQueryDto) {
+    if (query.q?.trim().length) await this.recordSearchTerm(query.q);
     const { page, limit } = getPaginationParams(query);
     const { items, total } = await this.findPublicProducts(query);
 
@@ -67,6 +73,28 @@ export class ProductsService {
       limit,
       total,
     });
+  }
+
+  private async recordSearchTerm(term: string) {
+    const displayTerm = term.trim().replace(/\s+/g, ' ').slice(0, 100);
+    const normalized = displayTerm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLocaleLowerCase('vi');
+    if (normalized.length < 2) return;
+    await this.prisma.searchTermStat.upsert({ where: { normalized }, create: { normalized, displayTerm }, update: { displayTerm, searchCount: { increment: 1 }, lastSearchedAt: new Date() } });
+  }
+
+  async listTopSearchedProducts(limit = 6) {
+    const terms = await this.prisma.searchTermStat.findMany({ orderBy: [{ searchCount: 'desc' }, { lastSearchedAt: 'desc' }], take: Math.min(limit * 3, 30) });
+    const results: Array<{ product: ProductListItemResponse; searchCount: string }> = [];
+    const seen = new Set<string>();
+    for (const term of terms) {
+      if (results.length >= limit) break;
+      const { items } = await this.findPublicProducts({ q: term.displayTerm, page: 1, limit: 1 } as ProductListQueryDto);
+      const product = items[0];
+      if (!product || seen.has(product.id.toString())) continue;
+      seen.add(product.id.toString());
+      results.push({ product: this.toListItem(product), searchCount: term.searchCount.toString() });
+    }
+    return results;
   }
 
   async getPublicProductDetail(slug: string) {
@@ -134,6 +162,25 @@ export class ProductsService {
       limit,
       total,
     });
+  }
+
+  async listAdminProducts(query: PaginationQueryDto & { status?: string }) {
+    const { page, limit, skip, take } = getPaginationParams(query);
+    const where = { isDeleted: false, ...(query.status ? { productStatus: query.status } : {}) };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({ where, orderBy: [{ createdAt: 'desc' }], skip, take, include: { shop: { select: { id: true, shopName: true, slug: true } }, category: { select: { id: true, categoryName: true, slug: true } }, images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] }, variants: { orderBy: [{ price: 'asc' }], include: { inventoryRecords: true } } } }),
+      this.prisma.product.count({ where }),
+    ]);
+    return createPaginatedResult({ items: items.map((product) => this.toSellerListItem(product)), page, limit, total });
+  }
+
+  async moderateProduct(user: AuthenticatedUser, productId: string, approved: boolean) {
+    const id = this.parseId(productId, 'productId');
+    const product = await this.prisma.product.findFirst({ where: { id, isDeleted: false } });
+    if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: 'Không tìm thấy sản phẩm', details: [] });
+    if (product.productStatus !== 'PendingApproval') throw new BadRequestException({ code: 'PRODUCT_NOT_PENDING', message: 'Sản phẩm không ở trạng thái chờ duyệt', details: [] });
+    const updated = await this.prisma.product.update({ where: { id }, data: { productStatus: approved ? 'Published' : 'Rejected', updatedByUserId: user.id, updatedAt: new Date() }, include: { shop: { select: { id: true, shopName: true, slug: true } }, category: { select: { id: true, categoryName: true, slug: true } }, images: { orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }] }, variants: { orderBy: [{ price: 'asc' }], include: { inventoryRecords: true } } } });
+    return this.toSellerListItem(updated);
   }
 
   async createSellerProduct(
@@ -237,7 +284,7 @@ export class ProductsService {
         compareAtPrice,
         warrantyMonths: dto.warrantyMonths ?? 0,
         weightGram: dto.weightGram ?? 0,
-        productStatus: dto.productStatus ?? DEFAULT_PRODUCT_STATUS,
+        productStatus: dto.productStatus === 'Published' ? 'PendingApproval' : DEFAULT_PRODUCT_STATUS,
         isViolation: false,
         isDeleted: false,
         createdByUserId: user.id,
@@ -392,7 +439,9 @@ export class ProductsService {
     }
 
     if (dto.productStatus !== undefined) {
-      data.productStatus = dto.productStatus;
+      data.productStatus = dto.productStatus === 'Published' ? 'PendingApproval' : 'Draft';
+    } else if (product.productStatus === 'Published' || product.productStatus === 'Rejected') {
+      data.productStatus = 'PendingApproval';
     }
 
     const updatedProduct = await this.prisma.product.update({
@@ -884,6 +933,7 @@ export class ProductsService {
         shopId: true,
         basePrice: true,
         compareAtPrice: true,
+        productStatus: true,
       },
     });
 
@@ -1047,6 +1097,15 @@ export class ProductsService {
         shop: {
           shopStatus: PUBLIC_SHOP_STATUS,
           isDeleted: false,
+          ownerUser: {
+            userStatus: 'Active',
+            isDeleted: false,
+          },
+          OR: [
+            { operationMode: ShopOperationMode.Open },
+            { operationMode: ShopOperationMode.PausedUntil, pauseStartsAt: { gt: new Date() } },
+            { operationMode: ShopOperationMode.PausedUntil, pauseEndsAt: { lte: new Date() } },
+          ],
         },
         category: {
           isActive: true,
@@ -1156,6 +1215,15 @@ export class ProductsService {
       shop: {
         shopStatus: PUBLIC_SHOP_STATUS,
         isDeleted: false,
+        ownerUser: {
+          userStatus: 'Active',
+          isDeleted: false,
+        },
+        OR: [
+          { operationMode: ShopOperationMode.Open },
+          { operationMode: ShopOperationMode.PausedUntil, pauseStartsAt: { gt: new Date() } },
+          { operationMode: ShopOperationMode.PausedUntil, pauseEndsAt: { lte: new Date() } },
+        ],
       },
       category: {
         isActive: true,

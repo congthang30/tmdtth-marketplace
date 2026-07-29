@@ -34,6 +34,11 @@ type ShopEntity = {
   streetAddress: string | null;
   taxCode: string | null;
   shopStatus: string;
+  operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+  pauseStartsAt: Date | null;
+  pauseEndsAt: Date | null;
+  pauseReason: string | null;
+  operationUpdatedAt: Date | null;
   approvedByUserId: bigint | null;
   approvedAt: Date | null;
   rejectionReason: string | null;
@@ -41,7 +46,6 @@ type ShopEntity = {
   createdAt: Date;
   updatedAt: Date | null;
   sellerVerification?: { verificationStatus: 'Approved' } | null;
-  payoutAccount?: { payoutStatus: 'Verified'; isActive: boolean } | null;
 };
 
 type ShopUpdateArgs = {
@@ -107,6 +111,11 @@ function createShopEntity(overrides: Partial<ShopEntity> = {}): ShopEntity {
     streetAddress: null,
     taxCode: null,
     shopStatus: 'PendingApproval',
+    operationMode: 'Open',
+    pauseStartsAt: null,
+    pauseEndsAt: null,
+    pauseReason: null,
+    operationUpdatedAt: null,
     approvedByUserId: null,
     approvedAt: null,
     rejectionReason: null,
@@ -193,10 +202,10 @@ describe('ShopsService', () => {
   });
 
   describe('createShop', () => {
-    it('creates a pending approval shop for the current seller', async () => {
-      prisma.shop.findUnique.mockResolvedValue(null);
+    it('creates a draft shop without reserving the public slug', async () => {
+      prisma.shop.findFirst.mockResolvedValue(null);
       prisma.shop.create.mockResolvedValue(
-        createShopEntity({ ownerUserId: sellerUser.id }),
+        createShopEntity({ ownerUserId: sellerUser.id, shopStatus: 'Draft', slug: 'draft-7' }),
       );
 
       const result = await service.createShop(sellerUser, {
@@ -209,20 +218,13 @@ describe('ShopsService', () => {
         streetAddress: '10 Demo',
         taxCode: 'TAX001',
       });
-      const findArgs = prisma.shop.findUnique.mock.calls[0][0] as {
-        where: { slug: string };
-        select: { id: boolean };
-      };
       const createArgs = prisma.shop.create.mock.calls[0][0];
 
-      expect(findArgs).toEqual({
-        where: { slug: 'seller-home' },
-        select: { id: true },
-      });
+      expect(prisma.shop.findUnique).not.toHaveBeenCalled();
       expect(createArgs.data).toMatchObject({
         ownerUserId: sellerUser.id,
         shopName: 'Seller Home',
-        slug: 'seller-home',
+        slug: 'draft-7',
         description: 'Home goods',
         email: 'seller@example.com',
         phoneNumber: '0900000001',
@@ -230,23 +232,21 @@ describe('ShopsService', () => {
         ward: 'Ben Nghe',
         streetAddress: '10 Demo',
         taxCode: 'TAX001',
-        shopStatus: 'PendingApproval',
+        shopStatus: 'Draft',
         isDeleted: false,
       });
       expect(createArgs.data.createdAt).toBeInstanceOf(Date);
       expect(result.ownerUserId).toBe('7');
-      expect(result.shopStatus).toBe('PendingApproval');
+      expect(result.shopStatus).toBe('Draft');
     });
 
-    it('rejects duplicate shop slug', async () => {
-      prisma.shop.findUnique.mockResolvedValue(createShopEntity());
+    it('does not reject a display name already used by another draft', async () => {
+      prisma.shop.findFirst.mockResolvedValue(null);
+      prisma.shop.create.mockResolvedValue(createShopEntity({ ownerUserId: sellerUser.id, shopStatus: 'Draft', slug: 'draft-7' }));
 
-      await expect(
-        service.createShop(sellerUser, {
-          shopName: 'Seller Home',
-        }),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(prisma.shop.create).not.toHaveBeenCalled();
+      await expect(service.createShop(sellerUser, { shopName: 'Seller Home' })).resolves.toBeDefined();
+      expect(prisma.shop.findUnique).not.toHaveBeenCalled();
+      expect(prisma.shop.create).toHaveBeenCalledTimes(1);
     });
 
     it('rejects shop names that cannot produce a slug', async () => {
@@ -264,7 +264,6 @@ describe('ShopsService', () => {
     it('approves a pending shop and records the admin actor', async () => {
       const pendingShop = createShopEntity({
         sellerVerification: { verificationStatus: 'Approved' },
-        payoutAccount: { payoutStatus: 'Verified', isActive: true },
       });
       const approvedShop = createShopEntity({
         shopStatus: 'Approved',
@@ -288,7 +287,7 @@ describe('ShopsService', () => {
       expect(result.approvedByUserId).toBe('99');
     });
 
-    it('blocks a legacy pending shop with no verification or payout record', async () => {
+    it('blocks a legacy pending shop with no verification record', async () => {
       prisma.shop.findUnique.mockResolvedValue(createShopEntity());
 
       await expect(service.approveShop(adminUser, '1')).rejects.toMatchObject({
@@ -298,39 +297,10 @@ describe('ShopsService', () => {
             {
               field: 'sellerVerification',
               verificationStatus: null,
-              payoutStatus: null,
             },
           ],
         },
       });
-      expect(prisma.shop.update).not.toHaveBeenCalled();
-    });
-
-    it('blocks approval when verification is approved but payout is unavailable', async () => {
-      prisma.shop.findUnique.mockResolvedValue(
-        createShopEntity({
-          sellerVerification: { verificationStatus: 'Approved' },
-          payoutAccount: null,
-        }),
-      );
-
-      await expect(service.approveShop(adminUser, '1')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      expect(prisma.shop.update).not.toHaveBeenCalled();
-    });
-
-    it('blocks approval when a verified payout account is inactive', async () => {
-      prisma.shop.findUnique.mockResolvedValue(
-        createShopEntity({
-          sellerVerification: { verificationStatus: 'Approved' },
-          payoutAccount: { payoutStatus: 'Verified', isActive: false },
-        }),
-      );
-
-      await expect(service.approveShop(adminUser, '1')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
       expect(prisma.shop.update).not.toHaveBeenCalled();
     });
   });
@@ -382,6 +352,35 @@ describe('ShopsService', () => {
         service.rejectShop(adminUser, '1', { reason: 'Hồ sơ chưa hợp lệ.' }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.shop.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('shop operation availability', () => {
+    it('treats scheduled pause boundaries and indefinite pause correctly', () => {
+      const startsAt = new Date('2026-07-27T10:00:00.000Z');
+      const endsAt = new Date('2026-07-27T12:00:00.000Z');
+      const shop = createShopEntity({
+        shopStatus: 'Approved',
+        operationMode: 'PausedUntil',
+        pauseStartsAt: startsAt,
+        pauseEndsAt: endsAt,
+      });
+      const predicate = (service as unknown as {
+        isOperationPaused: (value: ShopEntity, now: Date) => boolean;
+      }).isOperationPaused;
+
+      expect(predicate.call(service, shop, new Date('2026-07-27T09:59:59.999Z'))).toBe(false);
+      expect(predicate.call(service, shop, startsAt)).toBe(true);
+      expect(predicate.call(service, shop, new Date('2026-07-27T11:00:00.000Z'))).toBe(true);
+      expect(predicate.call(service, shop, endsAt)).toBe(false);
+      expect(predicate.call(service, { ...shop, operationMode: 'PausedIndefinitely' }, endsAt)).toBe(true);
+    });
+
+    it('does not report a non-approved shop as accepting orders', () => {
+      const toOperationResponse = (service as unknown as {
+        toOperationResponse: (value: ShopEntity, now: Date) => { isAcceptingOrders: boolean };
+      }).toOperationResponse;
+      expect(toOperationResponse.call(service, createShopEntity(), new Date()).isAcceptingOrders).toBe(false);
     });
   });
 });

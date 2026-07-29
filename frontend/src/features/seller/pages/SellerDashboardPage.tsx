@@ -75,6 +75,10 @@ export function SellerDashboardPage() {
                 Xem gian hàng
               </ButtonLink>
             ) : null}
+            <ButtonLink to="/seller/shop-operation" variant="secondary">
+              <Store size={16} aria-hidden="true" />
+              Nhận đơn
+            </ButtonLink>
             <ButtonLink to="/seller/shop-categories" variant="secondary">
               <FolderTree size={16} aria-hidden="true" />
               Danh mục

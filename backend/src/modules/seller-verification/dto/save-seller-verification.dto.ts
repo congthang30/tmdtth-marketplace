@@ -15,6 +15,17 @@ import { BusinessType, IdentityDocumentType, SellerType } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
+const trimOptional = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim();
+  return normalized || undefined;
+};
+const normalizeEmail = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : value;
+const meaningfulName = /^(?=.*\p{L})[\p{L}\p{M}\p{N} .,'&()/-]+$/u;
+const meaningfulAddress = /^(?=.*\p{L})[\p{L}\p{M}\p{N}\s.,'()/#-]+$/u;
+const registrationNumber = /^(?=.*[A-Za-z0-9])[A-Za-z0-9-]{6,50}$/;
+const contactPhone = /^(?=(?:\D*\d){8,15}\D*$)\+?[0-9()\-\s]+$/;
 
 export class SaveSellerVerificationDto {
   @IsEnum(SellerType)
@@ -30,34 +41,38 @@ export class SaveSellerVerificationDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
+  @Matches(meaningfulName)
   legalName!: string;
 
   @ValidateIf(
     (dto: SaveSellerVerificationDto) =>
-      dto.sellerType === SellerType.Individual,
+      dto.sellerType === SellerType.Individual ||
+      dto.businessType === BusinessType.HouseholdBusiness,
   )
   @IsEnum(IdentityDocumentType)
   identityDocumentType?: IdentityDocumentType;
 
   @ValidateIf(
     (dto: SaveSellerVerificationDto) =>
-      dto.sellerType === SellerType.Individual,
+      dto.sellerType === SellerType.Individual ||
+      dto.businessType === BusinessType.HouseholdBusiness,
   )
   @Transform(trim)
   @IsString()
-  @MinLength(9)
+  @MinLength(12)
   @MaxLength(12)
-  @Matches(/^\d{9,12}$/)
+  @Matches(/^\d{12}$/)
   identityNumber?: string;
 
   @IsOptional()
   @IsDateString()
   identityIssuedAt?: string;
 
+  @Transform(trimOptional)
   @IsOptional()
-  @Transform(trim)
   @IsString()
   @MaxLength(200)
+  @Matches(meaningfulName)
   identityIssuedBy?: string;
 
   @IsOptional()
@@ -72,10 +87,11 @@ export class SaveSellerVerificationDto {
   @IsString()
   @MinLength(5)
   @MaxLength(600)
+  @Matches(meaningfulAddress)
   registeredAddress!: string;
 
+  @Transform(trimOptional)
   @IsOptional()
-  @Transform(trim)
   @Matches(/^\d{10}$/)
   taxCode?: string;
 
@@ -86,41 +102,48 @@ export class SaveSellerVerificationDto {
   @IsString()
   @MinLength(6)
   @MaxLength(50)
-  @Matches(/^[A-Za-z0-9-]+$/)
+  @Matches(registrationNumber)
   businessRegistrationNumber?: string;
 
   @IsOptional()
   @IsDateString()
   businessRegistrationIssuedAt?: string;
 
+  @Transform(trimOptional)
   @IsOptional()
-  @Transform(trim)
   @IsString()
   @MaxLength(200)
+  @Matches(meaningfulName)
   businessRegistrationIssuedBy?: string;
 
-  @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @MaxLength(200)
-  legalRepresentativeName?: string;
-
-  @IsOptional()
+  @ValidateIf(
+    (dto: SaveSellerVerificationDto) =>
+      dto.businessType === BusinessType.Company,
+  )
   @Transform(trim)
   @IsString()
   @MinLength(2)
+  @MaxLength(200)
+  @Matches(meaningfulName)
+  legalRepresentativeName?: string;
+
+  @Transform(trimOptional)
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
   @MaxLength(100)
+  @Matches(meaningfulName)
   contactName?: string;
 
+  @Transform(normalizeEmail)
   @IsOptional()
-  @Transform(trim)
   @IsEmail()
   @MaxLength(255)
   contactEmail?: string;
 
+  @Transform(trimOptional)
   @IsOptional()
-  @Transform(trim)
-  @Matches(/^[0-9+()\-\s]{8,20}$/)
+  @Matches(contactPhone)
   contactPhone?: string;
 
   @IsOptional()
@@ -128,24 +151,23 @@ export class SaveSellerVerificationDto {
   useAccountPhone?: boolean;
 }
 
-export class SaveSellerPayoutAccountDto {
-  @Transform(trim)
-  @Matches(/^[A-Z0-9_-]{2,30}$/)
-  bankCode!: string;
-
+export class SaveSellerContactDto {
   @Transform(trim)
   @IsString()
   @MinLength(2)
-  @MaxLength(200)
-  bankName!: string;
+  @MaxLength(100)
+  @Matches(meaningfulName)
+  contactName!: string;
+
+  @Transform(normalizeEmail)
+  @IsEmail()
+  @MaxLength(255)
+  contactEmail!: string;
 
   @Transform(trim)
-  @Matches(/^\d{6,20}$/)
-  accountNumber!: string;
+  @Matches(contactPhone)
+  contactPhone!: string;
 
-  @Transform(trim)
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  accountHolderName!: string;
+  @IsBoolean()
+  useAccountPhone!: boolean;
 }

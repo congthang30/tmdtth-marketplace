@@ -33,4 +33,10 @@ describe('VerificationTransitionService', () => {
       expect(service.canTransition(status, status)).toBe(false);
     }
   });
+
+  it('never creates a new UnderReview state', () => {
+    for (const destinations of Object.values(VERIFICATION_TRANSITIONS)) {
+      expect(destinations).not.toContain(VerificationStatus.UnderReview);
+    }
+  });
 });

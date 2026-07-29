@@ -8,6 +8,7 @@ export type AdminCategory = {
   categoryName: string;
   slug: string;
   description: string | null;
+  imageUrl: string | null;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -18,6 +19,7 @@ export type CategoryRequest = {
   categoryName?: string;
   slug?: string;
   description?: string | null;
+  imageUrl?: string | null;
   parentCategoryId?: string | null;
   sortOrder?: number;
   isActive?: boolean;
@@ -25,6 +27,11 @@ export type CategoryRequest = {
 
 export type AdminShopListResponse = {
   items: Shop[];
+  meta?: ApiMeta;
+};
+
+export type AdminProductListResponse = {
+  items: import('@/features/seller/types').SellerProduct[];
   meta?: ApiMeta;
 };
 

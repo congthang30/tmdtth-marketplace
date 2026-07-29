@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit, FolderPlus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Edit, FolderPlus, ImagePlus, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -44,6 +44,7 @@ const categorySchema = z.object({
       "Slug chỉ gồm chữ thường, số và dấu gạch ngang",
     ),
   description: z.string().trim().max(500, "Mô tả quá dài").optional(),
+  imageUrl: z.string().url("URL ảnh không hợp lệ").optional().or(z.literal("")),
   parentCategoryId: z.string().optional(),
   sortOrder: z
     .string()
@@ -58,6 +59,7 @@ const defaultValues: CategoryFormValues = {
   categoryName: "",
   slug: "",
   description: "",
+  imageUrl: "",
   parentCategoryId: "",
   sortOrder: "0",
   isActive: true,
@@ -72,6 +74,7 @@ const toRequest = (values: CategoryFormValues): CategoryRequest => ({
   categoryName: values.categoryName.trim(),
   slug: values.slug.trim(),
   description: optionalString(values.description) ?? null,
+  imageUrl: optionalString(values.imageUrl) ?? null,
   parentCategoryId: optionalString(values.parentCategoryId) ?? null,
   sortOrder: optionalString(values.sortOrder) ? Number(values.sortOrder) : 0,
   isActive: values.isActive,
@@ -81,6 +84,7 @@ const toFormValues = (category: AdminCategory): CategoryFormValues => ({
   categoryName: category.categoryName,
   slug: category.slug,
   description: category.description ?? "",
+  imageUrl: category.imageUrl ?? "",
   parentCategoryId: category.parentCategoryId ?? "",
   sortOrder: String(category.sortOrder),
   isActive: category.isActive,
@@ -92,6 +96,7 @@ export function AdminCategoriesPage() {
   );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminCategory | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
   const form = useForm<CategoryFormValues>({
@@ -118,6 +123,11 @@ export function AdminCategoriesPage() {
       setIsCreateOpen(false);
       form.reset(defaultValues);
     },
+  });
+
+  const imageMutation = useMutation({
+    mutationFn: adminCategoriesApi.uploadImage,
+    onSuccess: ({ url }) => form.setValue("imageUrl", url, { shouldDirty: true, shouldValidate: true }),
   });
 
   const deactivateMutation = useMutation({
@@ -180,11 +190,8 @@ export function AdminCategoriesPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {categories.map((category) => (
-                <TableRow key={category.id}>
-                  <TableCell className="font-medium">
-                    {category.categoryName}
-                  </TableCell>
+              {categories.map((category) => <TableRow key={category.id}>
+                  <TableCell><div className="flex items-center gap-3">{category.imageUrl ? <img src={category.imageUrl} alt={`Ảnh danh mục ${category.categoryName}`} className="h-14 w-14 rounded-lg border border-border object-cover" loading="lazy"/> : <div className="grid h-14 w-14 place-items-center rounded-lg border border-dashed border-border bg-surface text-muted"><ImagePlus size={20} aria-label="Chưa có ảnh"/></div>}<span className="font-medium">{category.categoryName}</span></div></TableCell>
                   <TableCell>{category.slug}</TableCell>
                   <TableCell>
                     <Badge>
@@ -212,8 +219,7 @@ export function AdminCategoriesPage() {
                       </Button>
                     </div>
                   </TableCell>
-                </TableRow>
-              ))}
+                </TableRow>)}
             </TableBody>
           </Table>
         ) : (
@@ -246,7 +252,7 @@ export function AdminCategoriesPage() {
             <Button
               type="submit"
               form="category-form"
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || imageMutation.isPending}
             >
               {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
             </Button>
@@ -273,6 +279,13 @@ export function AdminCategoriesPage() {
             error={form.formState.errors.slug?.message}
             {...form.register("slug")}
           />
+          <div>
+            <span className="text-sm font-medium text-ink">Ảnh danh mục</span>
+            <input ref={imageInputRef} id="admin-category-image" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) imageMutation.mutate(file); event.currentTarget.value = ""; }}/>
+            {form.watch("imageUrl") ? <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-surface"><img src={form.watch("imageUrl")} alt="Ảnh danh mục xem trước" className="aspect-[16/9] w-full object-cover"/><button type="button" aria-label="Xóa ảnh danh mục" className="absolute right-2 top-2 grid min-h-11 min-w-11 place-items-center rounded-full bg-white shadow-panel focus:outline-none focus:ring-2 focus:ring-primary-600" onClick={() => form.setValue("imageUrl", "", { shouldDirty: true })}><X size={18}/></button></div> : <button type="button" disabled={imageMutation.isPending} onClick={() => imageInputRef.current?.click()} className="mt-2 flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface transition hover:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:opacity-60"><ImagePlus className="text-primary-700"/><span className="mt-2 font-medium">{imageMutation.isPending ? "Đang tải ảnh..." : "Chọn ảnh danh mục"}</span><span className="mt-1 text-xs text-muted">JPG, PNG hoặc WebP</span></button>}
+            {form.watch("imageUrl") ? <Button type="button" variant="secondary" className="mt-2" disabled={imageMutation.isPending} onClick={() => imageInputRef.current?.click()}>{imageMutation.isPending ? "Đang tải..." : "Thay ảnh"}</Button> : null}
+            {imageMutation.isError ? <Alert tone="danger" className="mt-2">{getErrorMessage(imageMutation.error)}</Alert> : null}
+          </div>
           <SelectInput
             label="Danh mục cha"
             error={form.formState.errors.parentCategoryId?.message}

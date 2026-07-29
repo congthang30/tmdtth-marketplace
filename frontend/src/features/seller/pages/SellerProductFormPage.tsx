@@ -308,8 +308,8 @@ export function SellerProductFormPage() {
             error={form.formState.errors.productStatus?.message}
             {...form.register("productStatus")}
           >
-            <option value="Draft">Bản nháp</option>
-            <option value="Published">Đã đăng bán</option>
+            <option value="Draft">Lưu bản nháp</option>
+            <option value="Published">Gửi phê duyệt</option>
           </SelectInput>
           <TextInput
             label="Thời hạn bảo hành (tháng)"

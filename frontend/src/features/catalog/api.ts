@@ -17,6 +17,8 @@ export const categoriesApi = {
   },
 };
 
+export type TopSearchedProduct = { product: ProductListItem; searchCount: string };
+
 export const catalogApi = {
   async listProducts(query: ProductListQuery) {
     const response = await apiGetResponse<ProductListItem[]>('/products', {
@@ -27,6 +29,9 @@ export const catalogApi = {
       items: response.data,
       meta: response.meta,
     };
+  },
+  listTopSearched(limit = 6) {
+    return apiGet<TopSearchedProduct[]>('/products/discovery/top-searched', { params: { limit } });
   },
   getProduct(slug: string) {
     return apiGet<ProductListItem>(`/products/${slug}`);

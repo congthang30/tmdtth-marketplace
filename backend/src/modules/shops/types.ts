@@ -13,6 +13,12 @@ export type ShopResponse = {
   streetAddress: string | null;
   taxCode: string | null;
   shopStatus: string;
+  operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+  pauseStartsAt: Date | null;
+  pauseEndsAt: Date | null;
+  pauseReason: string | null;
+  operationUpdatedAt: Date | null;
+  isAcceptingOrders: boolean;
   approvedByUserId: string | null;
   approvedByUserIdString: string | null;
   approvedAt: Date | null;

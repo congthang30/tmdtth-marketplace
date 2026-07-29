@@ -1,0 +1,1 @@
+ALTER TABLE "ShopCategories" ADD COLUMN "ImageUrl" VARCHAR(1000);

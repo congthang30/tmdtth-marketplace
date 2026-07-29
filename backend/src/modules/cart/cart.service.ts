@@ -27,6 +27,17 @@ const cartItemInclude = {
       id: true,
       shopName: true,
       slug: true,
+      shopStatus: true,
+      isDeleted: true,
+      operationMode: true,
+      pauseStartsAt: true,
+      pauseEndsAt: true,
+      ownerUser: {
+        select: {
+          userStatus: true,
+          isDeleted: true,
+        },
+      },
     },
   },
   product: {
@@ -61,6 +72,15 @@ const variantInclude = {
           slug: true,
           shopStatus: true,
           isDeleted: true,
+          operationMode: true,
+          pauseStartsAt: true,
+          pauseEndsAt: true,
+          ownerUser: {
+            select: {
+              userStatus: true,
+              isDeleted: true,
+            },
+          },
         },
       },
       category: {
@@ -175,6 +195,9 @@ export class CartService {
     }
 
     if (dto.isSelected !== undefined) {
+      if (dto.isSelected) {
+        await this.requirePurchasableVariant(item.productVariantId);
+      }
       data.isSelected = dto.isSelected;
     }
 
@@ -318,7 +341,10 @@ export class CartService {
       variant.product.isViolation ||
       !variant.product.category.isActive ||
       variant.product.shop.shopStatus !== PUBLIC_SHOP_STATUS ||
-      variant.product.shop.isDeleted
+      variant.product.shop.isDeleted ||
+      variant.product.shop.ownerUser.userStatus !== 'Active' ||
+      variant.product.shop.ownerUser.isDeleted ||
+      this.isShopPaused(variant.product.shop, new Date())
     ) {
       throw new NotFoundException({
         code: 'PRODUCT_VARIANT_NOT_FOUND',
@@ -414,12 +440,15 @@ export class CartService {
     const unitPriceSnapshot = item.unitPriceSnapshot.toString();
     const lineTotal = Number(unitPriceSnapshot) * item.quantity;
     const thumbnail = item.product.images[0] ?? null;
+    const availability = this.getItemAvailability(item);
+    const effectiveSelected = item.isSelected && availability.isAvailable;
 
     return {
       id: item.id.toString(),
       idString: item.id.toString(),
       quantity: item.quantity,
-      isSelected: item.isSelected,
+      isSelected: effectiveSelected,
+      availability,
       unitPriceSnapshot,
       lineTotal: String(lineTotal),
       product: {
@@ -451,6 +480,37 @@ export class CartService {
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
+  }
+
+  private getItemAvailability(item: CartItemEntity): CartItemResponse['availability'] {
+    if (item.shop.ownerUser.isDeleted || item.shop.ownerUser.userStatus !== 'Active') {
+      return { isAvailable: false, code: 'SELLER_SUSPENDED', message: 'Người bán hiện không thể nhận đơn.' };
+    }
+    if (item.shop.isDeleted || item.shop.shopStatus !== PUBLIC_SHOP_STATUS) {
+      return { isAvailable: false, code: 'SHOP_UNAVAILABLE', message: 'Gian hàng hiện không nhận đơn.' };
+    }
+    if (this.isShopPaused(item.shop, new Date())) {
+      const message = item.shop.operationMode === 'PausedUntil' && item.shop.pauseEndsAt
+        ? `Gian hàng tạm nghỉ đến ${item.shop.pauseEndsAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`
+        : 'Gian hàng đang tạm nghỉ và chưa có ngày mở lại.';
+      return { isAvailable: false, code: 'SHOP_PAUSED', message };
+    }
+    if (item.product.isDeleted || item.product.isViolation || item.product.productStatus !== PUBLIC_PRODUCT_STATUS) {
+      return { isAvailable: false, code: 'PRODUCT_UNAVAILABLE', message: 'Sản phẩm hiện không còn khả dụng.' };
+    }
+    if (item.productVariant.variantStatus !== PUBLIC_VARIANT_STATUS) {
+      return { isAvailable: false, code: 'VARIANT_UNAVAILABLE', message: 'Phân loại sản phẩm hiện không khả dụng.' };
+    }
+    const quantityAvailable = this.getQuantityAvailable(item.productVariant);
+    if (quantityAvailable < item.quantity) {
+      return { isAvailable: false, code: 'INSUFFICIENT_STOCK', message: `Chỉ còn ${quantityAvailable} sản phẩm.` };
+    }
+    return { isAvailable: true, code: null, message: null };
+  }
+
+  private isShopPaused(shop: { operationMode: string; pauseStartsAt: Date | null; pauseEndsAt: Date | null }, now: Date): boolean {
+    if (shop.operationMode === 'PausedIndefinitely') return true;
+    return shop.operationMode === 'PausedUntil' && shop.pauseStartsAt !== null && shop.pauseEndsAt !== null && now >= shop.pauseStartsAt && now < shop.pauseEndsAt;
   }
 
   private getQuantityAvailable(item: {

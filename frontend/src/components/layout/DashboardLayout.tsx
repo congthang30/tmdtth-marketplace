@@ -9,6 +9,8 @@ import {
   Truck,
   Warehouse,
   CalendarClock,
+  PackageCheck,
+  UsersRound,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
@@ -26,7 +28,7 @@ const navItems = [
   },
   {
     to: "/seller/shop/register",
-    label: "Đăng ký gian hàng",
+    label: "Hồ sơ người bán",
     icon: Store,
     roles: ["Seller"],
   },
@@ -61,6 +63,12 @@ const navItems = [
     roles: ["Seller"],
   },
   {
+    to: "/seller/shop-operation",
+    label: "Trạng thái nhận đơn",
+    icon: Store,
+    roles: ["Seller"],
+  },
+  {
     to: "/admin",
     label: "Tổng quan quản trị",
     icon: ShieldCheck,
@@ -73,15 +81,27 @@ const navItems = [
     roles: ["Admin"],
   },
   {
-    to: "/admin/shops",
-    label: "Duyệt gian hàng",
-    icon: Store,
+    to: "/admin/products",
+    label: "Duyệt sản phẩm",
+    icon: PackageCheck,
+    roles: ["Admin"],
+  },
+  {
+    to: "/admin/users",
+    label: "Người bán & người dùng",
+    icon: UsersRound,
     roles: ["Admin"],
   },
   {
     to: "/admin/shipping/providers",
     label: "Đối tác vận chuyển",
     icon: Truck,
+    roles: ["Admin"],
+  },
+  {
+    to: "/admin/seller-verifications",
+    label: "Xác minh người bán",
+    icon: ShieldCheck,
     roles: ["Admin"],
   },
   {

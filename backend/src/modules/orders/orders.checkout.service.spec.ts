@@ -47,13 +47,17 @@ type CheckoutCartItemEntity = {
   unitPriceSnapshot: Prisma.Decimal;
   isSelected: boolean;
   createdAt: Date;
-  shop: {
-    id: bigint;
-    shopName: string;
-    slug: string;
-    shopStatus: string;
-    isDeleted: boolean;
-  };
+   shop: {
+     id: bigint;
+     shopName: string;
+     slug: string;
+     shopStatus: string;
+     isDeleted: boolean;
+     operationMode?: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+     pauseStartsAt?: Date | null;
+     pauseEndsAt?: Date | null;
+     ownerUser: { userStatus: string; isDeleted: boolean };
+   };
   product: {
     id: bigint;
     shopId: bigint;
@@ -192,6 +196,10 @@ function createCartItem(
       slug: `shop-${shopId.toString()}`,
       shopStatus: 'Approved',
       isDeleted: false,
+      operationMode: 'Open',
+      pauseStartsAt: null,
+      pauseEndsAt: null,
+      ownerUser: { userStatus: 'Active', isDeleted: false },
     },
     product: {
       id: productId,
@@ -445,6 +453,40 @@ describe('OrdersService checkout preview', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects checkout preview when the shop is paused indefinitely', async () => {
+    prisma.address.findUnique.mockResolvedValue(createAddress());
+    prisma.paymentMethod.findUnique.mockResolvedValue(createPaymentMethod());
+    prisma.cart.findFirst.mockResolvedValue(createCart([createCartItem({
+      shop: {
+        ...createCartItem().shop,
+        operationMode: 'PausedIndefinitely',
+        pauseStartsAt: null,
+        pauseEndsAt: null,
+      },
+    })]));
+
+    await expect(service.checkoutPreview(customerUser, { addressId: '10', paymentMethodId: '20' })).rejects.toMatchObject({
+      response: {
+        code: 'CHECKOUT_ITEM_UNAVAILABLE',
+        details: [expect.objectContaining({ reason: 'SHOP_PAUSED' })],
+      },
+    });
+  });
+
+  it('rejects checkout preview while the shop is inside a scheduled pause', async () => {
+    prisma.address.findUnique.mockResolvedValue(createAddress());
+    prisma.paymentMethod.findUnique.mockResolvedValue(createPaymentMethod());
+    const base = createCartItem();
+    prisma.cart.findFirst.mockResolvedValue(createCart([{ ...base, shop: { ...base.shop, operationMode: 'PausedUntil', pauseStartsAt: new Date(Date.now() - 60_000), pauseEndsAt: new Date(Date.now() + 60_000) } }]));
+
+    await expect(service.checkoutPreview(customerUser, { addressId: '10', paymentMethodId: '20' })).rejects.toMatchObject({
+      response: {
+        code: 'CHECKOUT_ITEM_UNAVAILABLE',
+        details: [expect.objectContaining({ reason: 'SHOP_PAUSED' })],
+      },
+    });
+  });
+
   it('rejects checkout preview when a cart item is no longer purchasable', async () => {
     prisma.address.findUnique.mockResolvedValue(createAddress());
     prisma.paymentMethod.findUnique.mockResolvedValue(createPaymentMethod());
@@ -457,6 +499,7 @@ describe('OrdersService checkout preview', () => {
             slug: 'pending-shop',
             shopStatus: 'PendingApproval',
             isDeleted: false,
+            ownerUser: { userStatus: 'Active', isDeleted: false },
           },
         }),
       ]),

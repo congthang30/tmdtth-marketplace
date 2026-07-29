@@ -6,12 +6,12 @@
 //
 // Journeys covered:
 //   1. Individual seller: register -> create shop (PendingApproval) ->
-//      save legal profile -> save payout account -> upload documents ->
+//      save legal profile -> upload documents ->
 //      submit -> admin start-review -> admin approve verification ->
 //      only now can admin approve the shop itself -> verify final masked
 //      state and audit history.
 //   2. Business seller: register -> create shop (PendingApproval) -> save
-//      legal profile (Business/Company) -> save payout account -> upload
+//      legal profile (Business/Company) -> upload
 //      documents -> submit -> admin start-review -> admin
 //      request-revision (reason required) -> seller edits + resubmits ->
 //      admin approve verification -> admin approve shop -> verify final
@@ -123,18 +123,6 @@ async function approveShop(shopId) {
   });
 }
 
-const savePayout = (token, suffixTag) =>
-  api('/shops/payout-account/me', {
-    token,
-    method: 'PUT',
-    body: {
-      bankCode: 'VCB',
-      bankName: 'Vietcombank',
-      accountNumber: `0${Date.now()}`.slice(0, 14),
-      accountHolderName: `NGUYEN VAN A ${suffixTag}`,
-    },
-  });
-
 // ---------------------------------------------------------------------
 // Journey 1: Individual seller — submit, admin approves in one pass
 // ---------------------------------------------------------------------
@@ -173,15 +161,6 @@ async function runIndividualJourney() {
     `tax code must be masked, got: ${profile.taxCodeMasked}`,
   );
 
-  // Cannot submit without payout account
-  await expectFailure(
-    api('/shops/verification/me/submit', { token: seller.accessToken, method: 'POST' }),
-    'SELLER_PAYOUT_REQUIRED',
-  );
-
-  const payout = await savePayout(seller.accessToken, 'IND');
-  assert(/^•••• \d{4}$/.test(payout.accountNumberMasked), 'payout account number must be masked');
-
   // Cannot submit without required documents
   await expectFailure(
     api('/shops/verification/me/submit', { token: seller.accessToken, method: 'POST' }),
@@ -190,7 +169,6 @@ async function runIndividualJourney() {
 
   await uploadDocument(seller.accessToken, 'IdentityFront');
   await uploadDocument(seller.accessToken, 'IdentityBack');
-  await uploadDocument(seller.accessToken, 'BankAccountProof');
 
   const submitted = await api('/shops/verification/me/submit', {
     token: seller.accessToken,
@@ -244,9 +222,8 @@ async function runIndividualJourney() {
 
   const finalState = await api('/shops/verification/me', { token: seller.accessToken });
   assert(finalState.profile.verificationStatus === 'Approved', 'seller-side view should reflect Approved');
-  assert(finalState.payoutAccount.payoutStatus === 'Verified', 'payout account should be auto-verified on approval');
 
-  // Only now, after the profile is Approved and payout Verified, can the shop itself be approved
+  // Only now, after the profile is Approved, can the shop itself be approved
   const approvedShop = await approveShop(shop.id);
   assert(approvedShop.shopStatus === 'Approved', 'shop should become Approved once seller verification is Approved');
 
@@ -297,9 +274,7 @@ async function runBusinessRevisionJourney() {
       registeredAddress: '123 Business Street, District 1, TP.HCM',
     },
   });
-  await savePayout(seller.accessToken, 'BIZ');
   await uploadDocument(seller.accessToken, 'BusinessRegistration');
-  await uploadDocument(seller.accessToken, 'BankAccountProof');
 
   const submitted = await api('/shops/verification/me/submit', {
     token: seller.accessToken,
@@ -335,9 +310,6 @@ async function runBusinessRevisionJourney() {
     body: { reason: 'Giấy chứng nhận đăng ký kinh doanh bị mờ, vui lòng tải lại bản rõ nét hơn.' },
   });
   assert(revision.verificationStatus === 'NeedsRevision', 'expected NeedsRevision after request-revision');
-
-  const payoutAfterRevision = (await api('/shops/verification/me', { token: seller.accessToken })).payoutAccount;
-  assert(payoutAfterRevision.payoutStatus === 'Rejected', 'payout status should flip to Rejected alongside revision');
 
   // Seller cannot resubmit without re-uploading; verify document delete still allowed while NeedsRevision
   const stateForEdit = await api('/shops/verification/me', { token: seller.accessToken });

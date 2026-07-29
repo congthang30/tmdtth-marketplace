@@ -40,6 +40,12 @@ type CartItemEntity = {
     id: bigint;
     shopName: string;
     slug: string;
+    shopStatus?: string;
+    isDeleted?: boolean;
+    operationMode?: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+    pauseStartsAt?: Date | null;
+    pauseEndsAt?: Date | null;
+    ownerUser: { userStatus: string; isDeleted: boolean };
   };
   product: {
     id: bigint;
@@ -85,6 +91,10 @@ type PurchasableVariantEntity = {
       slug: string;
       shopStatus: string;
       isDeleted: boolean;
+      operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
+      pauseStartsAt: Date | null;
+      pauseEndsAt: Date | null;
+      ownerUser: { userStatus: string; isDeleted: boolean };
     };
     category: {
       id: bigint;
@@ -179,6 +189,7 @@ function createCartItemEntity(
       id: 100n,
       shopName: 'Seller Home',
       slug: 'seller-home',
+      ownerUser: { userStatus: 'Active', isDeleted: false },
     },
     product: {
       id: 200n,
@@ -234,6 +245,10 @@ function createPurchasableVariantEntity(
         slug: 'seller-home',
         shopStatus: 'Approved',
         isDeleted: false,
+        operationMode: 'Open',
+        pauseStartsAt: null,
+        pauseEndsAt: null,
+        ownerUser: { userStatus: 'Active', isDeleted: false },
       },
       category: {
         id: 50n,
@@ -363,6 +378,44 @@ describe('CartService', () => {
     expect(updateArgs.data.unitPriceSnapshot.toString()).toBe('159000');
     expect(prisma.cartItem.create).not.toHaveBeenCalled();
     expect(result.quantity).toBe(5);
+  });
+
+  it('rejects add item when the shop is paused indefinitely', async () => {
+    prisma.productVariant.findUnique.mockResolvedValue(
+      createPurchasableVariantEntity({
+        product: {
+          ...createPurchasableVariantEntity().product,
+          shop: {
+            ...createPurchasableVariantEntity().product.shop,
+            operationMode: 'PausedIndefinitely',
+            pauseStartsAt: null,
+            pauseEndsAt: null,
+          },
+        },
+      }),
+    );
+    prisma.cart.findFirst.mockResolvedValue(createCartEntity());
+
+    await expect(service.addItem(customerUser, { productVariantId: '250', quantity: 1 })).rejects.toMatchObject({
+      response: { code: 'PRODUCT_VARIANT_NOT_FOUND' },
+    });
+    expect(prisma.cartItem.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects add item while the shop is inside a scheduled pause', async () => {
+    const startsAt = new Date(Date.now() - 60_000);
+    const endsAt = new Date(Date.now() + 60_000);
+    const base = createPurchasableVariantEntity();
+    prisma.productVariant.findUnique.mockResolvedValue({
+      ...base,
+      product: { ...base.product, shop: { ...base.product.shop, operationMode: 'PausedUntil', pauseStartsAt: startsAt, pauseEndsAt: endsAt } },
+    });
+    prisma.cart.findFirst.mockResolvedValue(createCartEntity());
+
+    await expect(service.addItem(customerUser, { productVariantId: '250', quantity: 1 })).rejects.toMatchObject({
+      response: { code: 'PRODUCT_VARIANT_NOT_FOUND' },
+    });
+    expect(prisma.cartItem.create).not.toHaveBeenCalled();
   });
 
   it('rejects add item when requested quantity exceeds available stock', async () => {

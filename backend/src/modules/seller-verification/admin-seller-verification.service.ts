@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  PayoutStatus,
   ReviewStatus,
   SellerDocumentAccessRole,
   VerificationStatus,
@@ -61,7 +60,7 @@ export class AdminSellerVerificationService {
       this.prisma.sellerVerificationProfile.findMany({
         where,
         include: {
-          shop: { select: { id: true, shopName: true, shopStatus: true } },
+          shop: { select: { id: true, shopName: true, shopStatus: true, province: true, ward: true, streetAddress: true } },
           _count: { select: { documents: true } },
         },
         orderBy,
@@ -100,7 +99,7 @@ export class AdminSellerVerificationService {
     const profile = await this.prisma.sellerVerificationProfile.findUnique({
       where: { id },
       include: {
-        shop: { select: { id: true, shopName: true, shopStatus: true } },
+        shop: { select: { id: true, shopName: true, shopStatus: true, province: true, ward: true, streetAddress: true } },
         documents: {
           where: { isDeleted: false },
           orderBy: { createdAt: 'asc' },
@@ -112,9 +111,6 @@ export class AdminSellerVerificationService {
     if (!profile || profile.shop.shopStatus === 'Deleted') {
       throw this.notFound();
     }
-    const payout = await this.prisma.sellerPayoutAccount.findUnique({
-      where: { shopId: profile.shopId },
-    });
 
     return {
       id: profile.id.toString(),
@@ -123,30 +119,32 @@ export class AdminSellerVerificationService {
       businessType: profile.businessType,
       legalName: profile.legalName,
       identityDocumentType: profile.identityDocumentType,
-      identityNumberMasked: this.crypto.mask(profile.identityNumberLast4),
+      identityNumber: profile.identityNumberEncrypted
+        ? this.crypto.decrypt(profile.identityNumberEncrypted)
+        : null,
       identityIssuedAt: profile.identityIssuedAt,
       identityIssuedBy: profile.identityIssuedBy,
       identityExpiresAt: profile.identityExpiresAt,
-      taxCodeMasked: this.crypto.mask(profile.taxCodeLast4),
-      businessRegistrationNumberMasked: this.crypto.mask(
-        profile.businessRegistrationNumberLast4,
-      ),
+      taxCode: profile.taxCodeEncrypted
+        ? this.crypto.decrypt(profile.taxCodeEncrypted)
+        : null,
+      businessRegistrationNumber: profile.businessRegistrationNumberEncrypted
+        ? this.crypto.decrypt(profile.businessRegistrationNumberEncrypted)
+        : null,
       businessRegistrationIssuedAt: profile.businessRegistrationIssuedAt,
       businessRegistrationIssuedBy: profile.businessRegistrationIssuedBy,
       legalRepresentativeName: profile.legalRepresentativeName,
       registeredAddress: profile.registeredAddress,
+      dateOfBirth: profile.dateOfBirth,
+      contactName: profile.contactName,
+      contactEmail: profile.contactEmail,
+      contactPhone: profile.contactPhone,
+      useAccountPhone: profile.useAccountPhone,
+      faceVerified: profile.faceVerified,
       verificationStatus: profile.verificationStatus,
       submittedAt: profile.submittedAt,
       reviewedAt: profile.reviewedAt,
-      payoutAccount: payout
-        ? {
-            bankCode: payout.bankCode,
-            bankName: payout.bankNameSnapshot,
-            accountNumberMasked: this.crypto.mask(payout.accountNumberLast4),
-            accountHolderName: payout.accountHolderName,
-            payoutStatus: payout.payoutStatus,
-          }
-        : null,
+
       documents: profile.documents.map((document) => ({
         id: document.id.toString(),
         verificationProfileId: document.verificationProfileId.toString(),
@@ -210,14 +208,6 @@ export class AdminSellerVerificationService {
     return this.storage.signedUrl(document);
   }
 
-  startReview(user: AuthenticatedUser, profileId: string) {
-    return this.transition(
-      user,
-      profileId,
-      VerificationStatus.UnderReview,
-      ReviewStatus.InProgress,
-    );
-  }
 
   requestRevision(
     user: AuthenticatedUser,
@@ -262,7 +252,7 @@ export class AdminSellerVerificationService {
     const id = this.parseId(profileId);
     const profile = await this.prisma.sellerVerificationProfile.findUnique({
       where: { id },
-      include: { shop: { select: { shopName: true } } },
+      include: { shop: { select: { shopName: true, ownerUserId: true } } },
     });
     if (!profile) throw this.notFound();
     this.transitions.assertAllowed(profile.verificationStatus, toStatus);
@@ -300,28 +290,15 @@ export class AdminSellerVerificationService {
         },
       });
       if (toStatus === VerificationStatus.Approved) {
-        await transaction.sellerPayoutAccount.updateMany({
-          where: { shopId: profile.shopId, isActive: true },
-          data: {
-            payoutStatus: PayoutStatus.Verified,
-            verifiedAt: now,
-            verifiedByUserId: user.id,
-            updatedAt: now,
-          },
+        await transaction.sellerVerificationDocument.updateMany({
+          where: { verificationProfileId: id, isDeleted: false },
+          data: { documentStatus: 'Accepted', updatedAt: now },
         });
-      } else if (
-        toStatus === VerificationStatus.NeedsRevision ||
-        toStatus === VerificationStatus.Rejected
-      ) {
-        await transaction.sellerPayoutAccount.updateMany({
-          where: { shopId: profile.shopId, isActive: true },
-          data: {
-            payoutStatus: PayoutStatus.Rejected,
-            verifiedAt: null,
-            verifiedByUserId: user.id,
-            updatedAt: now,
-          },
-        });
+        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Approved', approvedByUserId: user.id, approvedAt: now, rejectionReason: null, updatedAt: now } });
+      } else if (toStatus === VerificationStatus.NeedsRevision) {
+        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Draft', approvedByUserId: null, approvedAt: null, rejectionReason: reason ?? null, updatedAt: now } });
+      } else if (toStatus === VerificationStatus.Rejected) {
+        await transaction.shop.update({ where: { id: profile.shopId }, data: { shopStatus: 'Rejected', approvedByUserId: null, approvedAt: null, rejectionReason: reason ?? null, updatedAt: now } });
       }
       return {
         id: updated.id.toString(),
@@ -329,8 +306,15 @@ export class AdminSellerVerificationService {
         reviewedAt: updated.reviewedAt,
       };
     });
-    if (toStatus === VerificationStatus.Approved && profile.contactEmail) {
-      await this.emailService.sendApproved(profile.contactEmail, profile.contactName ?? profile.legalName, profile.shop.shopName);
+    if (profile.contactEmail) {
+      const recipientName = profile.contactName ?? profile.legalName;
+      if (toStatus === VerificationStatus.Approved) {
+        await this.emailService.sendApproved(profile.contactEmail, recipientName, profile.shop.shopName);
+      } else if (toStatus === VerificationStatus.NeedsRevision && reason) {
+        await this.emailService.sendRevisionRequested(profile.contactEmail, recipientName, profile.shop.shopName, reason);
+      } else if (toStatus === VerificationStatus.Rejected && reason) {
+        await this.emailService.sendRejected(profile.contactEmail, recipientName, profile.shop.shopName, reason);
+      }
     }
     return result;
   }

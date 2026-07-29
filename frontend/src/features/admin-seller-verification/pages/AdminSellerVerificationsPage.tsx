@@ -18,7 +18,7 @@ import { adminSellerVerificationApi, adminSellerVerificationKeys } from '../api'
 export function AdminSellerVerificationsPage() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<VerificationStatus | ''>('Submitted');
+  const [status, setStatus] = useState<VerificationStatus | ''>('');
   const [sellerType, setSellerType] = useState<SellerType | ''>('');
   const params = { page, limit: 10, q: q.trim() || undefined, status: status || undefined, sellerType: sellerType || undefined, sortBy: 'submittedAt' as const, sortOrder: 'asc' as const };
   const queueQuery = useQuery({
@@ -44,7 +44,6 @@ export function AdminSellerVerificationsPage() {
           <SelectInput id="admin-verification-status" label="Trạng thái" value={status} onChange={(event) => { setStatus(event.target.value as VerificationStatus | ''); setPage(1); }}>
             <option value="">Tất cả</option>
             <option value="Submitted">Đã gửi</option>
-            <option value="UnderReview">Đang xét duyệt</option>
             <option value="NeedsRevision">Cần bổ sung</option>
             <option value="Approved">Đã xác minh</option>
             <option value="Rejected">Đã từ chối</option>
@@ -73,7 +72,7 @@ export function AdminSellerVerificationsPage() {
               </TableRow></TableHead>
               <TableBody>{items.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell><p className="font-medium">{item.shop.shopName}</p><p className="text-xs text-muted">{item.legalName} · MST {item.taxCodeMasked}</p></TableCell>
+                  <TableCell><p className="font-medium">{item.shop.shopName}</p><p className="text-xs text-muted">{[item.shop.streetAddress, item.shop.ward, item.shop.province].filter(Boolean).join(', ') || 'Chưa cập nhật địa chỉ'}</p><p className="text-xs text-muted">{item.legalName} · MST {item.taxCodeMasked}</p></TableCell>
                   <TableCell>{item.sellerType === 'Individual' ? 'Cá nhân' : 'Doanh nghiệp'}</TableCell>
                   <TableCell><Badge>{formatStatus(item.verificationStatus)}</Badge></TableCell>
                   <TableCell>{item.documentCount}</TableCell>

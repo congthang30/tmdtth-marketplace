@@ -4,15 +4,17 @@ import {
   apiGetResponse,
   apiPatch,
   apiPost,
+  apiClient,
 } from '@/services/api';
-import type { Shop } from '@/features/seller/types';
+import type { ApiResponse } from '@/types/api';
 import type {
   AdminCategory,
-  AdminShopListResponse,
   CarrierProvider,
   CarrierProviderListResponse,
   CategoryRequest,
+  AdminProductListResponse,
 } from './types';
+import type { SellerProduct } from '@/features/seller/types';
 
 const cleanParams = (params: Record<string, unknown>) =>
   Object.fromEntries(
@@ -32,6 +34,12 @@ export const adminCategoriesApi = {
       body,
     );
   },
+  async uploadImage(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post<ApiResponse<{ url: string }>>('/uploads', formData);
+    return response.data.data;
+  },
   deactivate(categoryId: string) {
     return apiDelete<{ id: string; deactivated: true }>(
       `/admin/categories/${categoryId}`,
@@ -39,24 +47,16 @@ export const adminCategoriesApi = {
   },
 };
 
-export const adminShopsApi = {
-  async list(page = 1, limit = 10, status?: string): Promise<AdminShopListResponse> {
-    const response = await apiGetResponse<Shop[]>('/admin/shops', {
-      params: cleanParams({ page, limit, status }),
-    });
-
-    return {
-      items: response.data,
-      meta: response.meta,
-    };
+export const adminProductsApi = {
+  async list(page = 1, limit = 10, status?: string): Promise<AdminProductListResponse> {
+    const response = await apiGetResponse<SellerProduct[]>('/admin/products', { params: cleanParams({ page, limit, status }) });
+    return { items: response.data, meta: response.meta };
   },
-  approve(shopId: string) {
-    return apiPatch<Shop>(`/admin/shops/${shopId}/approve`);
+  approve(productId: string) {
+    return apiPatch<SellerProduct>(`/admin/products/${productId}/approve`);
   },
-  reject(shopId: string, reason?: string) {
-    return apiPatch<Shop, { reason?: string }>(`/admin/shops/${shopId}/reject`, {
-      reason,
-    });
+  reject(productId: string) {
+    return apiPatch<SellerProduct>(`/admin/products/${productId}/reject`);
   },
 };
 

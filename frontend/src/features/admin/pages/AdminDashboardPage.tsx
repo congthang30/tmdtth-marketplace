@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { FolderTree, Store, Truck } from "lucide-react";
+import { FolderTree, ShieldCheck, Truck } from "lucide-react";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   adminCategoriesApi,
   adminShippingProvidersApi,
-  adminShopsApi,
 } from "../api";
 
 export function AdminDashboardPage() {
@@ -13,17 +12,12 @@ export function AdminDashboardPage() {
     queryKey: ["admin", "categories"],
     queryFn: adminCategoriesApi.list,
   });
-  const shopsQuery = useQuery({
-    queryKey: ["admin", "shops", 1, "PendingApproval"],
-    queryFn: () => adminShopsApi.list(1, 5, "PendingApproval"),
-  });
   const providersQuery = useQuery({
     queryKey: ["admin", "shipping-providers"],
     queryFn: () => adminShippingProvidersApi.list(),
   });
 
-  const isLoading =
-    categoriesQuery.isLoading || shopsQuery.isLoading || providersQuery.isLoading;
+  const isLoading = categoriesQuery.isLoading || providersQuery.isLoading;
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -42,16 +36,16 @@ export function AdminDashboardPage() {
       to: "/admin/categories",
     },
     {
-      label: "Gian hàng chờ duyệt",
-      value: shopsQuery.data?.meta?.total ?? 0,
-      icon: Store,
-      to: "/admin/shops",
-    },
-    {
       label: "Đối tác vận chuyển đã kết nối",
       value: `${configuredProviders}/${totalProviders}`,
       icon: Truck,
       to: "/admin/shipping/providers",
+    },
+    {
+      label: "Xác minh người bán",
+      value: "Mở hồ sơ",
+      icon: ShieldCheck,
+      to: "/admin/seller-verifications",
     },
   ];
 

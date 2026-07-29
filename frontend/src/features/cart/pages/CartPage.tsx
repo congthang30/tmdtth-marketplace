@@ -29,13 +29,13 @@ function CartItemCard({
   isMutating,
 }: CartItemCardProps) {
   return (
-    <article className="grid gap-4 rounded-lg border border-border bg-white p-4 shadow-panel sm:grid-cols-[auto_112px_1fr_auto] sm:items-center">
+    <article className={`grid gap-4 rounded-lg border bg-white p-4 shadow-panel sm:grid-cols-[auto_112px_1fr_auto] sm:items-center ${item.availability.isAvailable ? 'border-border' : 'border-danger-200 bg-danger-50/30'}`}>
       <label className="flex items-center gap-2 text-sm font-medium text-ink">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border text-primary-600"
           checked={item.isSelected}
-          disabled={isMutating}
+          disabled={isMutating || !item.availability.isAvailable}
           onChange={(event) => onSelectChange(item, event.target.checked)}
         />
         Chọn
@@ -64,13 +64,14 @@ function CartItemCard({
         <p className="mt-3 text-sm font-medium text-primary-700">
           {formatMoney(item.unitPriceSnapshot)}
         </p>
+        {!item.availability.isAvailable ? <p className="mt-2 text-sm font-medium text-danger-700" role="status">{item.availability.message ?? 'Sản phẩm hiện không thể mua.'}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-3 sm:justify-end">
         <div className="inline-flex overflow-hidden rounded-md border border-border bg-white">
           <button
             type="button"
             className="grid h-9 w-9 place-items-center hover:bg-surface disabled:opacity-40"
-            disabled={item.quantity <= 1 || isMutating}
+            disabled={item.quantity <= 1 || isMutating || !item.availability.isAvailable}
             onClick={() => onQuantityChange(item, item.quantity - 1)}
           >
             <Minus size={14} aria-hidden="true" />
@@ -82,7 +83,7 @@ function CartItemCard({
             type="button"
             className="grid h-9 w-9 place-items-center hover:bg-surface disabled:opacity-40"
             disabled={
-              item.quantity >= item.variant.quantityAvailable || isMutating
+              item.quantity >= item.variant.quantityAvailable || isMutating || !item.availability.isAvailable
             }
             onClick={() => onQuantityChange(item, item.quantity + 1)}
           >

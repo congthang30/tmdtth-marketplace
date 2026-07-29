@@ -15,7 +15,7 @@ export class SearchService {
     const q = query.trim();
     const [products, categories] = await Promise.all([
       this.prisma.product.findMany({
-        where: { productStatus: 'Published', isDeleted: false, isViolation: false, shop: { shopStatus: 'Approved', isDeleted: false }, category: { isActive: true } },
+        where: { productStatus: 'Published', isDeleted: false, isViolation: false, shop: { shopStatus: 'Approved', isDeleted: false, ownerUser: { userStatus: 'Active', isDeleted: false }, OR: [{ operationMode: 'Open' }, { operationMode: 'PausedUntil', pauseStartsAt: { gt: new Date() } }, { operationMode: 'PausedUntil', pauseEndsAt: { lte: new Date() } }] }, category: { isActive: true } },
         orderBy: [{ soldCount: 'desc' }, { viewCount: 'desc' }],
         take: 200,
         select: { productName: true, category: { select: { categoryName: true } } },

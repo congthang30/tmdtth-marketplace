@@ -1,20 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { Filter, RotateCcw, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Filter } from "lucide-react";
+import { useMemo } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { SelectInput } from "@/components/ui/SelectInput";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { TextInput } from "@/components/ui/TextInput";
-import { SuggestionSearch } from "@/features/search/SuggestionSearch";
 import { catalogApi, categoriesApi } from "../api";
 import type { ProductListQuery } from "../types";
-import { flattenCategories } from "../utils";
 import { ProductCard } from "../components/ProductCard";
 
 type CatalogFilters = {
@@ -72,34 +67,14 @@ const getFiltersFromParams = (
   };
 };
 
-const setParam = (params: URLSearchParams, key: string, value: string) => {
-  if (value) {
-    params.set(key, value);
-    return;
-  }
 
-  params.delete(key);
-};
-
-const getSortLabel = (sortBy: CatalogFilters["sortBy"]) =>
-  ({
-    createdAt: "Mới nhất",
-    basePrice: "Giá",
-    soldCount: "Lượt bán",
-    viewCount: "Lượt xem",
-    productName: "Tên sản phẩm",
-  })[sortBy];
 
 export function CatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState(() =>
-    getFiltersFromParams(searchParams),
-  );
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHomepage = location.pathname === "/";
   const page = getPage(searchParams);
-
-  useEffect(() => {
-    setFilters(getFiltersFromParams(searchParams));
-  }, [searchParams]);
 
   const query = useMemo<ProductListQuery>(
     () => ({
@@ -120,26 +95,16 @@ export function CatalogPage() {
     queryFn: () => catalogApi.listProducts(query),
   });
 
-  const categoryOptions = useMemo(
-    () => flattenCategories(categoriesQuery.data ?? []),
-    [categoriesQuery.data],
-  );
+  const topSearchedQuery = useQuery({
+    queryKey: ["catalog", "top-searched"],
+    queryFn: () => catalogApi.listTopSearched(6),
+    enabled: isHomepage,
+    staleTime: 60_000,
+  });
 
   const products = productsQuery.data?.items ?? [];
   const meta = productsQuery.data?.meta;
-
-  const applyFilters = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("page", "1");
-    setParam(nextParams, "q", filters.q.trim());
-    setParam(nextParams, "categoryId", filters.categoryId);
-    setParam(nextParams, "minPrice", filters.minPrice);
-    setParam(nextParams, "maxPrice", filters.maxPrice);
-    nextParams.set("sortBy", filters.sortBy);
-    nextParams.set("sortOrder", filters.sortOrder);
-    setSearchParams(nextParams);
-  };
+  const selectedCategoryId = searchParams.get("categoryId") ?? "";
 
   const resetFilters = () => {
     setSearchParams({ page: "1" });
@@ -153,133 +118,40 @@ export function CatalogPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-border bg-white p-5 shadow-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Danh mục công khai
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold text-ink">
-              Khám phá sản phẩm trên sàn
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-              Tìm kiếm và lọc sản phẩm theo danh mục, khoảng giá và thứ tự hiển
-              thị.
-            </p>
-          </div>
-          {meta ? (
-            <div className="rounded-md border border-border px-4 py-3 text-sm text-muted">
-              <span className="font-semibold text-ink">{meta.total}</span> sản
-              phẩm
-            </div>
-          ) : null}
-        </div>
+      {!isHomepage ? <header className="rounded-lg border border-border bg-white px-5 py-4 shadow-panel"><h1 className="text-xl font-semibold text-ink">{searchParams.get("q") ? `Kết quả tìm kiếm cho “${searchParams.get("q")}”` : "Tất cả sản phẩm"}</h1>{meta?.total !== undefined ? <p className="mt-1 text-sm text-muted">Tìm thấy {meta.total.toLocaleString("vi-VN")} sản phẩm</p> : null}</header> : null}
+      {isHomepage && categoriesQuery.isError ? (
+        <Alert tone="danger">
+          Không thể tải danh mục, nhưng bạn vẫn có thể xem sản phẩm.
+        </Alert>
+      ) : null}
 
-        <form
-          className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.9fr_0.6fr_0.6fr_0.7fr_0.7fr_auto]"
-          onSubmit={applyFilters}
-        >
-          <div>
-            <span className="mb-1 block text-sm font-medium text-ink">Tìm kiếm</span>
-            <SuggestionSearch
-              context="customer"
-              embedded
-              label="Tìm kiếm sản phẩm"
-              value={filters.q}
-              placeholder="Tên sản phẩm, danh mục hoặc gian hàng"
-              onValueChange={(nextValue) => setFilters((current) => ({ ...current, q: nextValue }))}
-            />
+      {isHomepage && categoriesQuery.isLoading ? (
+        <section aria-label="Đang tải danh mục" className="rounded-lg border border-border bg-white p-5 shadow-panel">
+          <Skeleton className="h-6 w-32" />
+          <div className="mt-5 grid grid-flow-col grid-rows-2 gap-x-4 gap-y-5 overflow-hidden">
+            {Array.from({ length: 12 }, (_, index) => <div key={index} className="w-24"><Skeleton className="mx-auto h-16 w-16 rounded-full"/><Skeleton className="mx-auto mt-2 h-8 w-20"/></div>)}
           </div>
-          <SelectInput
-            label="Danh mục"
-            value={filters.categoryId}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                categoryId: event.target.value,
-              }))
-            }
-          >
-            <option value="">Tất cả danh mục</option>
-            {categoryOptions.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </SelectInput>
-          <TextInput
-            label="Giá thấp nhất"
-            inputMode="numeric"
-            value={filters.minPrice}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                minPrice: event.target.value,
-              }))
-            }
-          />
-          <TextInput
-            label="Giá cao nhất"
-            inputMode="numeric"
-            value={filters.maxPrice}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                maxPrice: event.target.value,
-              }))
-            }
-          />
-          <SelectInput
-            label="Sắp xếp theo"
-            value={filters.sortBy}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                sortBy: event.target.value as CatalogFilters["sortBy"],
-              }))
-            }
-          >
-            {sortByOptions.map((option) => (
-              <option key={option} value={option}>
-                {getSortLabel(option)}
-              </option>
-            ))}
-          </SelectInput>
-          <SelectInput
-            label="Thứ tự"
-            value={filters.sortOrder}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                sortOrder: event.target.value as CatalogFilters["sortOrder"],
-              }))
-            }
-          >
-            <option value="desc">Giảm dần</option>
-            <option value="asc">Tăng dần</option>
-          </SelectInput>
-          <div className="flex items-end gap-2">
-            <Button type="submit" className="h-10">
-              <Search size={16} aria-hidden="true" />
-              Áp dụng
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-10"
-              onClick={resetFilters}
-            >
-              <RotateCcw size={16} aria-hidden="true" />
-            </Button>
-          </div>
-        </form>
+        </section>
+      ) : null}
 
-        {categoriesQuery.isError ? (
-          <Alert tone="danger" className="mt-4">
-            Không thể tải danh mục, nhưng Bạn vẫn có thể xem sản phẩm.
-          </Alert>
-        ) : null}
-      </section>
+      {isHomepage && !categoriesQuery.isLoading && !categoriesQuery.isError && (categoriesQuery.data?.length ?? 0) > 0 ? (
+        <section aria-labelledby="homepage-category-heading" className="overflow-hidden rounded-lg border border-border bg-white shadow-panel">
+          <div className="border-b border-border px-5 py-4"><h2 id="homepage-category-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">Danh mục</h2></div>
+          <div className="grid auto-cols-[6.5rem] grid-flow-col grid-rows-2 gap-x-3 gap-y-5 overflow-x-auto px-4 py-5 sm:auto-cols-[7.5rem] lg:grid-flow-row lg:grid-cols-8 lg:overflow-visible xl:grid-cols-10">
+            {(categoriesQuery.data ?? []).flatMap((category) => [category, ...category.children]).map((category) => {
+              const selected = selectedCategoryId === category.id;
+              return <button key={category.id} type="button" aria-pressed={selected} onClick={() => navigate(`/products?categoryId=${encodeURIComponent(category.id)}&page=1`)} className={`group flex min-h-28 flex-col items-center rounded-lg px-2 py-2 text-center transition focus:outline-none focus:ring-2 focus:ring-primary-600 ${selected ? "bg-primary-50 text-primary-700" : "text-ink hover:bg-surface"}`}>
+                <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-full border border-border bg-surface sm:h-18 sm:w-18">{category.imageUrl ? <img src={category.imageUrl} alt="" className="h-full w-full object-cover transition duration-200 group-hover:scale-105" loading="lazy"/> : <span className="px-2 text-xs font-semibold text-muted" aria-hidden="true">{category.categoryName.slice(0, 2).toLocaleUpperCase("vi")}</span>}</span>
+                <span className="mt-2 line-clamp-2 text-xs leading-4 sm:text-sm">{category.categoryName}</span>
+              </button>;
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {isHomepage && topSearchedQuery.isLoading ? <section aria-label="Đang tải tìm kiếm hàng đầu" className="rounded-lg border border-border bg-white p-5 shadow-panel"><Skeleton className="h-6 w-44"/><div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-48"/>)}</div></section> : null}
+      {isHomepage && topSearchedQuery.isError ? <Alert tone="danger">Không thể tải tìm kiếm hàng đầu. Bạn vẫn có thể tiếp tục xem sản phẩm.</Alert> : null}
+      {isHomepage && (topSearchedQuery.data?.length ?? 0) > 0 ? <section aria-labelledby="top-searched-heading" className="overflow-hidden rounded-lg border border-border bg-white shadow-panel"><div className="flex items-center justify-between border-b border-border px-5 py-4"><h2 id="top-searched-heading" className="text-sm font-semibold uppercase tracking-wide text-primary-700">Tìm kiếm hàng đầu</h2><Link to="/products" className="rounded-md px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-600">Xem tất cả</Link></div><div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-6">{topSearchedQuery.data?.map(({ product, searchCount }, index) => <Link key={product.id} to={`/products/${product.slug}`} className="group relative bg-white p-3 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-600"><span className="absolute left-3 top-3 z-10 rounded-r-md bg-primary-600 px-2 py-1 text-[10px] font-bold text-white">TOP {index + 1}</span><div className="aspect-square overflow-hidden rounded-md bg-surface">{product.thumbnailImage ? <img src={product.thumbnailImage.imageUrl} alt={product.thumbnailImage.altText ?? product.productName} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" loading="lazy"/> : <div className="grid h-full place-items-center px-3 text-center text-xs text-muted">Chưa có ảnh</div>}</div><p className="mt-3 line-clamp-2 min-h-10 text-sm font-medium text-ink">{product.productName}</p><p className="mt-1 text-xs text-muted">{Number(searchCount).toLocaleString("vi-VN")} lượt tìm kiếm</p></Link>)}</div></section> : null}
 
       {productsQuery.isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

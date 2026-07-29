@@ -1,11 +1,10 @@
 import { apiClient, apiDelete, apiGet, apiPatch, apiPost } from '@/services/api';
 import type { ApiResponse } from '@/types/api';
 import type {
-  SaveSellerPayoutRequest,
+  SaveSellerContactRequest,
   SaveSellerVerificationRequest,
   SellerDocumentAccess,
   SellerDocumentType,
-  SellerPayoutAccount,
   SellerVerificationDocument,
   SellerVerificationOverview,
   SellerVerificationProfile,
@@ -29,11 +28,13 @@ export const sellerVerificationApi = {
       body,
     );
   },
-  savePayout(body: SaveSellerPayoutRequest) {
-    return apiClient
-      .put<ApiResponse<SellerPayoutAccount>>('/shops/payout-account/me', body)
-      .then((response) => response.data.data);
+  updateContact(body: SaveSellerContactRequest) {
+    return apiPatch<SellerVerificationProfile, SaveSellerContactRequest>(
+      '/shops/verification/me/contact',
+      body,
+    );
   },
+
   async uploadDocument(documentType: SellerDocumentType, file: File) {
     const body = new FormData();
     body.append('documentType', documentType);

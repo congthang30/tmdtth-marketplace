@@ -32,6 +32,18 @@ export type CartItemResponse = {
   isSelected: boolean;
   unitPriceSnapshot: string;
   lineTotal: string;
+  availability: {
+    isAvailable: boolean;
+    code:
+      | 'SELLER_SUSPENDED'
+      | 'SHOP_UNAVAILABLE'
+      | 'SHOP_PAUSED'
+      | 'PRODUCT_UNAVAILABLE'
+      | 'VARIANT_UNAVAILABLE'
+      | 'INSUFFICIENT_STOCK'
+      | null;
+    message: string | null;
+  };
   product: CartProductSummary;
   variant: CartVariantSummary;
   shop: CartShopSummary;

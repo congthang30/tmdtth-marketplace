@@ -9,12 +9,6 @@ export type VerificationStatus =
   | 'Approved'
   | 'Rejected'
   | 'Suspended';
-export type PayoutStatus =
-  | 'Draft'
-  | 'PendingVerification'
-  | 'Verified'
-  | 'Rejected'
-  | 'Suspended';
 export type SellerDocumentType =
   | 'IdentityFront'
   | 'IdentityBack'
@@ -75,19 +69,10 @@ export type SellerVerificationProfile = {
   reviews: SellerVerificationReview[];
 };
 
-export type SellerPayoutAccount = {
-  id: string;
-  bankCode: string;
-  bankName: string;
-  accountNumberMasked: string;
-  accountHolderName: string;
-  payoutStatus: PayoutStatus;
-};
 
 export type SellerVerificationOverview = {
   shop: { id: string; shopName: string; shopStatus: string };
   profile: SellerVerificationProfile | null;
-  payoutAccount: SellerPayoutAccount | null;
 };
 
 export type SaveSellerVerificationRequest = {
@@ -112,12 +97,13 @@ export type SaveSellerVerificationRequest = {
   useAccountPhone?: boolean;
 };
 
-export type SaveSellerPayoutRequest = {
-  bankCode: string;
-  bankName: string;
-  accountNumber: string;
-  accountHolderName: string;
+export type SaveSellerContactRequest = {
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  useAccountPhone: boolean;
 };
+
 
 export type SellerDocumentAccess = {
   signedUrl: string;

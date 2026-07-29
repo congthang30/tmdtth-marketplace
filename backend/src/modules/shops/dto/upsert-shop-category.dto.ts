@@ -19,6 +19,13 @@ export class UpsertShopCategoryDto {
   description?: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
+  @IsString()
+  @MaxLength(1000)
+  @Matches(/^https:\/\//)
+  imageUrl?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

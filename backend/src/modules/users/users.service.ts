@@ -1,10 +1,14 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
+import { AdminUserQueryDto } from './dto/admin-user-query.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UserMeResponse } from './types';
 
@@ -94,6 +98,83 @@ export class UsersService {
     });
 
     return this.toMeResponse(updatedUser, user);
+  }
+
+  async listAdminUsers(query: AdminUserQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const sellerFilter = query.type === 'seller' ? { ownedShops: { some: { isDeleted: false } } } : query.type === 'customer' ? { ownedShops: { none: { isDeleted: false } } } : {};
+    const q = query.q?.trim();
+    const where = {
+      isDeleted: false,
+      ...(query.status ? { userStatus: query.status } : {}),
+      ...sellerFilter,
+      ...(q ? { OR: [{ email: { contains: q, mode: 'insensitive' as const } }, { phoneNumber: { contains: q } }, { profile: { fullName: { contains: q, mode: 'insensitive' as const } } }] } : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.user.findMany({ where, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' }, include: { profile: true, ownedShops: { where: { isDeleted: false }, select: { id: true, shopName: true, shopStatus: true } } } }),
+      this.prisma.user.count({ where }),
+    ]);
+    return {
+      items: items.map((user) => ({ id: user.id.toString(), email: user.email, phoneNumber: user.phoneNumber, fullName: user.profile?.fullName ?? null, avatarUrl: user.profile?.avatarUrl ?? null, userStatus: user.userStatus, isSeller: user.ownedShops.length > 0, shops: user.ownedShops.map((shop) => ({ ...shop, id: shop.id.toString() })), createdAt: user.createdAt, lastLoginAt: user.lastLoginAt })),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async adminUpdateUser(admin: AuthenticatedUser, id: string, dto: AdminUpdateUserDto) {
+    const userId = this.parseAdminUserId(id);
+    await this.requireAdminTarget(userId);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      if (dto.fullName !== undefined) await tx.userProfile.upsert({ where: { userId }, update: { fullName: dto.fullName.trim(), updatedAt: now }, create: { userId, fullName: dto.fullName.trim(), createdAt: now, updatedAt: now } });
+      await tx.user.update({ where: { id: userId }, data: { ...(dto.phoneNumber !== undefined ? { phoneNumber: dto.phoneNumber.trim() || null } : {}), updatedAt: now } });
+    });
+    return this.getAdminUser(userId);
+  }
+
+  async setUserStatus(admin: AuthenticatedUser, id: string, status: 'Active' | 'Suspended') {
+    const userId = this.parseAdminUserId(id);
+    if (userId === admin.id) throw new ForbiddenException({ code: 'ADMIN_SELF_MANAGEMENT_FORBIDDEN', message: 'Không thể khóa hoặc mở khóa chính tài khoản quản trị đang đăng nhập.', details: [] });
+    await this.requireAdminTarget(userId);
+    const now = new Date();
+    if (status === 'Suspended') {
+      await this.prisma.$transaction([
+        this.prisma.user.update({ where: { id: userId }, data: { userStatus: status, updatedAt: now } }),
+        this.prisma.shop.updateMany({ where: { ownerUserId: userId, isDeleted: false }, data: { shopStatus: 'Suspended', updatedAt: now } }),
+      ]);
+    } else {
+      // Mở khóa đăng nhập không tự mở lại các shop đã bị đình chỉ.
+      await this.prisma.user.update({ where: { id: userId }, data: { userStatus: status, updatedAt: now } });
+    }
+    return this.getAdminUser(userId);
+  }
+
+  async adminDeleteUser(admin: AuthenticatedUser, id: string) {
+    const userId = this.parseAdminUserId(id);
+    if (userId === admin.id) throw new ForbiddenException({ code: 'ADMIN_SELF_DELETE_FORBIDDEN', message: 'Không thể xóa chính tài khoản quản trị đang đăng nhập.', details: [] });
+    await this.requireAdminTarget(userId);
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { isDeleted: true, userStatus: 'Deleted', deletedAt: now, updatedAt: now } }),
+      this.prisma.shop.updateMany({ where: { ownerUserId: userId, isDeleted: false }, data: { shopStatus: 'Suspended', updatedAt: now } }),
+    ]);
+    return { id, deleted: true };
+  }
+
+  private async getAdminUser(id: bigint) {
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { profile: true, ownedShops: { where: { isDeleted: false }, select: { id: true, shopName: true, shopStatus: true } } } });
+    if (!user) throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'Không tìm thấy người dùng.', details: [] });
+    return { id: user.id.toString(), email: user.email, phoneNumber: user.phoneNumber, fullName: user.profile?.fullName ?? null, avatarUrl: user.profile?.avatarUrl ?? null, userStatus: user.userStatus, isSeller: user.ownedShops.length > 0, shops: user.ownedShops.map((shop) => ({ ...shop, id: shop.id.toString() })), createdAt: user.createdAt, lastLoginAt: user.lastLoginAt };
+  }
+
+  private async requireAdminTarget(id: bigint) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true, isDeleted: true } });
+    if (!user || user.isDeleted) throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'Không tìm thấy người dùng.', details: [] });
+  }
+
+  private parseAdminUserId(value: string) {
+    if (!/^\d+$/.test(value)) throw new BadRequestException({ code: 'INVALID_USER_ID', message: 'Mã người dùng không hợp lệ.', details: [] });
+    return BigInt(value);
   }
 
   private async findActiveUserById(userId: bigint) {

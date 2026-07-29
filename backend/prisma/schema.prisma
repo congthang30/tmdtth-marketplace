@@ -11,6 +11,20 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ShopOperationMode {
+  Open
+  PausedUntil
+  PausedIndefinitely
+}
+
+enum ShopOperationAction {
+  ScheduledPause
+  IndefinitePause
+  Resume
+  AdminSuspend
+  AdminResume
+}
+
 enum SellerType {
   Individual
   Business
@@ -49,14 +63,6 @@ enum DocumentStatus {
   Pending
   Accepted
   Rejected
-}
-
-enum PayoutStatus {
-  Draft
-  PendingVerification
-  Verified
-  Rejected
-  Suspended
 }
 
 enum SellerDocumentAccessRole {
@@ -118,11 +124,12 @@ model User {
   complaintEvidenceFilesUploaded  ComplaintEvidenceFile[]      @relation("ComplaintEvidenceUploadedBy")
   complaintResolutionsResolved    ComplaintResolution[]        @relation("ComplaintResolutionResolvedBy")
   sellerVerificationsReviewed     SellerVerificationProfile[]  @relation("SellerVerificationReviewer")
-  sellerPayoutAccountsVerified    SellerPayoutAccount[]        @relation("SellerPayoutVerifier")
   sellerVerificationDocuments     SellerVerificationDocument[] @relation("SellerVerificationDocumentUploader")
   sellerDocumentAccessAudits      SellerDocumentAccessAudit[]  @relation("SellerDocumentAccessActor")
   sellerVerificationReviews       SellerVerificationReview[]   @relation("SellerVerificationReviewActor")
   sellerVerificationHistories     SellerVerificationHistory[]  @relation("SellerVerificationHistoryActor")
+  shopOperationHistories          ShopOperationHistory[]       @relation("ShopOperationActor")
+  shopsOperationUpdated           Shop[]                       @relation("ShopOperationUpdatedBy")
 
   @@map("Users")
 }
@@ -164,29 +171,36 @@ model Address {
 }
 
 model Shop {
-  id               BigInt    @id @default(autoincrement()) @map("ShopID")
-  ownerUserId      BigInt    @map("OwnerUserID")
-  code             String    @unique @default(uuid()) @map("ShopCode") @db.Uuid
-  shopName         String    @map("ShopName") @db.VarChar(150)
-  slug             String    @unique @map("Slug") @db.VarChar(180)
-  description      String?   @map("Description") @db.VarChar(1000)
-  email            String?   @map("Email") @db.VarChar(255)
-  phoneNumber      String?   @map("PhoneNumber") @db.VarChar(20)
-  province         String?   @map("Province") @db.VarChar(100)
-  ward             String?   @map("Ward") @db.VarChar(100)
-  streetAddress    String?   @map("StreetAddress") @db.VarChar(255)
-  taxCode          String?   @map("TaxCode") @db.VarChar(50)
-  shopStatus       String    @default("PendingApproval") @map("ShopStatus") @db.VarChar(50)
-  approvedByUserId BigInt?   @map("ApprovedByUserID")
-  approvedAt       DateTime? @map("ApprovedAt") @db.Timestamp(3)
-  rejectionReason  String?   @map("RejectionReason") @db.VarChar(1000)
-  isDeleted        Boolean   @default(false) @map("IsDeleted")
-  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
-  deletedAt        DateTime? @map("DeletedAt") @db.Timestamp(3)
+  id                       BigInt            @id @default(autoincrement()) @map("ShopID")
+  ownerUserId              BigInt            @map("OwnerUserID")
+  code                     String            @unique @default(uuid()) @map("ShopCode") @db.Uuid
+  shopName                 String            @map("ShopName") @db.VarChar(150)
+  slug                     String            @unique @map("Slug") @db.VarChar(180)
+  description              String?           @map("Description") @db.VarChar(1000)
+  email                    String?           @map("Email") @db.VarChar(255)
+  phoneNumber              String?           @map("PhoneNumber") @db.VarChar(20)
+  province                 String?           @map("Province") @db.VarChar(100)
+  ward                     String?           @map("Ward") @db.VarChar(100)
+  streetAddress            String?           @map("StreetAddress") @db.VarChar(255)
+  taxCode                  String?           @map("TaxCode") @db.VarChar(50)
+  shopStatus               String            @default("PendingApproval") @map("ShopStatus") @db.VarChar(50)
+  approvedByUserId         BigInt?           @map("ApprovedByUserID")
+  approvedAt               DateTime?         @map("ApprovedAt") @db.Timestamp(3)
+  rejectionReason          String?           @map("RejectionReason") @db.VarChar(1000)
+  operationMode            ShopOperationMode @default(Open) @map("OperationMode")
+  pauseStartsAt            DateTime?         @map("PauseStartsAt") @db.Timestamp(3)
+  pauseEndsAt              DateTime?         @map("PauseEndsAt") @db.Timestamp(3)
+  pauseReason              String?           @map("PauseReason") @db.VarChar(500)
+  operationUpdatedByUserId BigInt?           @map("OperationUpdatedByUserID")
+  operationUpdatedAt       DateTime?         @map("OperationUpdatedAt") @db.Timestamp(3)
+  isDeleted                Boolean           @default(false) @map("IsDeleted")
+  createdAt                DateTime          @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt                DateTime?         @map("UpdatedAt") @db.Timestamp(3)
+  deletedAt                DateTime?         @map("DeletedAt") @db.Timestamp(3)
 
-  ownerUser      User  @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approvedByUser User? @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownerUser              User  @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser         User? @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  operationUpdatedByUser User? @relation("ShopOperationUpdatedBy", fields: [operationUpdatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   products       Product[]
   shopCategories ShopCategory[]
@@ -201,10 +215,31 @@ model Shop {
   complaints     Complaint[]        @relation("ComplaintAgainstShop")
 
   sellerVerification SellerVerificationProfile?
-  payoutAccount      SellerPayoutAccount?
+  operationHistories ShopOperationHistory[]
 
   @@index([ownerUserId])
+  @@index([shopStatus, operationMode])
+  @@index([operationMode, pauseStartsAt, pauseEndsAt])
   @@map("Shops")
+}
+
+model ShopOperationHistory {
+  id          BigInt              @id @default(autoincrement()) @map("ShopOperationHistoryID")
+  shopId      BigInt              @map("ShopID")
+  action      ShopOperationAction @map("Action")
+  startsAt    DateTime?           @map("StartsAt") @db.Timestamp(3)
+  endsAt      DateTime?           @map("EndsAt") @db.Timestamp(3)
+  reason      String?             @map("Reason") @db.VarChar(500)
+  actorUserId BigInt              @map("ActorUserID")
+  actorRole   String              @map("ActorRole") @db.VarChar(30)
+  createdAt   DateTime            @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shop  Shop @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor User @relation("ShopOperationActor", fields: [actorUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([shopId, createdAt])
+  @@index([actorUserId])
+  @@map("ShopOperationHistories")
 }
 
 model SellerVerificationProfile {
@@ -253,31 +288,6 @@ model SellerVerificationProfile {
   @@index([verificationStatus, createdAt])
   @@index([reviewedByUserId])
   @@map("SellerVerificationProfiles")
-}
-
-model SellerPayoutAccount {
-  id                     BigInt       @id @default(autoincrement()) @map("SellerPayoutAccountID")
-  shopId                 BigInt       @unique @map("ShopID")
-  bankCode               String       @map("BankCode") @db.VarChar(30)
-  bankNameSnapshot       String       @map("BankNameSnapshot") @db.VarChar(200)
-  accountNumberEncrypted String       @map("AccountNumberEncrypted") @db.Text
-  accountNumberHash      String       @map("AccountNumberHash") @db.VarChar(64)
-  accountNumberLast4     String       @map("AccountNumberLast4") @db.VarChar(4)
-  accountHolderName      String       @map("AccountHolderName") @db.VarChar(200)
-  payoutStatus           PayoutStatus @default(Draft) @map("PayoutStatus")
-  verifiedAt             DateTime?    @map("VerifiedAt") @db.Timestamp(3)
-  verifiedByUserId       BigInt?      @map("VerifiedByUserID")
-  isActive               Boolean      @default(true) @map("IsActive")
-  createdAt              DateTime     @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt              DateTime?    @map("UpdatedAt") @db.Timestamp(3)
-
-  shop           Shop  @relation(fields: [shopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  verifiedByUser User? @relation("SellerPayoutVerifier", fields: [verifiedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([accountNumberHash])
-  @@index([payoutStatus])
-  @@index([verifiedByUserId])
-  @@map("SellerPayoutAccounts")
 }
 
 model SellerVerificationDocument {
@@ -371,6 +381,7 @@ model Category {
   categoryName     String    @map("CategoryName") @db.VarChar(150)
   slug             String    @unique @map("Slug") @db.VarChar(180)
   description      String?   @map("Description") @db.VarChar(500)
+  imageUrl         String?   @map("ImageUrl") @db.VarChar(1000)
   sortOrder        Int       @default(0) @map("SortOrder")
   isActive         Boolean   @default(true) @map("IsActive")
   createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
@@ -384,6 +395,17 @@ model Category {
 
   @@index([parentCategoryId])
   @@map("Categories")
+}
+
+model SearchTermStat {
+  id             BigInt   @id @default(autoincrement()) @map("SearchTermStatID")
+  normalized     String   @unique @map("NormalizedTerm") @db.VarChar(100)
+  displayTerm    String   @map("DisplayTerm") @db.VarChar(100)
+  searchCount    BigInt   @default(1) @map("SearchCount")
+  lastSearchedAt DateTime @default(now()) @map("LastSearchedAt") @db.Timestamp(3)
+
+  @@index([searchCount, lastSearchedAt])
+  @@map("SearchTermStats")
 }
 
 model Product {
@@ -1093,6 +1115,7 @@ model ShopCategory {
   categoryName         String    @map("CategoryName") @db.VarChar(150)
   slug                 String    @map("Slug") @db.VarChar(180)
   description          String?   @map("Description") @db.VarChar(500)
+  imageUrl             String?   @map("ImageUrl") @db.VarChar(1000)
   sortOrder            Int       @default(0) @map("SortOrder")
   isActive             Boolean   @default(true) @map("IsActive")
   createdAt            DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)

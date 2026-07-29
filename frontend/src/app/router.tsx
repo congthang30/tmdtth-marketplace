@@ -17,6 +17,7 @@ import { RegisterPage } from "@/features/auth/pages/RegisterPage";
 import { ProtectedRoute } from "@/features/auth/components/ProtectedRoute";
 import { RoleRoute } from "@/features/auth/components/RoleRoute";
 import { SellerDashboardPage } from "@/features/seller/pages/SellerDashboardPage";
+import { SellerShopOperationPage } from "@/features/seller/pages/SellerShopOperationPage";
 import { SellerShopRegisterPage } from "@/features/seller/pages/SellerShopRegisterPage";
 import { SellerProductsPage } from "@/features/seller/pages/SellerProductsPage";
 import { SellerProductFormPage } from "@/features/seller/pages/SellerProductFormPage";
@@ -30,7 +31,8 @@ import { SellerShopCategoriesPage } from "@/features/shops/pages/SellerShopCateg
 import { SellerSaleCampaignsPage } from "@/features/shops/pages/SellerSaleCampaignsPage";
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage";
 import { AdminCategoriesPage } from "@/features/admin/pages/AdminCategoriesPage";
-import { AdminShopsPage } from "@/features/admin/pages/AdminShopsPage";
+import { AdminAccountsPage } from "@/features/admin/pages/AdminAccountsPage";
+import { AdminProductsPage } from "@/features/admin/pages/AdminProductsPage";
 import { AdminShippingProvidersPage } from "@/features/admin/pages/AdminShippingProvidersPage";
 import { AdminVouchersPage } from "@/features/admin/pages/AdminVouchersPage";
 import { AdminSellerVerificationsPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationsPage";
@@ -117,14 +119,6 @@ export const router = createBrowserRouter([
         element: <VnpayReturnPage />,
       },
       {
-        path: "seller/shop/register",
-        element: (
-          <ProtectedRoute>
-            <SellerShopRegisterPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: "forbidden",
         element: (
           <PlaceholderPage
@@ -163,6 +157,10 @@ export const router = createBrowserRouter([
             <SellerDashboardPage />
           </RoleRoute>
         ),
+      },
+      {
+        path: "seller/shop/register",
+        element: <SellerShopRegisterPage />,
       },
       {
         path: "seller/products",
@@ -229,6 +227,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "seller/shop-operation",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerShopOperationPage />
+          </RoleRoute>
+        ),
+      },
+      {
         path: "seller/shop-categories",
         element: (
           <RoleRoute allowedRoles={["Seller"]}>
@@ -269,10 +275,18 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "admin/shops",
+        path: "admin/products",
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
-            <AdminShopsPage />
+            <AdminProductsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/users",
+        element: (
+          <RoleRoute allowedRoles={["Admin"]}>
+            <AdminAccountsPage />
           </RoleRoute>
         ),
       },

@@ -1,0 +1,1 @@
+ALTER TABLE "Categories" ADD COLUMN "ImageUrl" VARCHAR(1000);

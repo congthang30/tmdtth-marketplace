@@ -7,6 +7,7 @@ export type CategoryTreeNode = {
   categoryName: string;
   slug: string;
   description: string | null;
+  imageUrl: string | null;
   sortOrder: number;
   children: CategoryTreeNode[];
 };

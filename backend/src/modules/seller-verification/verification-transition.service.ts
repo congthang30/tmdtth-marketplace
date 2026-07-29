@@ -5,7 +5,12 @@ export const VERIFICATION_TRANSITIONS: Readonly<
   Record<VerificationStatus, readonly VerificationStatus[]>
 > = {
   Draft: [VerificationStatus.Submitted],
-  Submitted: [VerificationStatus.UnderReview],
+  Submitted: [
+    VerificationStatus.NeedsRevision,
+    VerificationStatus.Approved,
+    VerificationStatus.Rejected,
+  ],
+  // ponytail: legacy DB rows may still be UnderReview; remove after data migration.
   UnderReview: [
     VerificationStatus.NeedsRevision,
     VerificationStatus.Approved,
@@ -14,7 +19,7 @@ export const VERIFICATION_TRANSITIONS: Readonly<
   NeedsRevision: [VerificationStatus.Submitted],
   Approved: [VerificationStatus.Suspended],
   Rejected: [VerificationStatus.Submitted],
-  Suspended: [VerificationStatus.UnderReview],
+  Suspended: [],
 };
 
 @Injectable()
