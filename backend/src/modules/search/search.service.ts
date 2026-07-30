@@ -33,7 +33,13 @@ const rank = (items: SearchSuggestion[], limit: number) =>
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, 'vi'))
     .slice(0, limit)
-    .map(({ score: _score, ...item }) => item);
+    .map(({ id, type, title, subtitle, url }) => ({
+      id,
+      type,
+      title,
+      subtitle,
+      url,
+    }));
 
 @Injectable()
 export class SearchService {

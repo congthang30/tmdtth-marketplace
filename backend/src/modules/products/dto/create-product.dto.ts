@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsIn,
+  ArrayMaxSize,
+  IsArray,
   IsInt,
   IsOptional,
   IsString,
@@ -70,13 +71,14 @@ export class CreateProductDto {
   warrantyMonths?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(100000000)
-  weightGram?: number;
-
-  @IsOptional()
-  @IsIn(['Draft', 'Published'])
-  productStatus?: 'Draft' | 'Published';
+  @IsArray()
+  @ArrayMaxSize(100)
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value)
+      ? (value as unknown[]).map((item) => normalizeStringInput(item))
+      : value,
+  )
+  @IsString({ each: true })
+  @Matches(idPattern, { each: true })
+  shopCategoryIds?: string[];
 }

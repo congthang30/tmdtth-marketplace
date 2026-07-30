@@ -1,6 +1,9 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
@@ -11,34 +14,18 @@ import {
   getPaginationParams,
 } from '../../common/utils/pagination.util';
 import { getCloudinaryFolder } from '../../config/upload.config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuthenticatedUser } from '../auth/types';
 
 export type UploadedFileResponse = {
+  id: string;
+  assetId: string;
   fileName: string;
   originalName: string;
   mimeType: string;
   size: number;
   url: string;
-};
-
-export type StoredUploadFile = {
-  fileName: string;
-  size: number;
-  createdAt: string;
-  updatedAt: string;
-  url: string;
-};
-
-type CloudinarySearchResource = {
-  public_id: string;
-  format?: string;
-  bytes: number;
-  created_at: string;
-  secure_url: string;
-};
-
-type CloudinarySearchResult = {
-  total_count: number;
-  resources: CloudinarySearchResource[];
+  status: string;
 };
 
 const JPEG_SIGNATURE = [0xff, 0xd8, 0xff] as const;
@@ -59,7 +46,30 @@ function startsWithBytes(
 }
 
 @Injectable()
-export class UploadService {
+export class UploadService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(UploadService.name);
+  private cleanupTimer?: NodeJS.Timeout;
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit(): void {
+    void this.cleanupStalePending().catch((error) =>
+      this.logger.error('Không thể dọn upload asset hết hạn', error),
+    );
+    this.cleanupTimer = setInterval(
+      () => {
+        void this.cleanupStalePending().catch((error) =>
+          this.logger.error('Không thể dọn upload asset hết hạn', error),
+        );
+      },
+      24 * 60 * 60 * 1000,
+    );
+    this.cleanupTimer.unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+  }
   assertUploadedImage(file: Express.Multer.File): void {
     if (this.hasValidImageContent(file)) {
       return;
@@ -72,24 +82,38 @@ export class UploadService {
     });
   }
 
-  async upload(file: Express.Multer.File): Promise<UploadedFileResponse> {
+  async upload(
+    user: AuthenticatedUser,
+    file: Express.Multer.File,
+  ): Promise<UploadedFileResponse> {
     this.assertCloudinaryConfigured();
 
     try {
-      const result = await this.uploadBuffer(file.buffer);
+      const result = await this.uploadBuffer(file.buffer, user.id);
+      const asset = await this.prisma.uploadAsset.create({
+        data: {
+          ownerUserId: user.id,
+          storagePublicId: result.public_id,
+          url: result.secure_url,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: result.bytes,
+          status: 'Pending',
+        },
+      });
 
       return {
+        id: asset.id.toString(),
+        assetId: asset.id.toString(),
         fileName: `${result.public_id}.${result.format}`,
         originalName: file.originalname,
         mimeType: file.mimetype,
         size: result.bytes,
         url: result.secure_url,
+        status: asset.status,
       };
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-
+      if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException({
         code: 'UPLOAD_PROVIDER_UNAVAILABLE',
         message: 'Không thể tải hình ảnh lên lúc này. Vui lòng thử lại.',
@@ -98,53 +122,73 @@ export class UploadService {
     }
   }
 
-  async listFiles(query: PaginationQueryDto) {
-    this.assertCloudinaryConfigured();
-    const { page, limit, skip } = getPaginationParams(query);
+  async listFiles(user: AuthenticatedUser, query: PaginationQueryDto) {
+    const { page, limit, skip, take } = getPaginationParams(query);
     const q = query.q?.trim();
-    const folder = getCloudinaryFolder();
-    const escapedFolder = folder.replace(/([:\\])/g, '\\$1');
-    const escapedQuery = q?.replace(/([:\\])/g, '\\$1');
-    const expression = [
-      `folder:${escapedFolder}`,
-      escapedQuery ? `public_id:*${escapedQuery}*` : undefined,
-    ]
-      .filter(Boolean)
-      .join(' AND ');
+    const where = {
+      ownerUserId: user.id,
+      ...(q
+        ? { originalName: { contains: q, mode: 'insensitive' as const } }
+        : {}),
+    };
+    const [assets, total] = await this.prisma.$transaction([
+      this.prisma.uploadAsset.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.uploadAsset.count({ where }),
+    ]);
+    return createPaginatedResult({
+      items: assets.map((asset) => ({
+        id: asset.id.toString(),
+        assetId: asset.id.toString(),
+        fileName: asset.storagePublicId,
+        originalName: asset.originalName,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        createdAt: asset.createdAt.toISOString(),
+        updatedAt: (asset.attachedAt ?? asset.createdAt).toISOString(),
+        url: asset.url,
+        status: asset.status,
+      })),
+      page,
+      limit,
+      total,
+      message: 'OK',
+    });
+  }
 
-    try {
-      const result = (await cloudinary.search
-        .expression(expression)
-        .sort_by('created_at', 'desc')
-        .max_results(Math.min(skip + limit, 500))
-        .execute()) as CloudinarySearchResult;
-      const items: StoredUploadFile[] = result.resources
-        .slice(skip, skip + limit)
-        .map((resource) => ({
-          fileName: `${resource.public_id}.${resource.format ?? ''}`.replace(
-            /\.$/,
-            '',
-          ),
-          size: resource.bytes,
-          createdAt: resource.created_at,
-          updatedAt: resource.created_at,
-          url: resource.secure_url,
-        }));
-
-      return createPaginatedResult({
-        items,
-        page,
-        limit,
-        total: result.total_count,
-        message: 'OK',
+  async cleanupStalePending(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const assets = await this.prisma.uploadAsset.findMany({
+      where: {
+        status: 'Pending',
+        createdAt: { lt: cutoff },
+        productImage: null,
+      },
+      select: { id: true, storagePublicId: true },
+    });
+    let removed = 0;
+    for (const asset of assets) {
+      const claimed = await this.prisma.uploadAsset.deleteMany({
+        where: { id: asset.id, status: 'Pending', productImage: null },
       });
-    } catch {
-      throw new ServiceUnavailableException({
-        code: 'UPLOAD_PROVIDER_UNAVAILABLE',
-        message: 'Không thể tải danh sách hình ảnh lúc này. Vui lòng thử lại.',
-        details: [],
-      });
+      if (claimed.count !== 1) continue;
+      try {
+        await cloudinary.uploader.destroy(asset.storagePublicId, {
+          resource_type: 'image',
+        });
+        removed += 1;
+      } catch (error) {
+        this.logger.error(
+          `Không thể xóa upload asset ${asset.id.toString()}`,
+          error,
+        );
+      }
     }
+    return removed;
   }
 
   private assertCloudinaryConfigured(): void {
@@ -159,11 +203,14 @@ export class UploadService {
     });
   }
 
-  private uploadBuffer(buffer: Buffer): Promise<UploadApiResponse> {
+  private uploadBuffer(
+    buffer: Buffer,
+    ownerUserId: bigint,
+  ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
-          folder: getCloudinaryFolder(),
+          folder: `${getCloudinaryFolder()}/${ownerUserId.toString()}`,
           public_id: `${Date.now()}-${randomUUID()}`,
           resource_type: 'image',
           overwrite: false,

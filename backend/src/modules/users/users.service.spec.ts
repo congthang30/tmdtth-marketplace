@@ -59,7 +59,10 @@ describe('UsersService seller suspension', () => {
 
     expect(prisma.shop.updateMany).toHaveBeenCalledWith({
       where: { ownerUserId: 7n, isDeleted: false },
-      data: { shopStatus: 'Suspended', updatedAt: expect.any(Date) },
+      data: {
+        shopStatus: 'Suspended',
+        updatedAt: expect.any(Date) as Date,
+      },
     });
     expect(
       result.shops.every(

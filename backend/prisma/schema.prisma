@@ -130,6 +130,7 @@ model User {
   sellerVerificationHistories     SellerVerificationHistory[]  @relation("SellerVerificationHistoryActor")
   shopOperationHistories          ShopOperationHistory[]       @relation("ShopOperationActor")
   shopsOperationUpdated           Shop[]                       @relation("ShopOperationUpdatedBy")
+  uploadAssets                    UploadAsset[]                @relation("UploadAssetOwner")
 
   @@map("Users")
 }
@@ -390,7 +391,6 @@ model Category {
   parentCategory    Category?          @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   childCategories   Category[]         @relation("CategoryTree")
   products          Product[]
-  attributes        ProductAttribute[]
   voucherCategories VoucherCategory[]
 
   @@index([parentCategoryId])
@@ -420,7 +420,6 @@ model Product {
   basePrice       Decimal   @map("BasePrice") @db.Decimal(18, 2)
   compareAtPrice  Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
   warrantyMonths  Int       @default(0) @map("WarrantyMonths")
-  weightGram      Int       @default(0) @map("WeightGram")
   productStatus   String    @default("Draft") @map("ProductStatus") @db.VarChar(50)
   isViolation     Boolean   @default(false) @map("IsViolation")
   viewCount       BigInt    @default(0) @map("ViewCount")
@@ -443,7 +442,6 @@ model Product {
   cartItems            CartItem[]
   orderItems           OrderItem[]
   reviews              ProductReview[]
-  attributeValues      ProductAttributeValue[]
   moderationLogs       ProductModerationLog[]
   voucherProducts      VoucherProduct[]
   shopCategoryProducts ShopCategoryProduct[]
@@ -459,7 +457,7 @@ model ProductVariant {
   productId         BigInt    @map("ProductID")
   sku               String    @map("SKU") @db.VarChar(100)
   variantName       String    @map("VariantName") @db.VarChar(255)
-  variantOptionJson String?   @map("VariantOptionJson") @db.Text
+  attributes        Json      @default("{}") @map("Attributes") @db.JsonB
   price             Decimal   @map("Price") @db.Decimal(18, 2)
   compareAtPrice    Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
   weightGram        Int       @default(0) @map("WeightGram")
@@ -473,7 +471,6 @@ model ProductVariant {
   cartItems         CartItem[]
   orderItems        OrderItem[]
   reviews           ProductReview[]
-  attributeValues   ProductAttributeValue[]
   saleCampaignItems ShopSaleCampaignItem[]
 
   @@unique([productId, sku])
@@ -513,8 +510,28 @@ model ShopSaleCampaignItem {
   @@map("ShopSaleCampaignItems")
 }
 
+model UploadAsset {
+  id              BigInt    @id @default(autoincrement()) @map("UploadAssetID")
+  ownerUserId     BigInt    @map("OwnerUserID")
+  storagePublicId String    @unique @map("StoragePublicID") @db.VarChar(500)
+  url             String    @map("Url") @db.VarChar(1000)
+  originalName    String    @map("OriginalName") @db.VarChar(255)
+  mimeType        String    @map("MimeType") @db.VarChar(100)
+  size            Int       @map("Size")
+  status          String    @default("Pending") @map("Status") @db.VarChar(30)
+  createdAt       DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  attachedAt      DateTime? @map("AttachedAt") @db.Timestamp(3)
+
+  owner        User          @relation("UploadAssetOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productImage ProductImage?
+
+  @@index([ownerUserId, status, createdAt])
+  @@map("UploadAssets")
+}
+
 model ProductImage {
   id               BigInt   @id @default(autoincrement()) @map("ProductImageID")
+  assetId          BigInt?  @unique @map("AssetID")
   productId        BigInt   @map("ProductID")
   productVariantId BigInt?  @map("ProductVariantID")
   imageUrl         String   @map("ImageUrl") @db.VarChar(1000)
@@ -525,6 +542,7 @@ model ProductImage {
 
   product        Product         @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  asset          UploadAsset?    @relation(fields: [assetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([productId])
   @@index([productVariantId])
@@ -592,40 +610,6 @@ model InventoryReservation {
   @@index([productInventoryId, reservationStatus])
   @@index([orderId, reservationStatus])
   @@map("InventoryReservations")
-}
-
-model ProductAttribute {
-  id            BigInt   @id @default(autoincrement()) @map("ProductAttributeID")
-  categoryId    BigInt   @map("CategoryID")
-  attributeName String   @map("AttributeName") @db.VarChar(150)
-  dataType      String   @map("DataType") @db.VarChar(50)
-  unit          String?  @map("Unit") @db.VarChar(50)
-  isRequired    Boolean  @default(false) @map("IsRequired")
-  createdAt     DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
-
-  category Category                @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  values   ProductAttributeValue[]
-
-  @@index([categoryId])
-  @@map("ProductAttributes")
-}
-
-model ProductAttributeValue {
-  id                 BigInt   @id @default(autoincrement()) @map("ProductAttributeValueID")
-  productId          BigInt   @map("ProductID")
-  productVariantId   BigInt?  @map("ProductVariantID")
-  productAttributeId BigInt   @map("ProductAttributeID")
-  valueText          String   @map("ValueText") @db.VarChar(1000)
-  createdAt          DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
-
-  product          Product          @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  productVariant   ProductVariant?  @relation(fields: [productVariantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  productAttribute ProductAttribute @relation(fields: [productAttributeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([productId])
-  @@index([productVariantId])
-  @@index([productAttributeId])
-  @@map("ProductAttributeValues")
 }
 
 model ProductModerationLog {
@@ -963,6 +947,10 @@ model Shipment {
   shipmentStatus     String    @default("Pending") @map("ShipmentStatus") @db.VarChar(50)
   shippingFee        Decimal   @default(0) @map("ShippingFee") @db.Decimal(18, 2)
   codAmount          Decimal   @default(0) @map("CODAmount") @db.Decimal(18, 2)
+  handoverMethod     String    @default("Pickup") @map("HandoverMethod") @db.VarChar(20)
+  pickupStationId    Int?      @map("PickupStationID")
+  pickupStationName  String?   @map("PickupStationName") @db.VarChar(255)
+  pickupStationAddress String? @map("PickupStationAddress") @db.VarChar(500)
   pickupAddress      String?   @map("PickupAddress") @db.VarChar(500)
   deliveryAddress    String    @map("DeliveryAddress") @db.VarChar(500)
   recipientName      String    @map("RecipientName") @db.VarChar(150)
@@ -982,7 +970,7 @@ model Shipment {
   shippingReviews   ShippingReview[]
   complaints        Complaint[]
 
-  @@index([shopOrderId])
+  @@unique([shopOrderId])
   @@index([shippingCompanyId])
   @@index([shipmentStatus])
   @@map("Shipments")

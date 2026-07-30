@@ -6,69 +6,34 @@ const expectedUserEmails = [
   'admin@example.com',
   'seller@example.com',
   'customer@example.com',
-  'shipper@example.com',
 ];
-
-const expectedPaymentMethods = ['COD', 'FAKE_ONLINE'];
-
-const expectedCategorySlugs = [
-  'do-nha-bep',
-  'noi-chao',
-  'may-xay',
-  'hop-dung-thuc-pham',
-  'do-phong-khach',
-  'den-trang-tri',
-  'ke-tu',
-  'do-phong-ngu',
-  'chan-ga-goi',
-  'den-ngu',
-  'do-ve-sinh',
-  'ke-nha-tam',
-  'dung-cu-ve-sinh',
-  'thiet-bi-gia-dung-nho',
-  'may-hut-bui',
-  'ban-ui',
-  'may-say',
-];
-
-const expectedShippingCompanySlugs = [
-  'giao-hang-demo',
-  'nhanh-express-demo',
-];
-
-const expectedAttributes = [
-  ['noi-chao', 'Chất liệu'],
-  ['noi-chao', 'Đường kính'],
-  ['den-trang-tri', 'Màu ánh sáng'],
-  ['den-ngu', 'Màu sắc'],
-  ['den-ngu', 'Công suất'],
-  ['chan-ga-goi', 'Kích thước'],
-  ['thiet-bi-gia-dung-nho', 'Công suất'],
-];
-
-const expectedVariantStocks = {
-  'NOI-INOX-20CM': 50,
-  'NOI-INOX-24CM': 30,
-  'DEN-NGU-VANG': 100,
+const expectedPaymentMethods = ['COD', 'VNPAY'];
+const expectedCounts = {
+  users: 3,
+  categories: 5,
+  shops: 1,
+  products: 5,
+  variants: 10,
+  vouchers: 0,
 };
 
 function assert(condition, message, failures) {
-  if (!condition) {
-    failures.push(message);
-  }
+  if (!condition) failures.push(message);
 }
 
 async function main() {
   const failures = [];
-
-  const users = await prisma.user.findMany({
-    where: { email: { in: expectedUserEmails } },
-    include: { profile: true },
-  });
-
+  const [users, totalUserCount] = await Promise.all([
+    prisma.user.findMany({
+      where: { email: { in: expectedUserEmails } },
+      include: { profile: true },
+    }),
+    prisma.user.count(),
+  ]);
   assert(
-    users.length === expectedUserEmails.length,
-    `Expected ${expectedUserEmails.length} demo users, found ${users.length}.`,
+    users.length === expectedUserEmails.length &&
+      totalUserCount === expectedCounts.users,
+    `Expected exactly ${expectedCounts.users} demo users, found ${totalUserCount}.`,
     failures,
   );
   assert(
@@ -77,84 +42,154 @@ async function main() {
     failures,
   );
 
-  const paymentMethodCount = await prisma.paymentMethod.count({
-    where: { methodCode: { in: expectedPaymentMethods }, isActive: true },
+  const paymentMethods = await prisma.paymentMethod.findMany({
+    where: { methodCode: { in: [...expectedPaymentMethods, 'FAKE_ONLINE'] } },
   });
   assert(
-    paymentMethodCount === expectedPaymentMethods.length,
-    `Expected ${expectedPaymentMethods.length} active payment methods, found ${paymentMethodCount}.`,
-    failures,
-  );
-
-  const categoryCount = await prisma.category.count({
-    where: { slug: { in: expectedCategorySlugs }, isActive: true },
-  });
-  assert(
-    categoryCount === expectedCategorySlugs.length,
-    `Expected ${expectedCategorySlugs.length} active categories, found ${categoryCount}.`,
-    failures,
-  );
-
-  const categoriesWithAttributes = await prisma.category.findMany({
-    where: {
-      slug: { in: expectedAttributes.map(([categorySlug]) => categorySlug) },
-    },
-    include: { attributes: true },
-  });
-  const seededAttributeKeys = new Set(
-    categoriesWithAttributes.flatMap((category) =>
-      category.attributes.map(
-        (attribute) => `${category.slug}:${attribute.attributeName}`,
+    expectedPaymentMethods.every((code) =>
+      paymentMethods.some(
+        (method) => method.methodCode === code && method.isActive,
       ),
     ),
-  );
-  const missingAttributes = expectedAttributes.filter(
-    ([categorySlug, attributeName]) =>
-      !seededAttributeKeys.has(`${categorySlug}:${attributeName}`),
+    'COD and VNPAY must be active.',
+    failures,
   );
   assert(
-    missingAttributes.length === 0,
-    `Missing product attributes: ${missingAttributes
-      .map(([categorySlug, attributeName]) => `${categorySlug}:${attributeName}`)
-      .join(', ')}`,
+    paymentMethods.every(
+      (method) => method.methodCode !== 'FAKE_ONLINE' || !method.isActive,
+    ),
+    'FAKE_ONLINE must not be active.',
     failures,
   );
 
-  const shippingCompanies = await prisma.shippingCompany.findMany({
-    where: {
-      slug: { in: expectedShippingCompanySlugs },
-      companyStatus: 'Approved',
-      isDeleted: false,
-    },
-    include: { services: true },
-  });
+  const [categoryCount, shopCount, productCount, variants, voucherCount] =
+    await Promise.all([
+      prisma.category.count({ where: { isActive: true } }),
+      prisma.shop.count({
+        where: { shopStatus: 'Approved', isDeleted: false },
+      }),
+      prisma.product.count({
+        where: { productStatus: 'Published', isDeleted: false },
+      }),
+      prisma.productVariant.findMany({
+        include: { inventoryRecords: true },
+      }),
+      prisma.voucher.count(),
+    ]);
   assert(
-    shippingCompanies.length === expectedShippingCompanySlugs.length,
-    `Expected ${expectedShippingCompanySlugs.length} approved shipping companies, found ${shippingCompanies.length}.`,
+    categoryCount === expectedCounts.categories,
+    `Expected ${expectedCounts.categories} active categories, found ${categoryCount}.`,
+    failures,
+  );
+  assert(
+    shopCount === expectedCounts.shops,
+    `Expected ${expectedCounts.shops} approved shops, found ${shopCount}.`,
+    failures,
+  );
+  assert(
+    productCount === expectedCounts.products,
+    `Expected ${expectedCounts.products} published products, found ${productCount}.`,
+    failures,
+  );
+  assert(
+    variants.length === expectedCounts.variants,
+    `Expected ${expectedCounts.variants} variants, found ${variants.length}.`,
+    failures,
+  );
+  assert(
+    voucherCount === expectedCounts.vouchers,
+    `Expected no demo vouchers, found ${voucherCount}.`,
+    failures,
+  );
+  assert(
+    variants.every(
+      (variant) =>
+        variant.attributes &&
+        typeof variant.attributes === 'object' &&
+        !Array.isArray(variant.attributes) &&
+        Object.keys(variant.attributes).length > 0,
+    ),
+    'Every variant must have a non-empty attributes object.',
+    failures,
+  );
+  assert(
+    variants.every(
+      (variant) =>
+        variant.inventoryRecords.length === 1 &&
+        variant.inventoryRecords[0].quantityOnHand >= 0 &&
+        variant.inventoryRecords[0].quantityAvailable >= 0 &&
+        variant.inventoryRecords[0].quantityReserved === 0,
+    ),
+    'Every variant must have one valid inventory record.',
     failures,
   );
 
-  const serviceCount = shippingCompanies.reduce(
-    (total, company) =>
-      total + company.services.filter((service) => service.isActive).length,
-    0,
+  const fashionMatrix = variants.filter(
+    (variant) =>
+      variant.attributes?.['Màu sắc'] && variant.attributes?.['Kích cỡ'],
   );
-  assert(serviceCount >= 3, `Expected at least 3 active shipping services, found ${serviceCount}.`, failures);
-
-  const shop = await prisma.shop.findUnique({
-    where: { slug: 'gia-dung-thang-nguyen' },
-  });
-  assert(Boolean(shop), 'Expected approved demo shop.', failures);
-  assert(shop?.shopStatus === 'Approved', 'Demo shop must be Approved.', failures);
-
-  const verification = shop
-    ? await prisma.sellerVerificationProfile.findUnique({
-        where: { shopId: shop.id },
-      })
-    : null;
+  const expectedFashionCombinations = new Set(
+    ['Đen', 'Đỏ'].flatMap((color) =>
+      ['XS', 'XL', 'XXL'].map((size) => `${color}|${size}`),
+    ),
+  );
   assert(
-    verification?.verificationStatus === 'Approved',
-    'Demo shop seller verification must be Approved.',
+    fashionMatrix.length === expectedFashionCombinations.size &&
+      fashionMatrix.every((variant) =>
+        expectedFashionCombinations.has(
+          `${variant.attributes['Màu sắc']}|${variant.attributes['Kích cỡ']}`,
+        ),
+      ),
+    'The fashion product must have the complete 2-color x 3-size matrix.',
+    failures,
+  );
+  assert(
+    fashionMatrix.some(
+      (variant) =>
+        variant.attributes['Màu sắc'] === 'Đỏ' &&
+        variant.attributes['Kích cỡ'] === 'XL' &&
+        variant.inventoryRecords[0]?.quantityAvailable === 0,
+    ),
+    'The fashion matrix must include the out-of-stock Red/XL selector case.',
+    failures,
+  );
+
+  const duplicateCombinations = await prisma.$queryRaw`
+    SELECT COUNT(*)::integer AS count
+    FROM (
+      SELECT "ProductID", "Attributes"
+      FROM "ProductVariants"
+      GROUP BY "ProductID", "Attributes"
+      HAVING COUNT(*) > 1
+    ) duplicates
+  `;
+  assert(
+    duplicateCombinations[0]?.count === 0,
+    'Variant attributes must be unique within each product.',
+    failures,
+  );
+
+  const shippingCompany = await prisma.shippingCompany.findUnique({
+    where: { slug: 'ghn' },
+    include: { services: { where: { isActive: true } } },
+  });
+  assert(
+    shippingCompany?.companyStatus === 'Approved' && !shippingCompany.isDeleted,
+    'GHN must be approved and active.',
+    failures,
+  );
+  assert(
+    shippingCompany?.services.length === 2,
+    `Expected 2 active GHN services, found ${shippingCompany?.services.length ?? 0}.`,
+    failures,
+  );
+
+  const verification = await prisma.sellerVerificationProfile.findFirst({
+    where: { verificationStatus: 'Approved' },
+  });
+  assert(
+    Boolean(verification),
+    'Expected one approved seller verification.',
     failures,
   );
   assert(
@@ -163,71 +198,21 @@ async function main() {
     'Demo sensitive seller data must use versioned encryption payloads.',
     failures,
   );
-  assert(
-    !verification?.identityNumberEncrypted.includes('079203012345') &&
-      !verification?.taxCodeEncrypted.includes('0312345678'),
-    'Demo sensitive seller data must not contain plaintext values.',
-    failures,
-  );
 
-  const products = await prisma.product.findMany({
-    where: {
-      slug: { in: ['noi-inox-3-lop', 'den-ngu-cam-ung'] },
-      productStatus: 'Published',
-      isDeleted: false,
+  const seedInventoryTransactionCount = await prisma.inventoryTransaction.count(
+    {
+      where: { transactionType: 'SEED_STOCK', referenceType: 'SEED' },
     },
-    include: {
-      images: true,
-      variants: {
-        include: {
-          inventoryRecords: true,
-        },
-      },
-    },
-  });
-
-  assert(products.length === 2, `Expected 2 published demo products, found ${products.length}.`, failures);
-  assert(
-    products.every((product) =>
-      product.images.some((image) => image.isThumbnail),
-    ),
-    'Every demo product must have a thumbnail image.',
-    failures,
   );
-
-  const variants = products.flatMap((product) => product.variants);
-  for (const [sku, expectedStock] of Object.entries(expectedVariantStocks)) {
-    const variant = variants.find((item) => item.sku === sku);
-    const inventory = variant?.inventoryRecords[0];
-
-    assert(Boolean(variant), `Expected variant ${sku}.`, failures);
-    assert(
-      inventory?.quantityOnHand === expectedStock &&
-        inventory?.quantityAvailable === expectedStock &&
-        inventory?.quantityReserved === 0,
-      `Expected inventory for ${sku} to be onHand=${expectedStock}, available=${expectedStock}, reserved=0.`,
-      failures,
-    );
-  }
-
-  const seedInventoryTransactionCount =
-    await prisma.inventoryTransaction.count({
-      where: {
-        transactionType: 'SEED_STOCK',
-        referenceType: 'SEED',
-      },
-    });
   assert(
-    seedInventoryTransactionCount >= Object.keys(expectedVariantStocks).length,
-    'Expected seed inventory transactions for every demo variant.',
+    seedInventoryTransactionCount === expectedCounts.variants,
+    `Expected ${expectedCounts.variants} seed inventory transactions, found ${seedInventoryTransactionCount}.`,
     failures,
   );
 
   if (failures.length > 0) {
     console.error('Seed check failed:');
-    for (const failure of failures) {
-      console.error(`- ${failure}`);
-    }
+    failures.forEach((failure) => console.error(`- ${failure}`));
     process.exitCode = 1;
     return;
   }
@@ -236,14 +221,14 @@ async function main() {
     JSON.stringify(
       {
         ok: true,
-        users: users.length,
-        paymentMethods: paymentMethodCount,
+        users: totalUserCount,
+        paymentMethods: expectedPaymentMethods.length,
         categories: categoryCount,
-        productAttributes: expectedAttributes.length,
-        shippingCompanies: shippingCompanies.length,
-        shippingServices: serviceCount,
-        demoProducts: products.length,
-        demoVariants: variants.length,
+        shops: shopCount,
+        shippingServices: shippingCompany.services.length,
+        products: productCount,
+        variants: variants.length,
+        vouchers: voucherCount,
         seedInventoryTransactions: seedInventoryTransactionCount,
       },
       null,

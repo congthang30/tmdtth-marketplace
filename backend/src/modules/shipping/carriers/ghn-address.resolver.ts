@@ -5,7 +5,6 @@ import {
 } from '../../../config/carrier.config';
 import {
   normalizeProvinceNameForMatching,
-  normalizeVietnameseText,
   normalizeWardNameForMatching,
 } from '../normalize-vietnamese-text';
 
@@ -39,6 +38,12 @@ export type ResolvedGhnAddress = {
 };
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// ponytail: GHN sandbox still exposes pre-2025 wards. Remove this verified
+// fallback once its master data includes the merged ward name.
+const GHN_LEGACY_WARD_ALIASES: Record<string, string> = {
+  'ho chi minh|hiep binh': 'hiep binh chanh',
+};
 
 @Injectable()
 export class GhnAddressResolver {
@@ -160,38 +165,59 @@ export class GhnAddressResolver {
     }
 
     const districts = await this.getDistricts(province.ProvinceID);
-    const matches: ResolvedGhnAddress[] = [];
+    const wardCandidates: Array<{
+      district: GhnDistrict;
+      ward: GhnWard;
+    }> = [];
 
     for (const district of districts) {
       const wards = await this.getWards(district.DistrictID);
-      const ward = wards.find(
-        (item) =>
-          normalizeWardNameForMatching(item.WardName) === normalizedWard,
-      );
+      wardCandidates.push(...wards.map((ward) => ({ district, ward })));
+    }
 
-      if (ward) {
-        matches.push({
-          districtId: district.DistrictID,
-          districtName: district.DistrictName,
-          wardCode: ward.WardCode,
-          wardName: ward.WardName,
-        });
+    let matches = wardCandidates.filter(
+      ({ ward }) =>
+        normalizeWardNameForMatching(ward.WardName) === normalizedWard,
+    );
+
+    if (matches.length === 0) {
+      const legacyWard =
+        GHN_LEGACY_WARD_ALIASES[`${normalizedProvince}|${normalizedWard}`];
+      if (legacyWard) {
+        matches = wardCandidates.filter(
+          ({ ward }) =>
+            normalizeWardNameForMatching(ward.WardName) === legacyWard,
+        );
+        if (matches.length > 0) {
+          this.logger.warn(
+            `GHN: resolved post-2025 ward "${wardName}" as legacy ward "${matches[0].ward.WardName}".`,
+          );
+        }
       }
     }
 
-    if (matches.length === 0) {
+    const resolvedMatches: ResolvedGhnAddress[] = matches.map(
+      ({ district, ward }) => ({
+        districtId: district.DistrictID,
+        districtName: district.DistrictName,
+        wardCode: ward.WardCode,
+        wardName: ward.WardName,
+      }),
+    );
+
+    if (resolvedMatches.length === 0) {
       this.logger.warn(
         `GHN: could not resolve ward "${wardName}" within province "${provinceName}".`,
       );
       return null;
     }
 
-    if (matches.length > 1) {
+    if (resolvedMatches.length > 1) {
       this.logger.warn(
-        `GHN: ambiguous ward "${wardName}" in "${provinceName}" matched ${matches.length} districts; using the first match.`,
+        `GHN: ambiguous ward "${wardName}" in "${provinceName}" matched ${resolvedMatches.length} districts; using the first match.`,
       );
     }
 
-    return matches[0];
+    return resolvedMatches[0];
   }
 }

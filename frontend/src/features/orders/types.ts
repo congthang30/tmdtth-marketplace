@@ -40,6 +40,12 @@ export type OrderShipment = {
   carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
+  handoverMethod: 'Pickup' | 'Dropoff';
+  pickupStation: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
   shippingCompany: {
     id: string;
     idString: string;

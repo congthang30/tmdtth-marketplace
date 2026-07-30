@@ -55,7 +55,7 @@ async function createSellerCatalog(seller, label, index, categoryId) {
 const category = await api('/admin/categories', { token: admin.accessToken, method: 'POST', body: { categoryName: `Acceptance ${suffix}`, slug: `acceptance-${suffix}`, isActive: true } });
 const catalogA = await createSellerCatalog(sellerA, 'A', 1, category.id);
 const catalogB = await createSellerCatalog(sellerB, 'B', 2, category.id);
-const address = await api('/addresses', { token: customer.accessToken, method: 'POST', body: { receiverName: 'Acceptance Customer', phoneNumber: '0901234567', province: 'Bangkok', district: 'Central', ward: 'Ward 1', streetAddress: '1 Acceptance Street', isDefault: true } });
+const address = await api('/addresses', { token: customer.accessToken, method: 'POST', body: { receiverName: 'Acceptance Customer', phoneNumber: '0901234567', province: 'Thành phố Hồ Chí Minh', district: 'Quận 1', ward: 'Phường Bến Nghé', streetAddress: '1 Đường Marketplace', isDefault: true } });
 const methods = await api('/payments/methods', { token: customer.accessToken });
 const cod = methods.find((method) => method.methodCode === 'COD');
 
@@ -68,24 +68,28 @@ await api('/orders/checkout-preview', { token: customer.accessToken, method: 'PO
 const order = await api('/orders', { token: customer.accessToken, method: 'POST', body: { addressId: address.id, paymentMethodId: cod.id, selectedCartItemIds } });
 if (order.shopOrders.length !== 2) throw new Error('Expected two shop orders');
 
-const shippingServices = await api('/admin/shipping-services', { token: admin.accessToken });
-const shippingServiceId = shippingServices.find((service) => service.isActive).id;
 for (const catalog of [catalogA, catalogB]) {
   const orders = await api('/seller/orders', { token: catalog.seller.accessToken });
   const shopOrder = orders.find((item) => item.orderId === order.id);
   await api(`/seller/orders/${shopOrder.id}/confirm`, { token: catalog.seller.accessToken, method: 'PATCH', body: {} });
   await api(`/seller/orders/${shopOrder.id}/prepare`, { token: catalog.seller.accessToken, method: 'PATCH', body: {} });
-  const shipment = await api(`/seller/orders/${shopOrder.id}/shipments`, { token: catalog.seller.accessToken, method: 'POST', body: { shippingServiceId, trackingNumber: `TRK-${suffix}-${catalog.shop.id}` } });
-  await api(`/seller/orders/${shopOrder.id}/shipments/${shipment.id}/tracking`, { token: catalog.seller.accessToken, method: 'PATCH', body: { shipmentStatus: 'InTransit' } });
-  await api(`/seller/orders/${shopOrder.id}/shipments/${shipment.id}/tracking`, { token: catalog.seller.accessToken, method: 'PATCH', body: { shipmentStatus: 'Delivered' } });
+  const shipment = await api(`/seller/orders/${shopOrder.id}/shipments`, {
+    token: catalog.seller.accessToken,
+    method: 'POST',
+    body: { handoverMethod: 'Pickup' },
+  });
+  if (!shipment.carrierOrderCode || shipment.trackingNumber !== shipment.carrierOrderCode) {
+    throw new Error('Expected a carrier-issued GHN tracking number');
+  }
+  await api(`/seller/orders/${shopOrder.id}/shipments/${shipment.id}/sync`, {
+    token: catalog.seller.accessToken,
+    method: 'POST',
+  });
 }
 
-const completed = await api(`/orders/${order.id}`, { token: customer.accessToken });
-if (completed.orderStatus !== 'Completed') throw new Error(`Expected Completed, got ${completed.orderStatus}`);
-const orderItemId = completed.shopOrders[0].items[0].id;
-await api('/reviews/products', { token: customer.accessToken, method: 'POST', body: { orderItemId, rating: 5, reviewTitle: 'Acceptance passed' } });
-let duplicateBlocked = false;
-try { await api('/reviews/products', { token: customer.accessToken, method: 'POST', body: { orderItemId, rating: 5 } }); } catch { duplicateBlocked = true; }
-if (!duplicateBlocked) throw new Error('Duplicate review was not blocked');
+const shipping = await api(`/orders/${order.id}`, { token: customer.accessToken });
+if (shipping.orderStatus !== 'Shipping') {
+  throw new Error(`Expected Shipping after GHN acceptance, got ${shipping.orderStatus}`);
+}
 
-console.log(JSON.stringify({ ok: true, orderId: order.id, shopOrders: order.shopOrders.length, status: completed.orderStatus, duplicateReviewBlocked: true }, null, 2));
+console.log(JSON.stringify({ ok: true, orderId: order.id, shopOrders: order.shopOrders.length, status: shipping.orderStatus, carrierAuthoritative: true }, null, 2));

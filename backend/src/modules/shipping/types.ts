@@ -84,6 +84,12 @@ export type ShipmentResponse = {
   shipmentStatus: string;
   shippingFee: string;
   codAmount: string;
+  handoverMethod: string;
+  pickupStation: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
   pickupAddress: string | null;
   deliveryAddress: string;
   recipientName: string;
@@ -107,4 +113,18 @@ export type ShipmentResponse = {
   items: ShipmentItemResponse[];
   createdAt: Date;
   updatedAt: Date | null;
+};
+
+export type HandoverStationResponse = {
+  id: number;
+  name: string;
+  address: string;
+  wardName: string | null;
+  districtName: string | null;
+  provinceName: string | null;
+};
+
+export type ShipmentLabelResponse = {
+  printUrl: string;
+  expiresAt: Date;
 };

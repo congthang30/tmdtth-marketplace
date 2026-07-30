@@ -46,12 +46,24 @@ type PrismaMock = {
     findMany: jest.Mock;
     updateMany: jest.Mock;
     update: jest.Mock;
-    create: jest.Mock;
+    create: jest.Mock<Promise<unknown>, [{ data: { shopId: bigint } }]>;
     count: jest.Mock;
   };
   voucherUsage: {
     count: jest.Mock;
-    create: jest.Mock;
+    create: jest.Mock<
+      Promise<unknown>,
+      [
+        {
+          data: {
+            voucherId: bigint;
+            userId: bigint;
+            orderId: bigint;
+            discountAmount: Prisma.Decimal;
+          };
+        },
+      ]
+    >;
     findMany: jest.Mock;
     deleteMany: jest.Mock;
   };
@@ -107,12 +119,26 @@ function createPrismaMock(): PrismaMock {
       findMany: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
-      create: jest.fn(),
+      create: jest.fn<Promise<unknown>, [{ data: { shopId: bigint } }]>(),
       count: jest.fn(),
     },
     voucherUsage: {
       count: jest.fn().mockResolvedValue(0),
-      create: jest.fn().mockResolvedValue({}),
+      create: jest
+        .fn<
+          Promise<unknown>,
+          [
+            {
+              data: {
+                voucherId: bigint;
+                userId: bigint;
+                orderId: bigint;
+                discountAmount: Prisma.Decimal;
+              };
+            },
+          ]
+        >()
+        .mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
@@ -382,13 +408,12 @@ describe('VouchersService.applyVoucherInTransaction', () => {
       where: { id: 1n, usedCount: { lt: 10 } },
       data: { usedCount: { increment: 1 } },
     });
-    expect(prisma.voucherUsage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        voucherId: 1n,
-        userId: customer.id,
-        orderId: 900n,
-        discountAmount: money('20000'),
-      }),
+    const usageCreateArgs = prisma.voucherUsage.create.mock.calls[0][0];
+    expect(usageCreateArgs.data).toMatchObject({
+      voucherId: 1n,
+      userId: customer.id,
+      orderId: 900n,
+      discountAmount: money('20000'),
     });
   });
 
@@ -512,10 +537,7 @@ describe('VouchersService shop scoping for CRUD', () => {
       endAt: new Date('2026-08-01T00:00:00.000Z'),
     } as never);
 
-    expect(prisma.voucher.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ shopId: 5n }),
-      }),
-    );
+    const voucherCreateArgs = prisma.voucher.create.mock.calls[0][0];
+    expect(voucherCreateArgs.data.shopId).toBe(5n);
   });
 });

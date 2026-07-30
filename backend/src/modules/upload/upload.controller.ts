@@ -16,7 +16,9 @@ import {
   getUploadMaxFileSizeBytes,
 } from '../../config/upload.config';
 import { AppRole } from '../auth/app-role.enum';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AuthenticatedUser } from '../auth/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UploadService } from './upload.service';
@@ -51,7 +53,10 @@ export class UploadController {
       },
     }),
   )
-  async uploadFile(@UploadedFile() file?: Express.Multer.File) {
+  async uploadFile(
+    @CurrentUser() user: AuthenticatedUser,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException({
         code: 'UPLOAD_FILE_REQUIRED',
@@ -62,11 +67,14 @@ export class UploadController {
 
     this.uploadService.assertUploadedImage(file);
 
-    return this.uploadService.upload(file);
+    return this.uploadService.upload(user, file);
   }
 
   @Get()
-  listFiles(@Query() query: PaginationQueryDto) {
-    return this.uploadService.listFiles(query);
+  listFiles(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.uploadService.listFiles(user, query);
   }
 }

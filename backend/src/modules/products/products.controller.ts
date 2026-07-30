@@ -18,6 +18,14 @@ export class ProductsController {
     );
   }
 
+  @Get(':slug/check-variant')
+  checkPublicProductVariant(
+    @Param('slug') slug: string,
+    @Query('attributes') attributes = '{}',
+  ) {
+    return this.productsService.checkPublicProductVariant(slug, attributes);
+  }
+
   @Get(':slug')
   getPublicProductDetail(@Param('slug') slug: string) {
     return this.productsService.getPublicProductDetail(slug);

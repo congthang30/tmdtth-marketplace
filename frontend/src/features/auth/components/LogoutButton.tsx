@@ -25,7 +25,7 @@ export function LogoutButton({ className }: LogoutButtonProps) {
       type="button"
       className={
         className ??
-        "inline-flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-surface"
+        "inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-surface"
       }
       disabled={mutation.isPending}
       onClick={() => mutation.mutate()}

@@ -15,28 +15,39 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
   };
 
   function setup() {
+    type DataArgs = { data: Record<string, unknown> };
+    const updateProfile = jest.fn<
+      Promise<typeof nowProfile & Record<string, unknown>>,
+      [DataArgs]
+    >(({ data }) => Promise.resolve({ ...nowProfile, ...data }));
     const transaction = {
-      sellerVerificationProfile: {
-        update: jest
-          .fn()
-          .mockImplementation(({ data }) =>
-            Promise.resolve({ ...nowProfile, ...data }),
-          ),
+      sellerVerificationProfile: { update: updateProfile },
+      sellerVerificationReview: {
+        create: jest.fn<Promise<unknown>, [DataArgs]>().mockResolvedValue({}),
       },
-      sellerVerificationReview: { create: jest.fn().mockResolvedValue({}) },
-      sellerVerificationHistory: { create: jest.fn().mockResolvedValue({}) },
+      sellerVerificationHistory: {
+        create: jest.fn<Promise<unknown>, [DataArgs]>().mockResolvedValue({}),
+      },
       sellerVerificationDocument: {
-        updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+        updateMany: jest
+          .fn<
+            Promise<{ count: number }>,
+            [DataArgs & Record<string, unknown>]
+          >()
+          .mockResolvedValue({ count: 3 }),
       },
-      shop: { update: jest.fn().mockResolvedValue({}) },
+      shop: {
+        update: jest.fn<Promise<unknown>, [DataArgs]>().mockResolvedValue({}),
+      },
     };
     const prisma = {
       sellerVerificationProfile: {
         findUnique: jest.fn().mockResolvedValue(nowProfile),
       },
-      $transaction: jest
-        .fn()
-        .mockImplementation((callback) => callback(transaction)),
+      $transaction: jest.fn(
+        (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
     };
     const emailService = {
       sendApproved: jest.fn().mockResolvedValue(undefined),
@@ -58,33 +69,37 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.approve(admin, '11');
 
-    expect(transaction.sellerVerificationProfile.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          verificationStatus: VerificationStatus.Approved,
-        }),
-      }),
+    const profileUpdate = transaction.sellerVerificationProfile.update.mock
+      .calls[0][0] as { data: { verificationStatus: VerificationStatus } };
+    const shopUpdate = transaction.shop.update.mock.calls[0][0] as {
+      data: {
+        shopStatus: string;
+        approvedByUserId: bigint;
+        rejectionReason: null;
+      };
+    };
+    const reviewCreate = transaction.sellerVerificationReview.create.mock
+      .calls[0][0] as { data: { reviewStatus: ReviewStatus } };
+    const documentUpdate = transaction.sellerVerificationDocument.updateMany
+      .mock.calls[0][0] as {
+      where: { verificationProfileId: bigint; isDeleted: boolean };
+      data: { documentStatus: string; updatedAt: Date };
+    };
+    expect(profileUpdate.data.verificationStatus).toBe(
+      VerificationStatus.Approved,
     );
-    expect(transaction.shop.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          shopStatus: 'Approved',
-          approvedByUserId: 99n,
-          rejectionReason: null,
-        }),
-      }),
-    );
-    expect(transaction.sellerVerificationReview.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ reviewStatus: ReviewStatus.Approved }),
-      }),
-    );
-    expect(
-      transaction.sellerVerificationDocument.updateMany,
-    ).toHaveBeenCalledWith({
-      where: { verificationProfileId: 11n, isDeleted: false },
-      data: { documentStatus: 'Accepted', updatedAt: expect.any(Date) },
+    expect(shopUpdate.data).toMatchObject({
+      shopStatus: 'Approved',
+      approvedByUserId: 99n,
+      rejectionReason: null,
     });
+    expect(reviewCreate.data.reviewStatus).toBe(ReviewStatus.Approved);
+    expect(documentUpdate.where).toEqual({
+      verificationProfileId: 11n,
+      isDeleted: false,
+    });
+    expect(documentUpdate.data.documentStatus).toBe('Accepted');
+    expect(documentUpdate.data.updatedAt).toBeInstanceOf(Date);
     expect(emailService.sendApproved).toHaveBeenCalledTimes(1);
   });
 
@@ -94,16 +109,20 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.requestRevision(admin, '11', { reason });
 
-    expect(transaction.shop.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          shopStatus: 'Draft',
-          approvedAt: null,
-          approvedByUserId: null,
-          rejectionReason: reason,
-        }),
-      }),
-    );
+    const shopUpdate = transaction.shop.update.mock.calls[0][0] as {
+      data: {
+        shopStatus: string;
+        approvedAt: null;
+        approvedByUserId: null;
+        rejectionReason: string;
+      };
+    };
+    expect(shopUpdate.data).toMatchObject({
+      shopStatus: 'Draft',
+      approvedAt: null,
+      approvedByUserId: null,
+      rejectionReason: reason,
+    });
     expect(emailService.sendRevisionRequested).toHaveBeenCalledWith(
       'seller@example.com',
       'Nguyen Van A',
@@ -118,14 +137,13 @@ describe('AdminSellerVerificationService moderation lifecycle', () => {
 
     await service.reject(admin, '11', { reason });
 
-    expect(transaction.shop.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          shopStatus: 'Rejected',
-          rejectionReason: reason,
-        }),
-      }),
-    );
+    const shopUpdate = transaction.shop.update.mock.calls[0][0] as {
+      data: { shopStatus: string; rejectionReason: string };
+    };
+    expect(shopUpdate.data).toMatchObject({
+      shopStatus: 'Rejected',
+      rejectionReason: reason,
+    });
     expect(emailService.sendRejected).toHaveBeenCalledWith(
       'seller@example.com',
       'Nguyen Van A',

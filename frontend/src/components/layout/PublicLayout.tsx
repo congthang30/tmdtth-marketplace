@@ -12,7 +12,7 @@ export function PublicLayout() {
     <div className="min-h-screen bg-surface text-ink">
       <header className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
-          <Link to="/" className="flex items-center gap-3 font-semibold">
+          <Link to="/" className="flex min-h-11 items-center gap-3 font-semibold">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary-600 text-white">
               <Store size={20} aria-hidden="true" />
             </span>

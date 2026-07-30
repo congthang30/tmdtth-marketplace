@@ -147,8 +147,8 @@ export function DashboardLayout() {
   const searchContext = user?.roles.includes("Admin") ? "admin" : "seller";
 
   return (
-    <div className="min-h-screen bg-surface text-ink">
-      <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-surface text-ink">
+      <div className="grid min-h-screen min-w-0 lg:grid-cols-[264px_minmax(0,1fr)]">
         <aside className="border-b border-border bg-white lg:border-b-0 lg:border-r">
           <div className="flex items-center gap-3 px-5 py-5">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary-600 text-white">
@@ -166,7 +166,7 @@ export function DashboardLayout() {
                 to={item.to}
                 className={({ isActive }) =>
                   [
-                    "flex min-w-max items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
+                    "flex min-h-11 min-w-max items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
                     isActive
                       ? "bg-primary-50 text-primary-700"
                       : "text-muted hover:bg-surface hover:text-ink",
@@ -194,7 +194,7 @@ export function DashboardLayout() {
               <div className="flex flex-wrap items-center gap-2">
                 <NavLink
                   to="/profile"
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm text-muted hover:bg-surface hover:text-ink"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-3 py-1 text-sm text-muted hover:bg-surface hover:text-ink"
                 >
                   <UserRound size={15} aria-hidden="true" />
                   {roleLabel}

@@ -46,6 +46,7 @@ export type ShopRequest = {
 
 export type SellerProduct = ProductListItem & {
   productStatus: string;
+  warrantyMonths: number;
   isViolation: boolean;
   isDeleted: boolean;
 };
@@ -64,8 +65,7 @@ export type ProductRequest = {
   basePrice?: string;
   compareAtPrice?: string;
   warrantyMonths?: number;
-  weightGram?: number;
-  productStatus?: 'Draft' | 'Published';
+  shopCategoryIds?: string[];
 };
 
 export type SellerVariant = {
@@ -75,7 +75,7 @@ export type SellerVariant = {
   productIdString: string;
   sku: string;
   variantName: string;
-  variantOptionJson: string | null;
+  attributes: Record<string, string>;
   price: string;
   compareAtPrice: string | null;
   weightGram: number;
@@ -86,18 +86,25 @@ export type SellerVariant = {
 };
 
 export type VariantUpdateRequest = {
-  variantName?: string;
-  variantOptionJson?: string;
+  attributes?: Record<string, string>;
   price?: string;
   compareAtPrice?: string;
   weightGram?: number;
   variantStatus?: 'Active' | 'Inactive';
 };
 
-export type VariantCreateRequest = Required<Pick<VariantUpdateRequest, 'variantName' | 'price'>> &
-  VariantUpdateRequest & {
-    quantityOnHand: number;
-  };
+export type VariantCreateRequest = {
+  attributes: Record<string, string>;
+  price: string;
+  compareAtPrice?: string;
+  weightGram?: number;
+  quantityOnHand: number;
+  variantStatus?: 'Active' | 'Inactive';
+};
+
+export type VariantBatchCreateRequest = {
+  variants: VariantCreateRequest[];
+};
 
 export type SellerImage = ProductImage & {
   productId: string;
@@ -109,7 +116,7 @@ export type SellerImage = ProductImage & {
 
 export type ProductImageRequest = {
   productVariantId?: string;
-  imageUrl: string;
+  assetId?: string;
   altText?: string;
   sortOrder?: number;
   isThumbnail?: boolean;
@@ -161,6 +168,25 @@ export type SellerInventoryTransactionListResponse = {
   meta?: { page?: number; limit?: number; total?: number; totalPages?: number };
 };
 
+export type SellerShippingSelection = {
+  shippingQuoteId: string;
+  shippingQuoteIdString: string;
+  shippingCompany: {
+    id: string;
+    idString: string;
+    companyName: string;
+    slug: string;
+  };
+  shippingService: {
+    id: string;
+    idString: string;
+    serviceCode: string;
+    serviceName: string;
+  };
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+};
+
 export type SellerShopOrder = {
   id: string;
   idString: string;
@@ -192,6 +218,7 @@ export type SellerShopOrder = {
   confirmedAt: string | null;
   preparedAt: string | null;
   completedAt: string | null;
+  shippingSelection: SellerShippingSelection | null;
   items: OrderItem[];
   shipments?: OrderShipment[];
   createdAt: string;
@@ -228,22 +255,31 @@ export type ShippingServiceListResponse = {
 };
 
 export type ShipmentRequest = {
-  shippingServiceId: string;
-  shippingQuoteId?: string;
-  trackingNumber?: string;
-  pickupAddress?: string;
-  expectedDeliveryAt?: string;
-  note?: string;
+  handoverMethod: 'Pickup' | 'Dropoff';
+  pickupStationId?: number;
 };
 
-export type ShipmentTrackingRequest = {
-  shipmentStatus: 'PickedUp' | 'InTransit' | 'Delivered';
-  trackingNumber?: string;
-  locationText?: string;
-  note?: string;
+export type HandoverStation = {
+  id: number;
+  name: string;
+  address: string;
+  wardName: string | null;
+  districtName: string | null;
+  provinceName: string | null;
+};
+
+export type HandoverStationListResponse = {
+  items: HandoverStation[];
+};
+
+export type ShipmentLabelResponse = {
+  printUrl: string;
+  expiresAt: string;
 };
 
 export type UploadedFile = {
+  id: string;
+  assetId: string;
   fileName: string;
   originalName: string;
   mimeType: string;
@@ -252,6 +288,8 @@ export type UploadedFile = {
 };
 
 export type StoredUploadFile = {
+  id: string;
+  assetId: string;
   fileName: string;
   size: number;
   createdAt: string;

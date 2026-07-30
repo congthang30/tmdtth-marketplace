@@ -2,13 +2,12 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
   Max,
-  MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
@@ -22,17 +21,8 @@ function normalizeStringInput(value: unknown): unknown {
 }
 
 export class CreateProductVariantDto {
-  @Transform(({ value }) => trimString(value))
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  variantName!: string;
-
-  @Transform(({ value }) => trimString(value))
-  @IsOptional()
-  @IsString()
-  @MaxLength(4000)
-  variantOptionJson?: string;
+  @IsObject()
+  attributes!: Record<string, string>;
 
   @Transform(({ value }) => normalizeStringInput(value))
   @IsString()

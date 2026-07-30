@@ -3,15 +3,16 @@ export type ProductListVariantResponse = {
   idString: string;
   sku: string;
   variantName: string;
+  attributes: Record<string, string>;
   price: string;
   compareAtPrice: string | null;
   quantityAvailable: number;
+  image: ProductListImageResponse | null;
 };
 
 export type SellerProductVariantResponse = ProductListVariantResponse & {
   productId: string;
   productIdString: string;
-  variantOptionJson: string | null;
   weightGram: number;
   variantStatus: string;
   createdAt: Date;
@@ -111,6 +112,7 @@ export type ProductListItemResponse = {
 
 export type SellerProductListItemResponse = ProductListItemResponse & {
   productStatus: string;
+  warrantyMonths: number;
   isViolation: boolean;
   isDeleted: boolean;
 };

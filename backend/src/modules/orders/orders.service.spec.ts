@@ -22,6 +22,21 @@ type SellerShopOrderEntity = {
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date | null;
+  shippingCompany: {
+    id: bigint;
+    companyName: string;
+    slug: string;
+  } | null;
+  shippingService: {
+    id: bigint;
+    serviceCode: string;
+    serviceName: string;
+  } | null;
+  shippingQuote: {
+    id: bigint;
+    estimatedMinDays: number;
+    estimatedMaxDays: number;
+  } | null;
   shop: {
     id: bigint;
     shopName: string;
@@ -115,6 +130,21 @@ function createShopOrderEntity(
     completedAt: null,
     createdAt: now,
     updatedAt: now,
+    shippingCompany: {
+      id: 10n,
+      companyName: 'Giao Hàng Nhanh',
+      slug: 'ghn',
+    },
+    shippingService: {
+      id: 20n,
+      serviceCode: 'STD',
+      serviceName: 'GHN Chuẩn',
+    },
+    shippingQuote: {
+      id: 30n,
+      estimatedMinDays: 2,
+      estimatedMaxDays: 5,
+    },
     shop: {
       id: 1n,
       shopName: 'Seller Home',
@@ -241,6 +271,24 @@ describe('OrdersService seller shop orders', () => {
     expect(result.orderCode).toBe('ORD-20260703-DEMO');
     expect(result.receiverName).toBe('Customer Demo');
     expect(result.totalAmount).toBe('159000');
+    expect(result.shippingSelection).toEqual({
+      shippingQuoteId: '30',
+      shippingQuoteIdString: '30',
+      shippingCompany: {
+        id: '10',
+        idString: '10',
+        companyName: 'Giao Hàng Nhanh',
+        slug: 'ghn',
+      },
+      shippingService: {
+        id: '20',
+        idString: '20',
+        serviceCode: 'STD',
+        serviceName: 'GHN Chuẩn',
+      },
+      estimatedMinDays: 2,
+      estimatedMaxDays: 5,
+    });
   });
 
   it('returns not found for another shop order', async () => {

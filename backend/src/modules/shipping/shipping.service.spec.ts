@@ -1,9 +1,10 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import { CarrierClient, CarrierQuoteResult } from './carriers/carrier.types';
+import { GhnClient } from './carriers/ghn.client';
 import { ShippingService } from './shipping.service';
 
 type ShippingCompanyEntity = {
@@ -69,11 +70,18 @@ type CreateShipmentShopOrderEntity = {
   id: bigint;
   orderId: bigint;
   shopId: bigint;
+  shippingCompanyId: bigint | null;
+  shippingServiceId: bigint | null;
+  shippingQuoteId: bigint | null;
   orderStatus: string;
+  shippingFeeAmount: { toString(): string };
+  totalAmount: { toString(): string };
   shop: {
     id: bigint;
     ownerUserId: bigint;
     isDeleted: boolean;
+    shopName: string;
+    phoneNumber: string | null;
     province: string | null;
     ward: string | null;
     streetAddress: string | null;
@@ -86,6 +94,7 @@ type CreateShipmentShopOrderEntity = {
     shippingProvince: string;
     shippingWard: string;
     shippingStreetAddress: string;
+    paymentMethod: { methodCode: string };
   };
   items: Array<{
     id: bigint;
@@ -108,6 +117,10 @@ type ShipmentEntity = {
   shipmentStatus: string;
   shippingFee: { toString(): string };
   codAmount: { toString(): string };
+  handoverMethod: string;
+  pickupStationId: number | null;
+  pickupStationName: string | null;
+  pickupStationAddress: string | null;
   pickupAddress: string | null;
   deliveryAddress: string;
   recipientName: string;
@@ -213,15 +226,23 @@ type OrderItemDelegateMock = {
 type ProductInventoryDelegateMock = {
   updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
   findUnique: jest.Mock<Promise<ProductInventoryEntity | null>, [unknown]>;
+  findUniqueOrThrow: jest.Mock<Promise<ProductInventoryEntity>, [unknown]>;
 };
 
 type InventoryTransactionDelegateMock = {
   create: jest.Mock<Promise<unknown>, [unknown]>;
 };
 
+type InventoryReservationEntity = {
+  id: bigint;
+  productInventoryId: bigint;
+  quantity: number;
+  reservationStatus: string;
+};
+
 type InventoryReservationDelegateMock = {
   updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
-  findUnique: jest.Mock<Promise<any>, [unknown]>;
+  findUnique: jest.Mock<Promise<InventoryReservationEntity | null>, [unknown]>;
   update: jest.Mock<Promise<unknown>, [unknown]>;
 };
 
@@ -366,11 +387,18 @@ function createShipmentShopOrderEntity(
     id: 501n,
     orderId: 900n,
     shopId: 100n,
+    shippingCompanyId: 10n,
+    shippingServiceId: 20n,
+    shippingQuoteId: 30n,
     orderStatus: 'Prepared',
+    shippingFeeAmount: { toString: () => '35000' },
+    totalAmount: { toString: () => '250000' },
     shop: {
       id: 100n,
       ownerUserId: adminUser.id,
       isDeleted: false,
+      shopName: 'Seller Home',
+      phoneNumber: '0900000002',
       province: 'TP.HCM',
       ward: 'Phường Bến Nghé',
       streetAddress: '5 Kho Hàng',
@@ -383,6 +411,7 @@ function createShipmentShopOrderEntity(
       shippingProvince: 'TP.HCM',
       shippingWard: 'Phường Bến Nghé',
       shippingStreetAddress: '10 Demo',
+      paymentMethod: { methodCode: 'COD' },
     },
     items: [
       {
@@ -413,8 +442,12 @@ function createShipmentEntity(
     carrierStatus: null,
     shipmentStatus: 'Pending',
     shippingFee: { toString: () => '35000' },
-    codAmount: { toString: () => '0' },
-    pickupAddress: 'Seller warehouse',
+    codAmount: { toString: () => '250000' },
+    handoverMethod: 'Pickup',
+    pickupStationId: null,
+    pickupStationName: null,
+    pickupStationAddress: null,
+    pickupAddress: '5 Kho Hàng, Phường Bến Nghé, TP.HCM',
     deliveryAddress: '10 Demo, Phường Bến Nghé, TP.HCM',
     recipientName: 'Customer Demo',
     recipientPhone: '0900000003',
@@ -453,12 +486,21 @@ function createUpdateShipmentTrackingEntity(
   };
 }
 
+type FakeCarrierClient = Omit<
+  CarrierClient,
+  'isConfigured' | 'getQuote' | 'createOrder'
+> & {
+  isConfigured: jest.Mock<boolean, []>;
+  getQuote: jest.Mock<Promise<CarrierQuoteResult>, [unknown]>;
+  createOrder: jest.Mock;
+};
+
 function createFakeCarrierClient(
-  overrides: Partial<CarrierClient> = {},
-): CarrierClient {
+  overrides: Partial<FakeCarrierClient> = {},
+): FakeCarrierClient {
   return {
     provider: 'GHN',
-    isConfigured: jest.fn().mockReturnValue(false),
+    isConfigured: jest.fn<boolean, []>().mockReturnValue(false),
     healthCheck: jest.fn().mockResolvedValue(false),
     getQuote: jest
       .fn<Promise<CarrierQuoteResult>, [unknown]>()
@@ -477,7 +519,10 @@ function createFakeCarrierClient(
 describe('ShippingService', () => {
   let prisma: PrismaMock;
   let carrierRegistry: CarrierRegistry;
-  let fakeCarrierClient: CarrierClient;
+  let fakeCarrierClient: FakeCarrierClient;
+  let ghnClient: jest.Mocked<
+    Pick<GhnClient, 'isConfigured' | 'getStations' | 'getA5PrintUrl'>
+  >;
   let service: ShippingService;
 
   beforeEach(() => {
@@ -557,6 +602,10 @@ describe('ShippingService', () => {
           Promise<ProductInventoryEntity | null>,
           [unknown]
         >(),
+        findUniqueOrThrow: jest.fn<
+          Promise<ProductInventoryEntity>,
+          [unknown]
+        >(),
       },
       inventoryTransaction: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
@@ -565,7 +614,10 @@ describe('ShippingService', () => {
         updateMany: jest
           .fn<Promise<{ count: number }>, [unknown]>()
           .mockResolvedValue({ count: 1 }),
-        findUnique: jest.fn<Promise<any>, [unknown]>(),
+        findUnique: jest.fn<
+          Promise<InventoryReservationEntity | null>,
+          [unknown]
+        >(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
       product: {
@@ -583,9 +635,19 @@ describe('ShippingService', () => {
       getAllClients: jest.fn().mockReturnValue([fakeCarrierClient]),
     } as unknown as CarrierRegistry;
 
+    ghnClient = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      getStations: jest.fn().mockResolvedValue([]),
+      getA5PrintUrl: jest
+        .fn()
+        .mockResolvedValue(
+          'https://dev-online-gateway.ghn.vn/a5/public-api/printA5?token=test',
+        ),
+    };
     service = new ShippingService(
       prisma as unknown as PrismaService,
       carrierRegistry,
+      ghnClient as unknown as GhnClient,
     );
   });
 
@@ -702,20 +764,28 @@ describe('ShippingService', () => {
     expect(prisma.shippingQuote.create).not.toHaveBeenCalled();
   });
 
-  it('creates a seller shipment from a prepared shop order', async () => {
+  it('moves a prepared order to shipping only after GHN accepts it', async () => {
+    prisma.shipment.findFirst.mockResolvedValue(null);
     prisma.shopOrder.findFirst.mockResolvedValue(
       createShipmentShopOrderEntity(),
     );
-    prisma.shipment.count.mockResolvedValue(0);
     prisma.shippingService.findUnique.mockResolvedValue(
       createShippingServiceWithCompanyEntity(),
     );
-    prisma.shippingQuote.findUnique.mockResolvedValue(
-      createShippingQuoteEntity({
-        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
-      }),
+    const registeringShipment = createShipmentEntity({
+      trackingNumber: null,
+      shipmentStatus: 'Registering',
+    });
+    const acceptedShipment = createShipmentEntity({
+      trackingNumber: 'GHN-ORDER-001',
+      carrierOrderCode: 'GHN-ORDER-001',
+      carrierStatus: 'ready_to_pick',
+      shipmentStatus: 'Pending',
+    });
+    prisma.shipment.create.mockResolvedValue(registeringShipment);
+    prisma.shipment.update.mockResolvedValue(
+      createUpdateShipmentTrackingEntity(acceptedShipment),
     );
-    prisma.shipment.create.mockResolvedValue(createShipmentEntity());
     prisma.shipmentItem.create.mockResolvedValue(createShipmentItemEntity());
     prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
     prisma.shopOrder.update.mockResolvedValue({ id: 501n });
@@ -723,151 +793,145 @@ describe('ShippingService', () => {
     prisma.shopOrder.count.mockResolvedValue(0);
     prisma.order.findUnique.mockResolvedValue({ orderStatus: 'Prepared' });
     prisma.order.update.mockResolvedValue({ id: 900n });
+    fakeCarrierClient.isConfigured.mockReturnValue(true);
+    fakeCarrierClient.createOrder.mockResolvedValue({
+      carrierOrderCode: 'GHN-ORDER-001',
+      feeAmount: 35000,
+      expectedDeliveryAt: new Date('2026-07-05T00:00:00.000Z'),
+      raw: {},
+    });
 
     const result = await service.createSellerShipment(adminUser, '501', {
-      shippingServiceId: '20',
-      shippingQuoteId: '30',
-      trackingNumber: 'TRACK-001',
-      pickupAddress: 'Seller warehouse',
-      expectedDeliveryAt: '2026-07-05T00:00:00.000Z',
-      note: 'Ready for courier',
+      handoverMethod: 'Pickup',
     });
     const shipmentArgs = prisma.shipment.create.mock.calls[0][0] as {
       data: {
-        shopOrderId: bigint;
-        shippingCompanyId: bigint;
-        shippingServiceId: bigint;
-        trackingNumber: string;
+        trackingNumber: null;
         shipmentStatus: string;
         shippingFee: { toString(): string };
-        deliveryAddress: string;
-        recipientName: string;
-        expectedDeliveryAt: Date;
-      };
-    };
-    const shipmentItemArgs = prisma.shipmentItem.create.mock.calls[0][0] as {
-      data: {
-        shipmentId: bigint;
-        orderItemId: bigint;
-        quantity: number;
-      };
-    };
-    const shopOrderUpdateArgs = prisma.shopOrder.update.mock.calls[0][0] as {
-      data: {
-        shippingCompanyId: bigint;
-        shippingServiceId: bigint;
-        shippingQuoteId: bigint;
-        shippingFeeAmount: { toString(): string };
-        orderStatus: string;
+        codAmount: { toString(): string };
+        handoverMethod: string;
+        pickupAddress: string;
       };
     };
 
-    expect(shipmentArgs.data.shopOrderId).toBe(501n);
-    expect(shipmentArgs.data.shippingCompanyId).toBe(10n);
-    expect(shipmentArgs.data.shippingServiceId).toBe(20n);
-    expect(shipmentArgs.data.trackingNumber).toBe('TRACK-001');
-    expect(shipmentArgs.data.shipmentStatus).toBe('Pending');
-    expect(shipmentArgs.data.shippingFee.toString()).toBe('35000');
-    expect(shipmentArgs.data.deliveryAddress).toBe(
-      '10 Demo, Phường Bến Nghé, TP.HCM',
-    );
-    expect(shipmentArgs.data.recipientName).toBe('Customer Demo');
-    expect(shipmentArgs.data.expectedDeliveryAt).toEqual(
-      new Date('2026-07-05T00:00:00.000Z'),
-    );
-    expect(shipmentItemArgs.data).toMatchObject({
-      shipmentId: 800n,
-      orderItemId: 700n,
-      quantity: 1,
+    expect(shipmentArgs.data).toMatchObject({
+      trackingNumber: null,
+      shipmentStatus: 'Registering',
+      handoverMethod: 'Pickup',
+      pickupAddress: '5 Kho Hàng, Phường Bến Nghé, TP.HCM',
     });
-    expect(shopOrderUpdateArgs.data.shippingQuoteId).toBe(30n);
-    expect(shopOrderUpdateArgs.data.shippingFeeAmount.toString()).toBe('35000');
-    expect(shopOrderUpdateArgs.data.orderStatus).toBe('Shipping');
-    expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: 900n },
+    expect(shipmentArgs.data.shippingFee.toString()).toBe('35000');
+    expect(shipmentArgs.data.codAmount.toString()).toBe('250000');
+    expect(fakeCarrierClient.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientOrderCode: registeringShipment.shipmentCode,
+        codAmount: 250000,
+        pickupStationId: undefined,
+      }),
+    );
+    expect(prisma.shopOrder.update).toHaveBeenCalledWith({
+      where: { id: 501n },
       data: {
         orderStatus: 'Shipping',
         updatedAt: expect.any(Date) as Date,
       },
     });
-    // Carrier is unconfigured in tests (isConfigured() -> false), so
-    // createOrder should never actually be called; shipment stays local.
-    expect(fakeCarrierClient.createOrder).not.toHaveBeenCalled();
-    expect(result.shipmentStatus).toBe('Pending');
-    expect(result.shippingFee).toBe('35000');
-    expect(result.items).toHaveLength(1);
+    expect(result).toMatchObject({
+      carrierOrderCode: 'GHN-ORDER-001',
+      trackingNumber: 'GHN-ORDER-001',
+      shipmentStatus: 'Pending',
+      handoverMethod: 'Pickup',
+    });
+  });
+
+  it('keeps the shop order prepared and marks sync failed when GHN rejects it', async () => {
+    prisma.shipment.findFirst.mockResolvedValue(null);
+    prisma.shopOrder.findFirst.mockResolvedValue(
+      createShipmentShopOrderEntity(),
+    );
+    prisma.shippingService.findUnique.mockResolvedValue(
+      createShippingServiceWithCompanyEntity(),
+    );
+    prisma.shipment.create.mockResolvedValue(
+      createShipmentEntity({ shipmentStatus: 'Registering' }),
+    );
+    prisma.shipmentItem.create.mockResolvedValue(createShipmentItemEntity());
+    prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
+    prisma.shipment.update.mockResolvedValue(
+      createUpdateShipmentTrackingEntity({ shipmentStatus: 'SyncFailed' }),
+    );
+    fakeCarrierClient.isConfigured.mockReturnValue(true);
+    fakeCarrierClient.createOrder.mockRejectedValue(
+      new Error('GHN unavailable'),
+    );
+
+    await expect(
+      service.createSellerShipment(adminUser, '501', {
+        handoverMethod: 'Pickup',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'CARRIER_ORDER_CREATE_FAILED' },
+    });
+    expect(prisma.shopOrder.update).not.toHaveBeenCalled();
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(prisma.shipment.update).toHaveBeenCalledWith({
+      where: { id: 800n },
+      data: {
+        shipmentStatus: 'SyncFailed',
+        updatedAt: expect.any(Date) as Date,
+      },
+    });
   });
 
   it('rejects shipment when shop order is not prepared', async () => {
+    prisma.shipment.findFirst.mockResolvedValue(null);
     prisma.shopOrder.findFirst.mockResolvedValue(
       createShipmentShopOrderEntity({ orderStatus: 'Confirmed' }),
     );
 
     await expect(
       service.createSellerShipment(adminUser, '501', {
-        shippingServiceId: '20',
+        handoverMethod: 'Pickup',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.shipment.create).not.toHaveBeenCalled();
   });
 
-  it('rejects shipment with an expired shipping quote', async () => {
-    prisma.shopOrder.findFirst.mockResolvedValue(
-      createShipmentShopOrderEntity(),
-    );
-    prisma.shipment.count.mockResolvedValue(0);
-    prisma.shippingService.findUnique.mockResolvedValue(
-      createShippingServiceWithCompanyEntity(),
-    );
-    prisma.shippingQuote.findUnique.mockResolvedValue(
-      createShippingQuoteEntity({
-        expiresAt: new Date('2020-01-01T00:00:00.000Z'),
-      }),
-    );
-
-    await expect(
-      service.createSellerShipment(adminUser, '501', {
-        shippingServiceId: '20',
-        shippingQuoteId: '30',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.shipment.create).not.toHaveBeenCalled();
-  });
-
-  it('updates seller shipment tracking and writes history', async () => {
-    prisma.shipment.findFirst.mockResolvedValue(
-      createUpdateShipmentTrackingEntity(),
-    );
+  it('syncs carrier-owned shipment status and writes history', async () => {
+    const shipment = createUpdateShipmentTrackingEntity({
+      carrierOrderCode: 'GHN-ORDER-001',
+      trackingNumber: 'GHN-ORDER-001',
+    });
+    prisma.shipment.findFirst.mockResolvedValue(shipment);
     prisma.shipment.update.mockResolvedValue(
       createUpdateShipmentTrackingEntity({
+        ...shipment,
+        carrierStatus: 'transporting',
         shipmentStatus: 'InTransit',
         pickedUpAt: new Date('2026-07-03T03:00:00.000Z'),
       }),
     );
-    prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
-
-    const result = await service.updateSellerShipmentTracking(
-      adminUser,
-      '501',
-      '800',
-      {
+    prisma.shipment.findUniqueOrThrow.mockResolvedValue(
+      createUpdateShipmentTrackingEntity({
+        ...shipment,
+        carrierStatus: 'transporting',
         shipmentStatus: 'InTransit',
-        trackingNumber: 'TRACK-002',
-        locationText: 'Sorting hub',
-        note: 'Package scanned',
-      },
+      }),
     );
-    const findArgs = prisma.shipment.findFirst.mock.calls[0][0] as {
-      where: {
-        id: bigint;
-        shopOrderId: bigint;
-        shopOrder: { shop: { ownerUserId: bigint; isDeleted: boolean } };
-      };
-    };
+    prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
+    fakeCarrierClient.isConfigured.mockReturnValue(true);
+    fakeCarrierClient.getOrderStatus = jest.fn().mockResolvedValue({
+      status: 'InTransit',
+      carrierStatusRaw: 'transporting',
+      deliveredAt: null,
+    });
+
+    const result = await service.syncSellerShipment(adminUser, '501', '800');
     const updateArgs = prisma.shipment.update.mock.calls[0][0] as {
       data: {
         shipmentStatus: string;
-        trackingNumber: string;
+        carrierStatus: string;
         pickedUpAt: Date;
       };
     };
@@ -877,47 +941,54 @@ describe('ShippingService', () => {
         shipmentId: bigint;
         fromStatus: string;
         toStatus: string;
-        locationText: string;
         note: string;
         updatedByUserId: bigint;
       };
     };
 
-    expect(findArgs.where).toEqual({
-      id: 800n,
-      shopOrderId: 501n,
-      shopOrder: {
-        shop: {
-          ownerUserId: adminUser.id,
-          isDeleted: false,
-        },
-      },
+    expect(updateArgs.data).toMatchObject({
+      shipmentStatus: 'InTransit',
+      carrierStatus: 'transporting',
     });
-    expect(updateArgs.data.shipmentStatus).toBe('InTransit');
-    expect(updateArgs.data.trackingNumber).toBe('TRACK-002');
     expect(updateArgs.data.pickedUpAt).toBeInstanceOf(Date);
     expect(historyArgs.data).toMatchObject({
       shipmentId: 800n,
       fromStatus: 'Pending',
       toStatus: 'InTransit',
-      locationText: 'Sorting hub',
-      note: 'Package scanned',
+      note: 'Đồng bộ trạng thái từ GHN: transporting',
       updatedByUserId: adminUser.id,
     });
-    expect(prisma.shopOrder.update).not.toHaveBeenCalled();
     expect(result.shipmentStatus).toBe('InTransit');
   });
 
   it('completes shop order and parent order when final shipment is delivered', async () => {
-    prisma.shipment.findFirst.mockResolvedValue(
-      createUpdateShipmentTrackingEntity({ shipmentStatus: 'InTransit' }),
-    );
+    const shipment = createUpdateShipmentTrackingEntity({
+      shipmentStatus: 'InTransit',
+      carrierOrderCode: 'GHN-ORDER-001',
+      trackingNumber: 'GHN-ORDER-001',
+    });
+    prisma.shipment.findFirst.mockResolvedValue(shipment);
     prisma.shipment.update.mockResolvedValue(
       createUpdateShipmentTrackingEntity({
+        ...shipment,
+        carrierStatus: 'delivered',
         shipmentStatus: 'Delivered',
         deliveredAt: new Date('2026-07-03T04:00:00.000Z'),
       }),
     );
+    prisma.shipment.findUniqueOrThrow.mockResolvedValue(
+      createUpdateShipmentTrackingEntity({
+        ...shipment,
+        carrierStatus: 'delivered',
+        shipmentStatus: 'Delivered',
+      }),
+    );
+    fakeCarrierClient.isConfigured.mockReturnValue(true);
+    fakeCarrierClient.getOrderStatus = jest.fn().mockResolvedValue({
+      status: 'Delivered',
+      carrierStatusRaw: 'delivered',
+      deliveredAt: new Date('2026-07-03T04:00:00.000Z'),
+    });
     prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
     prisma.shipment.count.mockResolvedValue(0);
     prisma.shopOrder.update
@@ -945,15 +1016,7 @@ describe('ShippingService', () => {
     prisma.order.findUnique.mockResolvedValue({ orderStatus: 'Shipping' });
     prisma.order.update.mockResolvedValue({ id: 900n });
 
-    const result = await service.updateSellerShipmentTracking(
-      adminUser,
-      '501',
-      '800',
-      {
-        shipmentStatus: 'Delivered',
-        locationText: 'Customer address',
-      },
-    );
+    const result = await service.syncSellerShipment(adminUser, '501', '800');
     const shopOrderUpdateArgs = prisma.shopOrder.update.mock.calls[0][0] as {
       where: { id: bigint };
       data: { orderStatus: string; updatedAt: Date };
@@ -1088,17 +1151,71 @@ describe('ShippingService', () => {
     expect(result.shipmentStatus).toBe('Delivered');
   });
 
-  it('rejects invalid shipment status transitions', async () => {
-    prisma.shipment.findFirst.mockResolvedValue(
-      createUpdateShipmentTrackingEntity(),
-    );
+  it('returns reserved stock only after GHN confirms the shipment was returned', async () => {
+    const shipment = createUpdateShipmentTrackingEntity({
+      shipmentStatus: 'InTransit',
+      carrierOrderCode: 'GHN-ORDER-001',
+      trackingNumber: 'GHN-ORDER-001',
+    });
+    const returnedShipment = createUpdateShipmentTrackingEntity({
+      ...shipment,
+      carrierStatus: 'returned',
+      shipmentStatus: 'Returned',
+    });
+    prisma.shipment.findFirst.mockResolvedValue(shipment);
+    prisma.shipment.update.mockResolvedValue(returnedShipment);
+    prisma.shipment.findUniqueOrThrow.mockResolvedValue(returnedShipment);
+    prisma.shipmentTrackingHistory.create.mockResolvedValue({ id: 820n });
+    prisma.inventoryReservation.findUnique.mockResolvedValue({
+      id: 600n,
+      productInventoryId: 400n,
+      quantity: 1,
+      reservationStatus: 'Active',
+    });
+    prisma.inventoryReservation.update.mockResolvedValue({ id: 600n });
+    prisma.productInventory.updateMany.mockResolvedValue({ count: 1 });
+    prisma.productInventory.findUniqueOrThrow.mockResolvedValue({
+      id: 400n,
+      quantityOnHand: 12,
+      quantityReserved: 0,
+      quantityAvailable: 12,
+    });
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 840n });
+    fakeCarrierClient.isConfigured.mockReturnValue(true);
+    fakeCarrierClient.getOrderStatus = jest.fn().mockResolvedValue({
+      status: 'Returned',
+      carrierStatusRaw: 'returned',
+      deliveredAt: null,
+    });
 
-    await expect(
-      service.updateSellerShipmentTracking(adminUser, '501', '800', {
-        shipmentStatus: 'Delivered',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.shipment.update).not.toHaveBeenCalled();
-    expect(prisma.shipmentTrackingHistory.create).not.toHaveBeenCalled();
+    const result = await service.syncSellerShipment(adminUser, '501', '800');
+
+    expect(prisma.inventoryReservation.update).toHaveBeenCalledWith({
+      where: { id: 600n },
+      data: {
+        reservationStatus: 'Returned',
+        returnedAt: expect.any(Date) as Date,
+      },
+    });
+    expect(prisma.productInventory.updateMany).toHaveBeenCalledWith({
+      where: { id: 400n, quantityReserved: { gte: 1 } },
+      data: {
+        quantityReserved: { decrement: 1 },
+        quantityAvailable: { increment: 1 },
+        updatedAt: expect.any(Date) as Date,
+      },
+    });
+    expect(prisma.inventoryTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productInventoryId: 400n,
+        transactionType: 'ReturnOrder',
+        quantityChange: 1,
+        quantityAfter: 12,
+        referenceType: 'ORDER_ITEM',
+        referenceId: 700n,
+        createdByUserId: adminUser.id,
+      }) as unknown,
+    });
+    expect(result.shipmentStatus).toBe('Returned');
   });
 });

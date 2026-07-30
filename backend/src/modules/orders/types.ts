@@ -158,8 +158,16 @@ export type OrderShipmentResponse = {
   idString: string;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
+  handoverMethod: string;
+  pickupStation: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
   shippingCompany: {
     id: string;
     idString: string;
@@ -248,6 +256,25 @@ export type OrderListItemResponse = Omit<OrderResponse, 'address'> & {
   };
 };
 
+export type SellerShippingSelectionResponse = {
+  shippingQuoteId: string;
+  shippingQuoteIdString: string;
+  shippingCompany: {
+    id: string;
+    idString: string;
+    companyName: string;
+    slug: string;
+  };
+  shippingService: {
+    id: string;
+    idString: string;
+    serviceCode: string;
+    serviceName: string;
+  };
+  estimatedMinDays: number;
+  estimatedMaxDays: number;
+};
+
 export type SellerShopOrderResponse = {
   id: string;
   idString: string;
@@ -274,6 +301,7 @@ export type SellerShopOrderResponse = {
   confirmedAt: Date | null;
   preparedAt: Date | null;
   completedAt: Date | null;
+  shippingSelection: SellerShippingSelectionResponse | null;
   items: OrderItemResponse[];
   shipments?: OrderShipmentResponse[];
   createdAt: Date;

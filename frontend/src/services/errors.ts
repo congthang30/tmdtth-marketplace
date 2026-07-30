@@ -14,6 +14,15 @@ const apiErrorMessages: Record<string, string> = {
     "Lựa chọn dịch vụ vận chuyển không hợp lệ.",
   CHECKOUT_SHIPPING_SELECTION_REQUIRED:
     "Vui lòng chọn dịch vụ vận chuyển cho từng gian hàng.",
+  CARRIER_ORDER_CREATE_FAILED:
+    "GHN chưa tiếp nhận vận đơn. Vui lòng kiểm tra cấu hình giao hàng rồi thử lại.",
+  CARRIER_QUOTE_FAILED:
+    "Không thể tính phí vận chuyển cho địa chỉ này. Vui lòng kiểm tra lại tỉnh, phường/xã và địa chỉ chi tiết.",
+  CARRIER_STATUS_SYNC_FAILED:
+    "Không thể lấy trạng thái mới nhất từ GHN. Vui lòng thử đồng bộ lại sau.",
+  DUPLICATE_OPTION_GROUP: "Tên nhóm phân loại không được trùng nhau.",
+  DUPLICATE_OPTION_VALUE: "Giá trị trong cùng một nhóm phân loại không được trùng nhau.",
+  DUPLICATE_VARIANT_OPTIONS: "Tổ hợp phân loại này đã tồn tại. Vui lòng chọn tổ hợp khác.",
   EMAIL_EXISTS: "Địa chỉ email này đã được sử dụng.",
   FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
   INTERNAL_SERVER_ERROR: "Hệ thống đang gặp sự cố. Vui lòng thử lại sau.",
@@ -23,6 +32,7 @@ const apiErrorMessages: Record<string, string> = {
   INVALID_CREDENTIALS: "Email hoặc mật khẩu không chính xác.",
   INVALID_DATE_OF_BIRTH: "Ngày sinh không hợp lệ.",
   INVALID_ID: "Mã dữ liệu không hợp lệ.",
+  INCOMPLETE_VARIANT_OPTIONS: "Vui lòng chọn một giá trị cho mỗi nhóm phân loại.",
   INVALID_INVENTORY_QUANTITY: "Số lượng tồn kho không hợp lệ.",
   INVALID_MONEY: "Giá trị tiền không hợp lệ.",
   INVALID_ORDER_ID: "Mã đơn hàng không hợp lệ.",
@@ -39,6 +49,7 @@ const apiErrorMessages: Record<string, string> = {
   INVALID_SHOP_NAME: "Tên gian hàng không hợp lệ.",
   INVALID_SHOP_ORDER_ID: "Mã đơn hàng của gian hàng không hợp lệ.",
   INVALID_VARIANT_OPTION_JSON: "Thông tin tùy chọn phân loại không hợp lệ.",
+  INVALID_VARIANT_OPTION_VALUE: "Giá trị phân loại không thuộc sản phẩm này. Vui lòng tải lại trang.",
   INVENTORY_NOT_FOUND: "Không tìm thấy thông tin tồn kho.",
   INVENTORY_RESERVATION_INVALID: "Số lượng hàng đã giữ không hợp lệ.",
   ORDER_CANNOT_BE_CANCELLED: "Đơn hàng này không thể hủy.",
@@ -55,6 +66,7 @@ const apiErrorMessages: Record<string, string> = {
   PRODUCT_IMAGE_NOT_FOUND: "Không tìm thấy hình ảnh sản phẩm.",
   PRODUCT_NOT_FOUND: "Không tìm thấy sản phẩm.",
   PRODUCT_REVIEW_ALREADY_EXISTS: "Bạn đã đánh giá sản phẩm này.",
+  PRODUCT_OPTIONS_IN_USE: "Không thể thêm, xóa hoặc đổi tên nhóm đã dùng. Bạn chỉ có thể thêm giá trị mới.",
   PRODUCT_SLUG_EXISTS: "Đường dẫn sản phẩm đã tồn tại trong gian hàng.",
   PRODUCT_VARIANT_NOT_FOUND: "Không tìm thấy phân loại sản phẩm.",
   PRODUCT_VARIANT_SKU_EXISTS: "Mã SKU đã tồn tại trong sản phẩm này.",
@@ -97,9 +109,20 @@ const apiErrorMessages: Record<string, string> = {
   EMAIL_VERIFICATION_CODE_INVALID:
     "Mã xác minh email không đúng hoặc đã hết hạn. Vui lòng kiểm tra mã hoặc gửi mã mới.",
   PROFILE_FULL_NAME_REQUIRED: "Vui lòng nhập họ và tên.",
+  PICKUP_STATION_INVALID:
+    "Bưu cục GHN đã chọn không còn khả dụng. Vui lòng tải lại danh sách và chọn bưu cục khác.",
+  PICKUP_STATION_REQUIRED: "Vui lòng chọn bưu cục GHN để gửi hàng.",
   SHIPMENT_INVALID_STATUS_TRANSITION:
-    "Không thể chuyển vận đơn sang trạng thái đã chọn.",
+    "Trạng thái mới từ GHN không phù hợp với hành trình hiện tại. Vui lòng tải lại sau.",
+  SHIPMENT_LABEL_CREATE_FAILED:
+    "Không thể tạo nhãn GHN. Vui lòng thử lại.",
+  SHIPMENT_LABEL_NOT_READY:
+    "GHN chưa cấp mã vận đơn nên chưa thể in nhãn.",
   SHIPMENT_NOT_FOUND: "Không tìm thấy vận đơn.",
+  SHIPMENT_RETRY_REQUIRED:
+    "Vận đơn trước đó chưa được GHN tiếp nhận. Vui lòng dùng nút Thử đăng ký lại.",
+  SHIPMENT_SYNC_NOT_RETRIABLE:
+    "Vận đơn này chưa thể đồng bộ. Vui lòng tải lại trang.",
   SHIPPING_COMPANY_NOT_APPROVED: "Đơn vị vận chuyển chưa được phê duyệt.",
   SHIPPING_COMPANY_NOT_FOUND: "Không tìm thấy đơn vị vận chuyển.",
   SHIPPING_COMPANY_SLUG_EXISTS: "Đường dẫn đơn vị vận chuyển đã tồn tại.",
@@ -121,6 +144,10 @@ const apiErrorMessages: Record<string, string> = {
   SHOP_ORDER_INVALID_STATUS:
     "Trạng thái đơn hàng không phù hợp với thao tác này.",
   SHOP_ORDER_NOT_FOUND: "Không tìm thấy đơn hàng của gian hàng.",
+  SHOP_ORDER_SHIPPING_SELECTION_MISSING:
+    "Đơn hàng chưa có lựa chọn vận chuyển của khách. Vui lòng liên hệ bộ phận hỗ trợ.",
+  SHOP_ORDER_SHIPPING_SELECTION_MISMATCH:
+    "Vận đơn phải dùng đúng dịch vụ vận chuyển khách đã chọn.",
   SHOP_ORDER_SHIPMENT_EXISTS: "Đơn hàng này đã có vận đơn.",
   SHOP_SLUG_EXISTS: "Đường dẫn gian hàng đã tồn tại.",
   SLUG_EXISTS: "Đường dẫn này đã tồn tại.",
@@ -178,6 +205,18 @@ function detailObjects(details: unknown[]): ErrorDetail[] {
 
 function getDetailedApiErrorMessage(code: string, details: unknown[], status?: number) {
   const parsedDetails = detailObjects(details);
+  if (code === "PRODUCT_NOT_READY_FOR_REVIEW") {
+    const missing = parsedDetails
+      .map((detail) =>
+        "label" in detail && typeof detail.label === "string"
+          ? detail.label
+          : undefined,
+      )
+      .filter((label): label is string => Boolean(label));
+    if (missing.length) {
+      return `Sản phẩm chưa đủ điều kiện gửi phê duyệt: ${missing.join(", ")}. Vui lòng bổ sung rồi thử lại.`;
+    }
+  }
   if (code === "SELLER_DOCUMENTS_REQUIRED") {
     const missing = parsedDetails
       .map((detail) => typeof detail.documentType === "string" ? documentNames[detail.documentType] : undefined)

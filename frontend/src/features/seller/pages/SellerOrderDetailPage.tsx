@@ -1,7 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, PackageCheck, RefreshCw, Truck } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  MapPin,
+  PackageCheck,
+  Printer,
+  RefreshCw,
+  Truck,
+} from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useParams } from "react-router-dom";
 import { z } from "zod";
@@ -13,54 +20,33 @@ import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Modal } from "@/components/ui/Modal";
 import { SelectInput } from "@/components/ui/SelectInput";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { TextInput } from "@/components/ui/TextInput";
 import { Textarea } from "@/components/ui/Textarea";
-import type { OrderShipment } from "@/features/orders/types";
 import { getErrorMessage } from "@/services/errors";
 import { useToastStore } from "@/stores/toast.store";
 import { formatDateTime, formatMoney, formatStatus } from "@/utils/format";
-import { sellerOrdersApi, sellerShippingApi } from "../api";
+import { sellerOrdersApi } from "../api";
 
 const noteSchema = z.object({
   sellerNote: z.string().trim().max(1000, "Ghi chú quá dài").optional(),
 });
 
-const shipmentSchema = z.object({
-  shippingServiceId: z.string().min(1, "Vui lòng chọn dịch vụ vận chuyển"),
-  trackingNumber: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "Mã vận đơn không hợp lệ")
-    .or(z.literal(""))
-    .optional(),
-  pickupAddress: z
-    .string()
-    .trim()
-    .max(500, "Địa chỉ lấy hàng quá dài")
-    .optional(),
-  expectedDeliveryAt: z.string().optional(),
-  note: z.string().trim().max(1000, "Ghi chú quá dài").optional(),
-});
-
-const trackingSchema = z.object({
-  shipmentStatus: z.enum(["PickedUp", "InTransit", "Delivered"]),
-  trackingNumber: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/, "Mã vận đơn không hợp lệ")
-    .or(z.literal(""))
-    .optional(),
-  locationText: z
-    .string()
-    .trim()
-    .max(255, "Thông tin vị trí quá dài")
-    .optional(),
-  note: z.string().trim().max(1000, "Ghi chú quá dài").optional(),
-});
+const shipmentSchema = z
+  .object({
+    handoverMethod: z.enum(["Pickup", "Dropoff"]),
+    pickupStationId: z.string().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.handoverMethod === "Dropoff" && !value.pickupStationId) {
+      context.addIssue({
+        code: "custom",
+        path: ["pickupStationId"],
+        message: "Vui lòng chọn bưu cục GHN",
+      });
+    }
+  });
 
 type NoteFormValues = z.infer<typeof noteSchema>;
 type ShipmentFormValues = z.infer<typeof shipmentSchema>;
-type TrackingFormValues = z.infer<typeof trackingSchema>;
 
 const optionalString = (value: string | undefined) => {
   const trimmed = value?.trim() ?? "";
@@ -74,8 +60,6 @@ export function SellerOrderDetailPage() {
     null,
   );
   const [isShipmentOpen, setIsShipmentOpen] = useState(false);
-  const [trackingShipment, setTrackingShipment] =
-    useState<OrderShipment | null>(null);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
   const noteForm = useForm<NoteFormValues>({
@@ -85,33 +69,29 @@ export function SellerOrderDetailPage() {
   const shipmentForm = useForm<ShipmentFormValues>({
     resolver: zodResolver(shipmentSchema),
     defaultValues: {
-      shippingServiceId: "",
-      trackingNumber: "",
-      pickupAddress: "",
-      expectedDeliveryAt: "",
-      note: "",
+      handoverMethod: "Pickup",
+      pickupStationId: "",
     },
   });
-  const trackingForm = useForm<TrackingFormValues>({
-    resolver: zodResolver(trackingSchema),
-    defaultValues: {
-      shipmentStatus: "PickedUp",
-      trackingNumber: "",
-      locationText: "",
-      note: "",
-    },
-  });
+  const handoverMethod = shipmentForm.watch("handoverMethod");
 
   const orderQuery = useQuery({
     queryKey: ["seller", "orders", "detail", shopOrderId],
     queryFn: () => sellerOrdersApi.get(shopOrderId),
     enabled: Boolean(shopOrderId),
   });
-  const servicesQuery = useQuery({
-    queryKey: ["shipping", "services", orderQuery.data?.shop.id],
+  const stationQuery = useQuery({
+    queryKey: [
+      "seller",
+      "orders",
+      shopOrderId,
+      "handover-stations",
+      handoverMethod,
+    ],
     queryFn: () =>
-      sellerShippingApi.listActiveServices(orderQuery.data?.shop.id),
-    enabled: Boolean(orderQuery.data),
+      sellerOrdersApi.listHandoverStations(shopOrderId, handoverMethod),
+    enabled:
+      Boolean(shopOrderId) && isShipmentOpen && handoverMethod === "Dropoff",
   });
 
   const invalidate = async () => {
@@ -149,64 +129,49 @@ export function SellerOrderDetailPage() {
   const shipmentMutation = useMutation({
     mutationFn: (values: ShipmentFormValues) =>
       sellerOrdersApi.createShipment(shopOrderId, {
-        shippingServiceId: values.shippingServiceId,
-        trackingNumber: optionalString(values.trackingNumber),
-        pickupAddress: optionalString(values.pickupAddress),
-        expectedDeliveryAt: optionalString(values.expectedDeliveryAt),
-        note: optionalString(values.note),
+        handoverMethod: values.handoverMethod,
+        pickupStationId:
+          values.handoverMethod === "Dropoff"
+            ? Number(values.pickupStationId)
+            : undefined,
       }),
     onSuccess: async () => {
       await invalidate();
-      pushToast({ tone: "success", title: "Đã tạo vận đơn" });
+      pushToast({
+        tone: "success",
+        title: "GHN đã tiếp nhận vận đơn",
+        description: "Đơn hàng đã chuyển sang Chờ lấy hàng.",
+      });
       setIsShipmentOpen(false);
-      shipmentForm.reset();
-    },
-  });
-
-  const trackingMutation = useMutation({
-    mutationFn: (values: TrackingFormValues) =>
-      trackingShipment
-        ? sellerOrdersApi.updateShipmentTracking(
-            shopOrderId,
-            trackingShipment.id,
-            {
-              shipmentStatus: values.shipmentStatus,
-              trackingNumber: optionalString(values.trackingNumber),
-              locationText: optionalString(values.locationText),
-              note: optionalString(values.note),
-            },
-          )
-        : Promise.reject(new Error("Shipment is required")),
-    onSuccess: async () => {
-      await invalidate();
-      pushToast({ tone: "success", title: "Đã cập nhật hành trình" });
-      setTrackingShipment(null);
-      trackingForm.reset();
+      shipmentForm.reset({
+        handoverMethod: "Pickup",
+        pickupStationId: "",
+      });
     },
   });
 
   const syncMutation = useMutation({
     mutationFn: (shipmentId: string) =>
       sellerOrdersApi.syncShipment(shopOrderId, shipmentId),
-    onSuccess: async () => {
+    onSuccess: async (shipment) => {
       await invalidate();
-      pushToast({ tone: "success", title: "Đã đồng bộ trạng thái vận đơn" });
+      pushToast({
+        tone: "success",
+        title:
+          shipment.shipmentStatus === "Pending"
+            ? "GHN đã tiếp nhận vận đơn"
+            : "Đã đồng bộ trạng thái từ GHN",
+      });
     },
   });
 
-  useEffect(() => {
-    if (trackingShipment) {
-      trackingForm.reset({
-        shipmentStatus:
-          trackingShipment.shipmentStatus === "Pending"
-            ? "PickedUp"
-            : "InTransit",
-        trackingNumber: trackingShipment.trackingNumber ?? "",
-        locationText: "",
-        note: "",
-      });
-    }
-  }, [trackingForm, trackingShipment]);
+  const labelMutation = useMutation({
+    mutationFn: (shipmentId: string) =>
+      sellerOrdersApi.createShipmentLabel(shopOrderId, shipmentId),
+    onSuccess: ({ printUrl }) => {
+      window.open(printUrl, "_blank", "noopener,noreferrer");
+    },
+  });
 
   if (orderQuery.isLoading) {
     return (
@@ -227,10 +192,11 @@ export function SellerOrderDetailPage() {
   }
 
   const order = orderQuery.data;
-  const services = servicesQuery.data?.items ?? [];
+  const shippingSelection = order.shippingSelection;
   const canConfirm = order.orderStatus === "WaitingForSeller";
   const canPrepare = order.orderStatus === "Confirmed";
-  const canCreateShipment = order.orderStatus === "Prepared";
+  const canCreateShipment =
+    order.orderStatus === "Prepared" && Boolean(shippingSelection);
   const shipments = order.shipments ?? [];
 
   return (
@@ -267,7 +233,7 @@ export function SellerOrderDetailPage() {
             {canCreateShipment ? (
               <Button type="button" onClick={() => setIsShipmentOpen(true)}>
                 <Truck size={16} aria-hidden="true" />
-                Tạo vận đơn
+                Sắp xếp vận chuyển
               </Button>
             ) : null}
           </div>
@@ -300,83 +266,126 @@ export function SellerOrderDetailPage() {
 
           <article className="rounded-lg border border-border bg-white p-5 shadow-panel">
             <h2 className="text-lg font-semibold">Vận đơn</h2>
-            {syncMutation.isError ? (
+            {order.orderStatus === "Prepared" && !shippingSelection ? (
               <Alert tone="danger" className="mt-3">
-                {getErrorMessage(syncMutation.error)}
+                Đơn hàng chưa có lựa chọn vận chuyển của khách. Vui lòng liên hệ
+                bộ phận hỗ trợ trước khi tạo vận đơn.
+              </Alert>
+            ) : null}
+            {(syncMutation.isError || labelMutation.isError) ? (
+              <Alert tone="danger" className="mt-3">
+                {getErrorMessage(syncMutation.error ?? labelMutation.error)}
               </Alert>
             ) : null}
             <div className="mt-4 space-y-3">
               {shipments.length > 0 ? (
-                shipments.map((shipment) => (
-                  <div
-                    key={shipment.id}
-                    className="rounded-md border border-border bg-surface p-4 text-sm"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-medium text-ink">
-                          {shipment.shipmentCode}
-                        </p>
-                        <p className="mt-1 text-muted">
-                          {shipment.shippingCompany.provider} ·{" "}
-                          {shipment.shippingService.serviceName}
-                        </p>
-                        <p className="mt-1 text-muted">
-                          Mã vận đơn hãng:{" "}
-                          {shipment.carrierOrderCode ??
-                            shipment.trackingNumber ??
-                            "Chưa có mã vận đơn"}
-                        </p>
-                        {shipment.carrierStatus ? (
-                          <p className="mt-1 text-xs text-muted">
-                            Trạng thái từ hãng: {shipment.carrierStatus}
+                shipments.map((shipment) => {
+                  const isSyncFailed = shipment.shipmentStatus === "SyncFailed";
+                  const isSyncing =
+                    syncMutation.isPending &&
+                    syncMutation.variables === shipment.id;
+                  const isPrinting =
+                    labelMutation.isPending &&
+                    labelMutation.variables === shipment.id;
+
+                  return (
+                    <div
+                      key={shipment.id}
+                      className="rounded-md border border-border bg-surface p-4 text-sm"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-medium text-ink">
+                            {shipment.shipmentCode}
                           </p>
-                        ) : null}
+                          <p className="mt-1 text-muted">
+                            {shipment.shippingCompany.companyName} ·{" "}
+                            {shipment.shippingService.serviceName}
+                          </p>
+                          <p className="mt-1 text-muted">
+                            Mã GHN: {shipment.carrierOrderCode ?? "Chưa được cấp"}
+                          </p>
+                          <p className="mt-1 text-muted">
+                            Bàn giao: {shipment.handoverMethod === "Dropoff"
+                              ? "Gửi tại bưu cục"
+                              : "GHN đến lấy hàng"}
+                          </p>
+                          {shipment.pickupStation ? (
+                            <p className="mt-1 flex items-start gap-1.5 text-muted">
+                              <MapPin
+                                className="mt-0.5 shrink-0"
+                                size={14}
+                                aria-hidden="true"
+                              />
+                              <span>
+                                {shipment.pickupStation.name} ·{" "}
+                                {shipment.pickupStation.address}
+                              </span>
+                            </p>
+                          ) : null}
+                          {shipment.carrierStatus ? (
+                            <p className="mt-1 text-xs text-muted">
+                              GHN: {shipment.carrierStatus}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge>{formatStatus(shipment.shipmentStatus)}</Badge>
+                          {isSyncFailed ? (
+                            <Button
+                              type="button"
+                              disabled={isSyncing}
+                              onClick={() => syncMutation.mutate(shipment.id)}
+                            >
+                              <RefreshCw size={14} aria-hidden="true" />
+                              {isSyncing ? "Đang thử lại..." : "Thử đăng ký lại"}
+                            </Button>
+                          ) : shipment.carrierOrderCode &&
+                            shipment.shipmentStatus !== "Delivered" ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={isSyncing}
+                              onClick={() => syncMutation.mutate(shipment.id)}
+                            >
+                              <RefreshCw size={14} aria-hidden="true" />
+                              {isSyncing ? "Đang đồng bộ..." : "Đồng bộ từ GHN"}
+                            </Button>
+                          ) : null}
+                          {shipment.carrierOrderCode ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={isPrinting}
+                              onClick={() => labelMutation.mutate(shipment.id)}
+                            >
+                              <Printer size={14} aria-hidden="true" />
+                              {isPrinting ? "Đang tạo nhãn..." : "In nhãn A5"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge>{formatStatus(shipment.shipmentStatus)}</Badge>
-                        {shipment.shipmentStatus !== "Delivered" ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={
-                              syncMutation.isPending &&
-                              syncMutation.variables === shipment.id
-                            }
-                            onClick={() => syncMutation.mutate(shipment.id)}
-                          >
-                            <RefreshCw size={14} aria-hidden="true" />
-                            {syncMutation.isPending &&
-                            syncMutation.variables === shipment.id
-                              ? "Đang đồng bộ..."
-                              : "Đồng bộ trạng thái"}
-                          </Button>
-                        ) : null}
-                        {shipment.shipmentStatus !== "Delivered" ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => setTrackingShipment(shipment)}
-                          >
-                            Cập nhật hành trình
-                          </Button>
-                        ) : null}
-                      </div>
+                      {isSyncFailed ? (
+                        <Alert tone="danger" className="mt-3">
+                          GHN chưa tiếp nhận vận đơn. Đơn vẫn ở trạng thái Chờ
+                          sắp xếp; kiểm tra cấu hình giao hàng rồi thử đăng ký lại.
+                        </Alert>
+                      ) : null}
+                      {shipment.trackingHistories.length > 0 ? (
+                        <div className="mt-3 space-y-1 text-muted">
+                          {shipment.trackingHistories.map((history) => (
+                            <p key={history.id}>
+                              {formatStatus(history.toStatus)} -{" "}
+                              {formatDateTime(history.createdAt)}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    {shipment.trackingHistories.length > 0 ? (
-                      <div className="mt-3 space-y-1 text-muted">
-                        {shipment.trackingHistories.map((history) => (
-                          <p key={history.id}>
-                            {formatStatus(history.toStatus)} -{" "}
-                            {formatDateTime(history.createdAt)}
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))
+                  );
+                })
               ) : (
-                <p className="text-sm text-muted">Chưa tạo vận đơn.</p>
+                <p className="text-sm text-muted">Chưa sắp xếp vận chuyển.</p>
               )}
             </div>
           </article>
@@ -404,6 +413,21 @@ export function SellerOrderDetailPage() {
               </dd>
             </div>
           </dl>
+          {shippingSelection ? (
+            <div className="mt-5 rounded-md border border-border bg-surface p-3 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Vận chuyển khách đã chọn
+              </p>
+              <p className="mt-2 font-medium text-ink">
+                {shippingSelection.shippingCompany.companyName}
+              </p>
+              <p className="mt-1 text-muted">
+                {shippingSelection.shippingService.serviceName} · Dự kiến{" "}
+                {shippingSelection.estimatedMinDays}-
+                {shippingSelection.estimatedMaxDays} ngày
+              </p>
+            </div>
+          ) : null}
           <div className="mt-5 rounded-md border border-border bg-surface p-3 text-sm">
             <p className="font-medium text-ink">{order.receiverName}</p>
             <p className="mt-1 text-muted">{order.receiverPhone}</p>
@@ -468,7 +492,7 @@ export function SellerOrderDetailPage() {
 
       <Modal
         open={isShipmentOpen}
-        title="Tạo vận đơn"
+        title="Sắp xếp vận chuyển"
         onClose={() => setIsShipmentOpen(false)}
         footer={
           <>
@@ -482,16 +506,23 @@ export function SellerOrderDetailPage() {
             <Button
               type="submit"
               form="shipment-form"
-              disabled={shipmentMutation.isPending}
+              disabled={
+                shipmentMutation.isPending ||
+                (handoverMethod === "Dropoff" && stationQuery.isLoading)
+              }
             >
-              {shipmentMutation.isPending ? "Đang tạo..." : "Tạo vận đơn"}
+              {shipmentMutation.isPending
+                ? "Đang đăng ký với GHN..."
+                : "Xác nhận bàn giao"}
             </Button>
           </>
         }
       >
-        {shipmentMutation.isError || servicesQuery.isError ? (
+        {shipmentMutation.isError ? (
           <Alert tone="danger" className="mb-4">
-            {getErrorMessage(shipmentMutation.error ?? servicesQuery.error)}
+            <span className="font-medium">GHN chưa tiếp nhận vận đơn.</span>{" "}
+            {getErrorMessage(shipmentMutation.error)} Đơn hàng vẫn ở trạng thái
+            Chờ sắp xếp; bạn có thể thử lại trên vận đơn đã lưu.
           </Alert>
         ) : null}
         <form
@@ -501,104 +532,112 @@ export function SellerOrderDetailPage() {
             shipmentMutation.mutate(values),
           )}
         >
-          <SelectInput
-            label="Dịch vụ vận chuyển"
-            error={shipmentForm.formState.errors.shippingServiceId?.message}
-            {...shipmentForm.register("shippingServiceId")}
-          >
-            <option value="">Chọn dịch vụ</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.serviceName} - {service.estimatedMinDays}-
-                {service.estimatedMaxDays} ngày
-              </option>
-            ))}
-          </SelectInput>
-          <TextInput
-            label="Mã vận đơn"
-            error={shipmentForm.formState.errors.trackingNumber?.message}
-            {...shipmentForm.register("trackingNumber")}
-          />
-          <TextInput
-            label="Địa chỉ lấy hàng"
-            error={shipmentForm.formState.errors.pickupAddress?.message}
-            {...shipmentForm.register("pickupAddress")}
-          />
-          <TextInput
-            label="Ngày giao dự kiến"
-            type="date"
-            error={shipmentForm.formState.errors.expectedDeliveryAt?.message}
-            {...shipmentForm.register("expectedDeliveryAt")}
-          />
-          <Textarea
-            label="Ghi chú"
-            rows={3}
-            error={shipmentForm.formState.errors.note?.message}
-            {...shipmentForm.register("note")}
-          />
-        </form>
-      </Modal>
-
-      <Modal
-        open={Boolean(trackingShipment)}
-        title="Cập nhật hành trình"
-        onClose={() => setTrackingShipment(null)}
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setTrackingShipment(null)}
-            >
-              Hủy
-            </Button>
-            <Button
-              type="submit"
-              form="tracking-form"
-              disabled={trackingMutation.isPending}
-            >
-              {trackingMutation.isPending ? "Đang cập nhật..." : "Cập nhật"}
-            </Button>
-          </>
-        }
-      >
-        {trackingMutation.isError ? (
-          <Alert tone="danger" className="mb-4">
-            {getErrorMessage(trackingMutation.error)}
-          </Alert>
-        ) : null}
-        <form
-          id="tracking-form"
-          className="space-y-4"
-          onSubmit={trackingForm.handleSubmit((values) =>
-            trackingMutation.mutate(values),
+          {shippingSelection ? (
+            <div className="rounded-md border border-border bg-surface p-4">
+              <div className="flex items-start gap-3">
+                <Truck
+                  className="mt-0.5 shrink-0 text-primary-700"
+                  size={20}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 text-sm">
+                  <p className="font-medium text-ink">
+                    {shippingSelection.shippingCompany.companyName} ·{" "}
+                    {shippingSelection.shippingService.serviceName}
+                  </p>
+                  <p className="mt-1 text-muted">
+                    Dịch vụ đã được khách chọn khi thanh toán và không thể thay
+                    đổi. Phí vận chuyển {formatMoney(order.shippingFeeAmount)}, dự
+                    kiến {shippingSelection.estimatedMinDays}-
+                    {shippingSelection.estimatedMaxDays} ngày.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Alert tone="danger">
+              Không tìm thấy lựa chọn vận chuyển của khách. Chưa thể sắp xếp vận
+              chuyển.
+            </Alert>
           )}
-        >
-          <SelectInput
-            label="Trạng thái vận đơn"
-            error={trackingForm.formState.errors.shipmentStatus?.message}
-            {...trackingForm.register("shipmentStatus")}
-          >
-            <option value="PickedUp">Đã lấy hàng</option>
-            <option value="InTransit">Đang vận chuyển</option>
-            <option value="Delivered">Đã giao hàng</option>
-          </SelectInput>
-          <TextInput
-            label="Mã vận đơn"
-            error={trackingForm.formState.errors.trackingNumber?.message}
-            {...trackingForm.register("trackingNumber")}
-          />
-          <TextInput
-            label="Vị trí"
-            error={trackingForm.formState.errors.locationText?.message}
-            {...trackingForm.register("locationText")}
-          />
-          <Textarea
-            label="Ghi chú"
-            rows={3}
-            error={trackingForm.formState.errors.note?.message}
-            {...trackingForm.register("note")}
-          />
+
+          <fieldset>
+            <legend className="text-sm font-medium text-ink">
+              Cách bàn giao cho GHN
+            </legend>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-border bg-white p-3 text-sm focus-within:ring-2 focus-within:ring-primary-600">
+                <input
+                  type="radio"
+                  value="Pickup"
+                  {...shipmentForm.register("handoverMethod")}
+                />
+                <span>
+                  <span className="block font-medium text-ink">
+                    GHN đến lấy hàng
+                  </span>
+                  <span className="mt-1 block text-muted">
+                    Bàn giao tại địa chỉ kho của gian hàng.
+                  </span>
+                </span>
+              </label>
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-border bg-white p-3 text-sm focus-within:ring-2 focus-within:ring-primary-600">
+                <input
+                  type="radio"
+                  value="Dropoff"
+                  {...shipmentForm.register("handoverMethod")}
+                />
+                <span>
+                  <span className="block font-medium text-ink">
+                    Gửi tại bưu cục GHN
+                  </span>
+                  <span className="mt-1 block text-muted">
+                    Chọn một điểm gửi hàng khả dụng gần kho.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          {handoverMethod === "Dropoff" ? (
+            stationQuery.isLoading ? (
+              <div role="status" className="space-y-2">
+                <Skeleton className="h-11 w-full" />
+                <p className="text-sm text-muted">Đang tải bưu cục GHN...</p>
+              </div>
+            ) : stationQuery.isError ? (
+              <Alert tone="danger">
+                {getErrorMessage(stationQuery.error)}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={() => void stationQuery.refetch()}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  Tải lại bưu cục
+                </Button>
+              </Alert>
+            ) : stationQuery.data?.items.length ? (
+              <SelectInput
+                label="Bưu cục bàn giao"
+                error={shipmentForm.formState.errors.pickupStationId?.message}
+                {...shipmentForm.register("pickupStationId")}
+              >
+                <option value="">Chọn bưu cục GHN</option>
+                {stationQuery.data.items.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name} — {station.address}
+                  </option>
+                ))}
+              </SelectInput>
+            ) : (
+              <Alert tone="danger">
+                Chưa có bưu cục GHN khả dụng cho địa chỉ kho. Chọn “GHN đến lấy
+                hàng” hoặc kiểm tra lại địa chỉ gian hàng.
+              </Alert>
+            )
+          ) : null}
         </form>
       </Modal>
     </div>

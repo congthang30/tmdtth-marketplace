@@ -36,6 +36,12 @@ export const catalogApi = {
   getProduct(slug: string) {
     return apiGet<ProductListItem>(`/products/${slug}`);
   },
+  checkVariant(slug: string, attributes: Record<string, string>) {
+    return apiGet<ProductListItem['variants'][number] | null>(
+      `/products/${slug}/check-variant`,
+      { params: { attributes: JSON.stringify(attributes) } },
+    );
+  },
   async listReviews(slug: string, page = 1, limit = 5) {
     const response = await apiGetResponse<PublicProductReview[]>(
       `/products/${slug}/reviews`,

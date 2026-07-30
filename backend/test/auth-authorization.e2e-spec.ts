@@ -33,6 +33,7 @@ import { AdminShopsController } from '../src/modules/shops/admin-shops.controlle
 import { ShopsController } from '../src/modules/shops/shops.controller';
 import { ShopsService } from '../src/modules/shops/shops.service';
 import { SellerVerificationController } from '../src/modules/seller-verification/seller-verification.controller';
+import { SellerVerificationEmailService } from '../src/modules/seller-verification/seller-verification-email.service';
 import { SellerVerificationService } from '../src/modules/seller-verification/seller-verification.service';
 import { AdminSellerVerificationController } from '../src/modules/seller-verification/admin-seller-verification.controller';
 import { AdminSellerVerificationService } from '../src/modules/seller-verification/admin-seller-verification.service';
@@ -123,7 +124,6 @@ const protectedRoutes: SecuredRoute[] = [
   ['order create', 'post', '/api/orders'],
   ['order cancel', 'patch', '/api/orders/1/cancel'],
   ['payment method list', 'get', '/api/payments/methods'],
-  ['fake payment success', 'post', '/api/payments/1/fake-success'],
   ['shop registration', 'post', '/api/shops'],
   ['admin shop approve', 'patch', '/api/admin/shops/1/approve'],
   ['admin shop reject', 'patch', '/api/admin/shops/1/reject'],
@@ -137,11 +137,6 @@ const protectedRoutes: SecuredRoute[] = [
     'admin seller document access',
     'get',
     '/api/admin/seller-verifications/1/documents/2/access',
-  ],
-  [
-    'admin seller verification start',
-    'patch',
-    '/api/admin/seller-verifications/1/start-review',
   ],
   [
     'admin seller verification revision',
@@ -166,10 +161,12 @@ const protectedRoutes: SecuredRoute[] = [
   ['shipping quote create', 'post', '/api/shipping/quotes'],
   ['seller shipment create', 'post', '/api/seller/orders/1/shipments'],
   [
-    'seller shipment tracking',
-    'patch',
-    '/api/seller/orders/1/shipments/2/tracking',
+    'seller shipment handover station list',
+    'get',
+    '/api/seller/orders/1/shipments/handover-stations',
   ],
+  ['seller shipment sync', 'post', '/api/seller/orders/1/shipments/2/sync'],
+  ['seller shipment label', 'post', '/api/seller/orders/1/shipments/2/label'],
   ['product review create', 'post', '/api/reviews/products'],
   ['upload create', 'post', '/api/uploads'],
   ['upload list', 'get', '/api/uploads'],
@@ -185,7 +182,6 @@ const ownerScopedVerificationRoutes: SecuredRoute[] = [
   ['seller verification detail', 'get', '/api/shops/verification/me'],
   ['seller verification create', 'post', '/api/shops/verification'],
   ['seller verification update', 'patch', '/api/shops/verification/me'],
-  ['seller payout update', 'put', '/api/shops/payout-account/me'],
   ['seller verification submit', 'post', '/api/shops/verification/me/submit'],
   ['seller document upload', 'post', '/api/shops/verification/me/documents'],
   [
@@ -299,6 +295,7 @@ describe('Authentication and role authorization (e2e)', () => {
         { provide: PaymentsService, useValue: {} },
         { provide: ShopsService, useValue: {} },
         { provide: SellerVerificationService, useValue: {} },
+        { provide: SellerVerificationEmailService, useValue: {} },
         { provide: AdminSellerVerificationService, useValue: {} },
         {
           provide: ShippingService,

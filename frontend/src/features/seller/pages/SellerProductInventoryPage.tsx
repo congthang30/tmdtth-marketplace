@@ -34,15 +34,21 @@ const bucketLabels: Record<InventoryAffectedBucket, string> = {
 };
 
 function InventoryHistory({ productId, variantId }: { productId: string; variantId: string }) {
+  const [isOpen, setIsOpen] = useState(false);
   const [page, setPage] = useState(1);
   const query = useQuery({
     queryKey: ["seller", "products", productId, "inventory", variantId, "transactions", page],
     queryFn: () => sellerProductsApi.listInventoryTransactions(productId, variantId, page, 10),
+    enabled: isOpen,
   });
   const items = query.data?.items ?? [];
 
   return (
-    <details className="mt-5 rounded-md border border-border bg-white">
+    <details
+      className="mt-5 rounded-md border border-border bg-white"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600">
         <span>Lịch sử tồn kho</span>
         <span className="text-sm font-normal text-muted">Xem biến động</span>

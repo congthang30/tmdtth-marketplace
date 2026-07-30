@@ -57,17 +57,20 @@ type ModalProps = {
   children: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
+  closeDisabled?: boolean;
 };
 
-export function Modal({ open, title, children, onClose, footer }: ModalProps) {
+export function Modal({ open, title, children, onClose, footer, closeDisabled = false }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+    onCloseRef.current = () => {
+      if (!closeDisabled) onClose();
+    };
+  }, [closeDisabled, onClose]);
 
   useEffect(() => {
     if (!open) {
@@ -163,8 +166,9 @@ export function Modal({ open, title, children, onClose, footer }: ModalProps) {
             ref={closeButtonRef}
             type="button"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md text-muted hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+            disabled={closeDisabled}
             aria-label="Đóng hộp thoại"
-            onClick={onClose}
+            onClick={onCloseRef.current}
           >
             <X size={18} aria-hidden="true" />
           </button>
@@ -173,7 +177,7 @@ export function Modal({ open, title, children, onClose, footer }: ModalProps) {
           {children}
         </div>
         {footer ? (
-          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border px-4 py-3 sm:px-5 sm:py-4">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border px-4 py-3 [&>*]:w-full sm:flex-row sm:flex-wrap sm:justify-end sm:px-5 sm:py-4 sm:[&>*]:w-auto">
             {footer}
           </div>
         ) : null}

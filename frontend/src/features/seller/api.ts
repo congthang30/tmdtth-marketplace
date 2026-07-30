@@ -23,13 +23,15 @@ import type {
   SellerShopOrder,
   SellerVariant,
   SellerNoteRequest,
+  HandoverStationListResponse,
+  ShipmentLabelResponse,
   ShipmentRequest,
-  ShipmentTrackingRequest,
   ShippingServiceListResponse,
   Shop,
   ShopRequest,
   UploadListResponse,
   UploadedFile,
+  VariantBatchCreateRequest,
   VariantCreateRequest,
   VariantUpdateRequest,
 } from './types';
@@ -76,6 +78,9 @@ export const sellerProductsApi = {
       meta: response.meta,
     };
   },
+  get(productId: string) {
+    return apiGet<SellerProduct>(`/seller/products/${productId}`);
+  },
   create(body: ProductRequest) {
     return apiPost<SellerProduct, ProductRequest>('/seller/products', body);
   },
@@ -88,12 +93,27 @@ export const sellerProductsApi = {
   delete(productId: string) {
     return apiDelete<SellerProduct>(`/seller/products/${productId}`);
   },
+  submit(productId: string) {
+    return apiPost<SellerProduct>(`/seller/products/${productId}/submit`);
+  },
+  stopSelling(productId: string) {
+    return apiPost<SellerProduct>(`/seller/products/${productId}/stop-selling`);
+  },
+  resumeSelling(productId: string) {
+    return apiPost<SellerProduct>(`/seller/products/${productId}/resume-selling`);
+  },
   listVariants(productId: string) {
     return apiGet<SellerVariant[]>(`/seller/products/${productId}/variants`);
   },
   createVariant(productId: string, body: VariantCreateRequest) {
     return apiPost<SellerVariant, VariantCreateRequest>(
       `/seller/products/${productId}/variants`,
+      body,
+    );
+  },
+  createVariantsBatch(productId: string, body: VariantBatchCreateRequest) {
+    return apiPost<SellerVariant[], VariantBatchCreateRequest>(
+      `/seller/products/${productId}/variants/batch`,
       body,
     );
   },
@@ -191,30 +211,26 @@ export const sellerOrdersApi = {
       body,
     );
   },
+  listHandoverStations(shopOrderId: string, handoverMethod: 'Pickup' | 'Dropoff') {
+    return apiGet<HandoverStationListResponse>(
+      `/seller/orders/${shopOrderId}/shipments/handover-stations`,
+      { params: { handoverMethod } },
+    );
+  },
   createShipment(shopOrderId: string, body: ShipmentRequest) {
     return apiPost<OrderShipment, ShipmentRequest>(
       `/seller/orders/${shopOrderId}/shipments`,
       body,
     );
   },
-  updateShipmentTracking(
-    shopOrderId: string,
-    shipmentId: string,
-    body: ShipmentTrackingRequest,
-  ) {
-    return apiPatch<OrderShipment, ShipmentTrackingRequest>(
-      `/seller/orders/${shopOrderId}/shipments/${shipmentId}/tracking`,
-      body,
-    );
-  },
-  /**
-   * Retries registering the shipment with its carrier (GHN) when the
-   * initial order-creation call failed, or refreshes the cached
-   * carrierStatus/shipmentStatus by polling the carrier API.
-   */
   syncShipment(shopOrderId: string, shipmentId: string) {
     return apiPost<OrderShipment>(
       `/seller/orders/${shopOrderId}/shipments/${shipmentId}/sync`,
+    );
+  },
+  createShipmentLabel(shopOrderId: string, shipmentId: string) {
+    return apiPost<ShipmentLabelResponse>(
+      `/seller/orders/${shopOrderId}/shipments/${shipmentId}/label`,
     );
   },
 };

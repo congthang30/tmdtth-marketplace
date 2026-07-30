@@ -42,6 +42,34 @@ type GhnOrderDetailResponse = {
   };
 };
 
+type GhnStationResponse = {
+  code: number;
+  message: string;
+  data?: Array<{
+    locationId: number;
+    locationName: string;
+    address: string;
+    wardName?: string;
+    districtName?: string;
+    provinceName?: string;
+  }>;
+};
+
+type GhnPrintTokenResponse = {
+  code: number;
+  message: string;
+  data?: { token?: string };
+};
+
+export type GhnStation = {
+  id: number;
+  name: string;
+  address: string;
+  wardName: string | null;
+  districtName: string | null;
+  provinceName: string | null;
+};
+
 const GHN_DEFAULT_ITEM_DIMENSIONS_CM = 20;
 
 /**
@@ -64,7 +92,7 @@ const GHN_STATUS_MAP: Record<string, CarrierTrackingStatus> = {
   delivery_fail: 'Failed',
   waiting_to_return: 'Failed',
   return: 'Failed',
-  returned: 'Failed',
+  returned: 'Returned',
   cancel: 'Cancelled',
   exception: 'Failed',
   damage: 'Failed',
@@ -248,6 +276,7 @@ export class GhnClient implements CarrierClient {
         height: GHN_DEFAULT_ITEM_DIMENSIONS_CM,
         cod_amount: Math.round(input.codAmount),
         content: input.note ?? undefined,
+        pick_station_id: input.pickupStationId,
       },
     );
 
@@ -267,6 +296,66 @@ export class GhnClient implements CarrierClient {
         : null,
       raw: response,
     };
+  }
+
+  async getStations(
+    provinceName: string,
+    wardName: string,
+  ): Promise<GhnStation[]> {
+    const address = await this.addressResolver.resolve(provinceName, wardName);
+    if (!address) {
+      throw new CarrierApiError(
+        'GHN',
+        'Không thể xác định địa chỉ kho theo dữ liệu GHN.',
+      );
+    }
+
+    const response = await this.request<GhnStationResponse>(
+      '/v2/station/get',
+      'POST',
+      {
+        district_id: address.districtId,
+        ward_code: address.wardCode,
+        offset: 0,
+        limit: 1000,
+      },
+    );
+
+    return (response.data ?? [])
+      .filter(
+        (station) =>
+          Number.isSafeInteger(station.locationId) &&
+          station.locationId > 0 &&
+          station.locationName?.trim() &&
+          station.address?.trim(),
+      )
+      .map((station) => ({
+        id: station.locationId,
+        name: station.locationName.trim(),
+        address: station.address.trim(),
+        wardName: station.wardName?.trim() || null,
+        districtName: station.districtName?.trim() || null,
+        provinceName: station.provinceName?.trim() || null,
+      }));
+  }
+
+  async getA5PrintUrl(carrierOrderCode: string): Promise<string> {
+    const response = await this.request<GhnPrintTokenResponse>(
+      '/v2/a5/gen-token',
+      'POST',
+      { order_codes: [carrierOrderCode] },
+    );
+    const token = response.data?.token?.trim();
+    if (!token) {
+      throw new CarrierApiError(
+        'GHN',
+        'GHN không trả về token in nhãn hợp lệ.',
+        response,
+      );
+    }
+
+    const apiUrl = new URL(getGhnConfig().baseUrl);
+    return `${apiUrl.origin}/a5/public-api/printA5?token=${encodeURIComponent(token)}`;
   }
 
   async getOrderStatus(

@@ -17,6 +17,7 @@ import { AdjustDamagedInventoryDto } from './dto/adjust-damaged-inventory.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
+import { CreateProductVariantsBatchDto } from './dto/create-product-variants-batch.dto';
 import { ProductListQueryDto } from './dto/product-list-query.dto';
 import { ReceiveProductInventoryDto } from './dto/set-product-inventory.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -47,9 +48,11 @@ type VariantResponseSource = {
   id: bigint;
   sku: string;
   variantName: string;
+  attributes: Prisma.JsonValue;
   price: { toString(): string };
   compareAtPrice: { toString(): string } | null;
   inventoryRecords: Array<{ quantityAvailable: number }>;
+  images?: ProductImageEntity[];
 };
 
 const PUBLIC_PRODUCT_STATUS = 'Published';
@@ -143,6 +146,37 @@ export class ProductsService {
     return this.toListItem(product);
   }
 
+  async checkPublicProductVariant(slug: string, attributesJson: string) {
+    const product = await this.findPublicProductBySlug(slug);
+    if (!product) {
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Không tìm thấy sản phẩm',
+        details: [],
+      });
+    }
+    let parsedAttributes: unknown;
+    try {
+      parsedAttributes = JSON.parse(attributesJson);
+    } catch {
+      throw new BadRequestException({
+        code: 'INVALID_VARIANT_ATTRIBUTES',
+        message: 'Thuộc tính phân loại không hợp lệ',
+        details: [{ field: 'attributes' }],
+      });
+    }
+    const attributes = this.normalizeVariantAttributes(
+      parsedAttributes as Record<string, string>,
+    );
+    const variant = product.variants.find((candidate) =>
+      this.variantAttributesEqual(
+        this.readVariantAttributes(candidate),
+        attributes,
+      ),
+    );
+    return variant ? this.toVariantResponse(variant) : null;
+  }
+
   async listSellerProducts(user: AuthenticatedUser, query: PaginationQueryDto) {
     const { page, limit, skip, take } = getPaginationParams(query);
     const where = {
@@ -194,6 +228,40 @@ export class ProductsService {
       limit,
       total,
     });
+  }
+
+  async getSellerProduct(
+    user: AuthenticatedUser,
+    productId: string,
+  ): Promise<SellerProductListItemResponse> {
+    const id = this.parseId(productId, 'productId');
+    await this.requireSellerProduct(user, id);
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        shop: { select: { id: true, shopName: true, slug: true } },
+        category: {
+          select: { id: true, categoryName: true, slug: true },
+        },
+        images: {
+          orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+        },
+        variants: {
+          orderBy: [{ price: 'asc' }],
+          include: { inventoryRecords: true },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Không tìm thấy sản phẩm',
+        details: [{ field: 'productId' }],
+      });
+    }
+
+    return this.toSellerListItem(product);
   }
 
   async listAdminProducts(query: PaginationQueryDto & { status?: string }) {
@@ -357,56 +425,69 @@ export class ProductsService {
       });
     }
 
+    const shopCategoryIds = this.parseUniqueIds(
+      dto.shopCategoryIds ?? [],
+      'shopCategoryIds',
+    );
+    await this.requireShopCategories(shopId, shopCategoryIds);
+
     const now = new Date();
-    const product = await this.prisma.product.create({
-      data: {
-        shopId,
-        categoryId,
-        productName: dto.productName,
-        slug,
-        description: this.normalizeNullableText(dto.description),
-        brand: this.normalizeNullableText(dto.brand),
-        basePrice,
-        compareAtPrice,
-        warrantyMonths: dto.warrantyMonths ?? 0,
-        weightGram: dto.weightGram ?? 0,
-        productStatus:
-          dto.productStatus === 'Published'
-            ? 'PendingApproval'
-            : DEFAULT_PRODUCT_STATUS,
-        isViolation: false,
-        isDeleted: false,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
-        createdAt: now,
-        updatedAt: now,
-      },
-      include: {
-        shop: {
-          select: {
-            id: true,
-            shopName: true,
-            slug: true,
+    const product = await this.prisma.$transaction((tx) =>
+      tx.product.create({
+        data: {
+          shopId,
+          categoryId,
+          productName: dto.productName,
+          slug,
+          description: this.normalizeNullableText(dto.description),
+          brand: this.normalizeNullableText(dto.brand),
+          basePrice,
+          compareAtPrice,
+          warrantyMonths: dto.warrantyMonths ?? 0,
+          productStatus: DEFAULT_PRODUCT_STATUS,
+          isViolation: false,
+          isDeleted: false,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+          createdAt: now,
+          updatedAt: now,
+          ...(shopCategoryIds.length > 0
+            ? {
+                shopCategoryProducts: {
+                  create: shopCategoryIds.map((shopCategoryId) => ({
+                    shopCategoryId,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: {
+          shop: {
+            select: {
+              id: true,
+              shopName: true,
+              slug: true,
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              categoryName: true,
+              slug: true,
+            },
+          },
+          images: {
+            orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+          },
+          variants: {
+            orderBy: [{ price: 'asc' }],
+            include: {
+              inventoryRecords: true,
+            },
           },
         },
-        category: {
-          select: {
-            id: true,
-            categoryName: true,
-            slug: true,
-          },
-        },
-        images: {
-          orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
-        },
-        variants: {
-          orderBy: [{ price: 'asc' }],
-          include: {
-            inventoryRecords: true,
-          },
-        },
-      },
-    });
+      }),
+    );
 
     return this.toSellerListItem(product);
   }
@@ -418,9 +499,48 @@ export class ProductsService {
   ): Promise<SellerProductListItemResponse> {
     const id = this.parseId(productId, 'productId');
     const product = await this.requireSellerProduct(user, id);
+    if (product.productStatus === 'PendingApproval') {
+      throw new BadRequestException({
+        code: 'PRODUCT_PENDING_LOCKED',
+        message: 'Sản phẩm đang chờ duyệt và chưa thể chỉnh sửa',
+        details: [],
+      });
+    }
+    const requestedCategoryId =
+      dto.categoryId === undefined
+        ? undefined
+        : this.parseId(dto.categoryId, 'categoryId');
+    const moderatedFieldChanged =
+      (requestedCategoryId !== undefined &&
+        requestedCategoryId !== product.categoryId) ||
+      (dto.productName !== undefined &&
+        dto.productName !== product.productName) ||
+      (dto.description !== undefined &&
+        this.normalizeNullableText(dto.description) !== product.description) ||
+      (dto.brand !== undefined &&
+        this.normalizeNullableText(dto.brand) !== product.brand) ||
+      (dto.warrantyMonths !== undefined &&
+        dto.warrantyMonths !== product.warrantyMonths);
+    const shopCategoryIds =
+      dto.shopCategoryIds === undefined
+        ? undefined
+        : this.parseUniqueIds(dto.shopCategoryIds, 'shopCategoryIds');
+    if (shopCategoryIds !== undefined) {
+      await this.requireShopCategories(product.shopId, shopCategoryIds);
+    }
     const data: Prisma.ProductUpdateInput = {
       updatedByUser: { connect: { id: user.id } },
       updatedAt: new Date(),
+      ...(shopCategoryIds === undefined
+        ? {}
+        : {
+            shopCategoryProducts: {
+              deleteMany: {},
+              create: shopCategoryIds.map((shopCategoryId) => ({
+                shopCategoryId,
+              })),
+            },
+          }),
     };
 
     if (dto.categoryId !== undefined) {
@@ -523,51 +643,191 @@ export class ProductsService {
       data.warrantyMonths = dto.warrantyMonths;
     }
 
-    if (dto.weightGram !== undefined) {
-      data.weightGram = dto.weightGram;
-    }
-
-    if (dto.productStatus !== undefined) {
-      data.productStatus =
-        dto.productStatus === 'Published' ? 'PendingApproval' : 'Draft';
-    } else if (
-      product.productStatus === 'Published' ||
-      product.productStatus === 'Rejected'
+    if (
+      moderatedFieldChanged &&
+      (product.productStatus === 'Published' ||
+        product.productStatus === 'Inactive')
     ) {
       data.productStatus = 'PendingApproval';
     }
 
-    const updatedProduct = await this.prisma.product.update({
-      where: { id },
-      data,
-      include: {
-        shop: {
-          select: {
-            id: true,
-            shopName: true,
-            slug: true,
+    const updatedProduct = await this.prisma.$transaction((tx) =>
+      tx.product.update({
+        where: { id },
+        data,
+        include: {
+          shop: {
+            select: {
+              id: true,
+              shopName: true,
+              slug: true,
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              categoryName: true,
+              slug: true,
+            },
+          },
+          images: {
+            orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+          },
+          variants: {
+            orderBy: [{ price: 'asc' }],
+            include: {
+              inventoryRecords: true,
+            },
           },
         },
-        category: {
-          select: {
-            id: true,
-            categoryName: true,
-            slug: true,
-          },
-        },
-        images: {
-          orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
-        },
-        variants: {
-          orderBy: [{ price: 'asc' }],
-          include: {
-            inventoryRecords: true,
-          },
-        },
-      },
-    });
+      }),
+    );
 
     return this.toSellerListItem(updatedProduct);
+  }
+
+  async submitSellerProduct(
+    user: AuthenticatedUser,
+    productId: string,
+  ): Promise<SellerProductListItemResponse> {
+    const id = this.parseId(productId, 'productId');
+    await this.requireSellerProduct(user, id);
+
+    await this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.findFirst({
+        where: {
+          id,
+          isDeleted: false,
+          productStatus: { in: ['Draft', 'Rejected'] },
+          shop: { ownerUserId: user.id, isDeleted: false },
+        },
+        include: {
+          category: { select: { isActive: true } },
+          variants: {
+            where: { variantStatus: 'Active' },
+            select: { id: true, price: true, weightGram: true },
+          },
+          images: {
+            select: { id: true, isThumbnail: true },
+            orderBy: [
+              { sortOrder: 'asc' },
+              { createdAt: 'asc' },
+              { id: 'asc' },
+            ],
+          },
+        },
+      });
+      if (!product) {
+        throw new BadRequestException({
+          code: 'INVALID_PRODUCT_STATUS_TRANSITION',
+          message: 'Chỉ sản phẩm nháp hoặc bị từ chối mới có thể gửi phê duyệt',
+          details: [],
+        });
+      }
+
+      const missing: string[] = [];
+      if (!product.productName.trim()) missing.push('Tên sản phẩm');
+      if (!product.description?.trim()) missing.push('Mô tả sản phẩm');
+      if (!this.toDecimal(product.basePrice).gt(0))
+        missing.push('Giá sản phẩm');
+      if (!product.category.isActive) missing.push('Danh mục đang hoạt động');
+      if (product.variants.length === 0)
+        missing.push('Ít nhất một phân loại đang hoạt động');
+      if (
+        product.variants.some((variant) => !this.toDecimal(variant.price).gt(0))
+      )
+        missing.push('Giá của mọi phân loại đang hoạt động');
+      if (product.variants.some((variant) => variant.weightGram <= 0))
+        missing.push('Khối lượng của mọi phân loại đang hoạt động');
+      if (product.images.length === 0) missing.push('Ít nhất một hình ảnh');
+      if (product.images.filter((image) => image.isThumbnail).length > 1)
+        missing.push('Chỉ một ảnh đại diện');
+
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          code: 'PRODUCT_NOT_READY_FOR_REVIEW',
+          message: `Sản phẩm chưa đủ điều kiện gửi phê duyệt: ${missing.join(', ')}`,
+          details: missing.map((label) => ({ label })),
+        });
+      }
+
+      if (!product.images.some((image) => image.isThumbnail)) {
+        await tx.productImage.update({
+          where: { id: product.images[0].id },
+          data: { isThumbnail: true },
+        });
+      }
+      const updated = await tx.product.updateMany({
+        where: { id, productStatus: product.productStatus, isDeleted: false },
+        data: {
+          productStatus: 'PendingApproval',
+          updatedByUserId: user.id,
+          updatedAt: new Date(),
+        },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException({
+          code: 'PRODUCT_STATUS_CHANGED',
+          message: 'Trạng thái sản phẩm vừa thay đổi. Vui lòng tải lại trang.',
+          details: [],
+        });
+      }
+    });
+
+    return this.getSellerProduct(user, productId);
+  }
+
+  async stopSellingProduct(user: AuthenticatedUser, productId: string) {
+    return this.transitionSellerProduct(
+      user,
+      productId,
+      ['Published'],
+      'Inactive',
+    );
+  }
+
+  async resumeSellingProduct(user: AuthenticatedUser, productId: string) {
+    return this.transitionSellerProduct(
+      user,
+      productId,
+      ['Inactive'],
+      'Published',
+    );
+  }
+
+  private async transitionSellerProduct(
+    user: AuthenticatedUser,
+    productId: string,
+    allowedStatuses: string[],
+    nextStatus: string,
+  ): Promise<SellerProductListItemResponse> {
+    const id = this.parseId(productId, 'productId');
+    const product = await this.requireSellerProduct(user, id);
+    if (!allowedStatuses.includes(product.productStatus)) {
+      throw new BadRequestException({
+        code: 'INVALID_PRODUCT_STATUS_TRANSITION',
+        message: 'Không thể chuyển sản phẩm từ trạng thái hiện tại',
+        details: [{ field: 'productStatus', current: product.productStatus }],
+      });
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: { id, productStatus: product.productStatus, isDeleted: false },
+      data: {
+        productStatus: nextStatus,
+        updatedByUserId: user.id,
+        updatedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) {
+      throw new ConflictException({
+        code: 'PRODUCT_STATUS_CHANGED',
+        message: 'Trạng thái sản phẩm vừa thay đổi. Vui lòng tải lại trang.',
+        details: [],
+      });
+    }
+
+    return this.getSellerProduct(user, productId);
   }
 
   async deleteSellerProduct(
@@ -641,7 +901,6 @@ export class ProductsService {
   ): Promise<SellerProductVariantResponse> {
     const parsedProductId = this.parseId(productId, 'productId');
     const product = await this.requireSellerProduct(user, parsedProductId);
-    const sku = await this.generateVariantSku(parsedProductId, product.slug);
     const price = this.parsePositiveMoney(dto.price, 'price');
     const compareAtPrice = this.parseOptionalCompareAtPrice(
       dto.compareAtPrice,
@@ -649,15 +908,42 @@ export class ProductsService {
     );
     const now = new Date();
 
+    const attributes = this.normalizeVariantAttributes(dto.attributes);
+    const variantName = Object.values(attributes).join(' / ');
+
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${parsedProductId})`;
+      const sku = await this.generateVariantSku(
+        parsedProductId,
+        product.slug,
+        tx,
+      );
+      const existingVariants = await tx.productVariant.findMany({
+        where: { productId: parsedProductId },
+        select: { attributes: true },
+      });
+      const existingAttributes = existingVariants.map((variant) =>
+        this.readVariantAttributes(variant),
+      );
+      this.assertVariantAttributeSchema(attributes, existingAttributes);
+      if (
+        existingAttributes.some((candidate) =>
+          this.variantAttributesEqual(candidate, attributes),
+        )
+      ) {
+        throw new ConflictException({
+          code: 'DUPLICATE_VARIANT_ATTRIBUTES',
+          message: 'Tổ hợp phân loại này đã tồn tại',
+          details: [{ field: 'attributes' }],
+        });
+      }
+
       const variant = await tx.productVariant.create({
         data: {
           productId: parsedProductId,
           sku,
-          variantName: dto.variantName,
-          variantOptionJson: this.normalizeVariantOptionJson(
-            dto.variantOptionJson,
-          ),
+          variantName,
+          attributes,
           price,
           compareAtPrice,
           weightGram: dto.weightGram ?? 0,
@@ -704,6 +990,147 @@ export class ProductsService {
     });
   }
 
+  async createSellerProductVariantsBatch(
+    user: AuthenticatedUser,
+    productId: string,
+    dto: CreateProductVariantsBatchDto,
+  ): Promise<SellerProductVariantResponse[]> {
+    const parsedProductId = this.parseId(productId, 'productId');
+    const product = await this.requireSellerProduct(user, parsedProductId);
+    const inputs = dto.variants.map((variant) => {
+      const price = this.parsePositiveMoney(variant.price, 'price');
+      return {
+        attributes: this.normalizeVariantAttributes(variant.attributes),
+        price,
+        compareAtPrice: this.parseOptionalCompareAtPrice(
+          variant.compareAtPrice,
+          price,
+        ),
+        weightGram: variant.weightGram ?? 0,
+        quantityOnHand: variant.quantityOnHand,
+        variantStatus: variant.variantStatus ?? PUBLIC_VARIANT_STATUS,
+      };
+    });
+    const canonicalAttributes = inputs.map((input) =>
+      JSON.stringify(
+        Object.entries(input.attributes).sort(([left], [right]) =>
+          left.localeCompare(right, 'vi'),
+        ),
+      ),
+    );
+    if (new Set(canonicalAttributes).size !== canonicalAttributes.length) {
+      throw new BadRequestException({
+        code: 'DUPLICATE_VARIANT_ATTRIBUTES',
+        message: 'Danh sách có tổ hợp phân loại bị trùng',
+        details: [{ field: 'variants' }],
+      });
+    }
+    this.assertVariantAttributeSchema(
+      inputs[0].attributes,
+      inputs.slice(1).map((input) => input.attributes),
+    );
+
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${parsedProductId})`;
+      const skus: string[] = [];
+      const generatedSkus = new Set<string>();
+      while (skus.length < inputs.length) {
+        const sku = await this.generateVariantSku(
+          parsedProductId,
+          product.slug,
+          tx,
+        );
+        if (!generatedSkus.has(sku)) {
+          generatedSkus.add(sku);
+          skus.push(sku);
+        }
+      }
+      const existingVariants = await tx.productVariant.findMany({
+        where: { productId: parsedProductId },
+        select: { attributes: true },
+      });
+      const existingAttributes = existingVariants.map((variant) =>
+        this.readVariantAttributes(variant),
+      );
+      this.assertVariantAttributeSchema(
+        inputs[0].attributes,
+        existingAttributes,
+      );
+      const hasDuplicate = inputs.some(({ attributes }) =>
+        existingAttributes.some((candidate) =>
+          this.variantAttributesEqual(candidate, attributes),
+        ),
+      );
+      if (hasDuplicate) {
+        throw new ConflictException({
+          code: 'DUPLICATE_VARIANT_ATTRIBUTES',
+          message: 'Một hoặc nhiều tổ hợp phân loại đã tồn tại',
+          details: [{ field: 'variants' }],
+        });
+      }
+
+      const createdVariants: SellerProductVariantResponse[] = [];
+      for (const [index, input] of inputs.entries()) {
+        const variant = await tx.productVariant.create({
+          data: {
+            productId: parsedProductId,
+            sku: skus[index],
+            variantName: Object.values(input.attributes).join(' / '),
+            attributes: input.attributes,
+            price: input.price,
+            compareAtPrice: input.compareAtPrice,
+            weightGram: input.weightGram,
+            variantStatus: input.variantStatus,
+            createdAt: now,
+            updatedAt: now,
+          },
+          include: { inventoryRecords: true },
+        });
+        const inventory = await tx.productInventory.create({
+          data: {
+            productId: parsedProductId,
+            productVariantId: variant.id,
+            quantityOnHand: input.quantityOnHand,
+            quantityReserved: 0,
+            quantityAvailable: input.quantityOnHand,
+            quantityDamaged: 0,
+            quantityIncoming: 0,
+            lowStockThreshold: 5,
+            updatedAt: now,
+          },
+        });
+
+        if (input.quantityOnHand > 0) {
+          await tx.inventoryTransaction.create({
+            data: {
+              productInventoryId: inventory.id,
+              transactionType: INVENTORY_TRANSACTION_SELLER_SET_STOCK,
+              quantityChange: input.quantityOnHand,
+              quantityAfter: input.quantityOnHand,
+              referenceType: INVENTORY_REFERENCE_TYPE_PRODUCT_VARIANT,
+              referenceId: variant.id,
+              note: 'Seller set initial inventory quantity',
+              createdByUserId: user.id,
+              createdAt: now,
+            },
+          });
+        }
+
+        createdVariants.push(
+          this.toSellerVariantResponse({
+            ...variant,
+            inventoryRecords: [
+              { quantityAvailable: inventory.quantityAvailable },
+            ],
+          }),
+        );
+      }
+      return createdVariants;
+    });
+  }
+
   async updateSellerProductVariant(
     user: AuthenticatedUser,
     productId: string,
@@ -721,14 +1148,13 @@ export class ProductsService {
       updatedAt: new Date(),
     };
 
-    if (dto.variantName !== undefined) {
-      data.variantName = dto.variantName;
-    }
-
-    if (dto.variantOptionJson !== undefined) {
-      data.variantOptionJson = this.normalizeVariantOptionJson(
-        dto.variantOptionJson,
-      );
+    if (dto.attributes !== undefined) {
+      const attributes = this.normalizeVariantAttributes(dto.attributes);
+      this.assertVariantAttributeSchema(attributes, [
+        this.readVariantAttributes(variant),
+      ]);
+      data.attributes = attributes;
+      data.variantName = Object.values(attributes).join(' / ');
     }
 
     const price =
@@ -766,10 +1192,35 @@ export class ProductsService {
       data.variantStatus = dto.variantStatus;
     }
 
-    const updatedVariant = await this.prisma.productVariant.update({
-      where: { id: parsedVariantId },
-      data,
-      include: { inventoryRecords: true },
+    const updatedVariant = await this.prisma.$transaction(async (tx) => {
+      if (dto.attributes !== undefined) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${parsedProductId})`;
+        const attributes = this.normalizeVariantAttributes(dto.attributes);
+        const duplicates = await tx.productVariant.findMany({
+          where: { productId: parsedProductId, id: { not: parsedVariantId } },
+          select: { attributes: true },
+        });
+        if (
+          duplicates.some((candidate) =>
+            this.variantAttributesEqual(
+              this.readVariantAttributes(candidate),
+              attributes,
+            ),
+          )
+        ) {
+          throw new ConflictException({
+            code: 'DUPLICATE_VARIANT_ATTRIBUTES',
+            message: 'Tổ hợp phân loại này đã tồn tại',
+            details: [{ field: 'attributes' }],
+          });
+        }
+      }
+
+      return tx.productVariant.update({
+        where: { id: parsedVariantId },
+        data,
+        include: { inventoryRecords: true },
+      });
     });
 
     return this.toSellerVariantResponse(updatedVariant);
@@ -827,10 +1278,31 @@ export class ProductsService {
 
     await this.requireSellerProduct(user, parsedProductId);
 
+    const assetId = this.parseId(dto.assetId, 'assetId');
     const now = new Date();
 
     return this.prisma.$transaction(async (tx) => {
-      if (dto.isThumbnail) {
+      const asset = await tx.uploadAsset.findFirst({
+        where: {
+          id: assetId,
+          ownerUserId: user.id,
+          status: 'Pending',
+          productImage: null,
+        },
+      });
+      if (!asset) {
+        throw new BadRequestException({
+          code: 'UPLOAD_ASSET_NOT_ATTACHABLE',
+          message:
+            'Hình ảnh không tồn tại, không thuộc tài khoản hoặc đã được sử dụng',
+          details: [{ field: 'assetId' }],
+        });
+      }
+      const imageCount = await tx.productImage.count({
+        where: { productId: parsedProductId },
+      });
+      const isThumbnail = imageCount === 0 || dto.isThumbnail === true;
+      if (isThumbnail) {
         await tx.productImage.updateMany({
           where: { productId: parsedProductId, isThumbnail: true },
           data: { isThumbnail: false },
@@ -839,15 +1311,27 @@ export class ProductsService {
 
       const image = await tx.productImage.create({
         data: {
+          assetId,
           productId: parsedProductId,
           productVariantId,
-          imageUrl: dto.imageUrl,
+          imageUrl: asset.url,
           altText: this.normalizeNullableText(dto.altText),
           sortOrder: dto.sortOrder ?? 0,
-          isThumbnail: dto.isThumbnail ?? false,
+          isThumbnail,
           createdAt: now,
         },
       });
+      const attached = await tx.uploadAsset.updateMany({
+        where: { id: assetId, ownerUserId: user.id, status: 'Pending' },
+        data: { status: 'Attached', attachedAt: now },
+      });
+      if (attached.count !== 1) {
+        throw new ConflictException({
+          code: 'UPLOAD_ASSET_ALREADY_ATTACHED',
+          message: 'Hình ảnh vừa được sử dụng. Vui lòng chọn hình khác.',
+          details: [],
+        });
+      }
 
       return this.toSellerImageResponse(image);
     });
@@ -876,10 +1360,6 @@ export class ProductsService {
       data.productVariant = productVariantId
         ? { connect: { id: productVariantId } }
         : { disconnect: true };
-    }
-
-    if (dto.imageUrl !== undefined) {
-      data.imageUrl = dto.imageUrl;
     }
 
     if (dto.altText !== undefined) {
@@ -923,9 +1403,26 @@ export class ProductsService {
     const parsedProductId = this.parseId(productId, 'productId');
     const parsedImageId = this.parseId(imageId, 'imageId');
 
-    await this.requireSellerImage(user, parsedProductId, parsedImageId);
-    await this.prisma.productImage.delete({
-      where: { id: parsedImageId },
+    const current = await this.requireSellerImage(
+      user,
+      parsedProductId,
+      parsedImageId,
+    );
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productImage.delete({ where: { id: parsedImageId } });
+      if (current.isThumbnail) {
+        const next = await tx.productImage.findFirst({
+          where: { productId: parsedProductId },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true },
+        });
+        if (next) {
+          await tx.productImage.update({
+            where: { id: next.id },
+            data: { isThumbnail: true },
+          });
+        }
+      }
     });
 
     return {
@@ -1099,6 +1596,11 @@ export class ProductsService {
         basePrice: true,
         compareAtPrice: true,
         productStatus: true,
+        categoryId: true,
+        productName: true,
+        description: true,
+        brand: true,
+        warrantyMonths: true,
         slug: true,
       },
     });
@@ -1180,7 +1682,11 @@ export class ProductsService {
     return parsedVariantId;
   }
 
-  private async generateVariantSku(productId: bigint, productSlug: string) {
+  private async generateVariantSku(
+    productId: bigint,
+    productSlug: string,
+    client: Pick<PrismaService, 'productVariant'> = this.prisma,
+  ) {
     const prefix =
       productSlug
         .replace(/[^a-z0-9]/gi, '')
@@ -1189,7 +1695,7 @@ export class ProductsService {
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const sku = `${prefix}-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`;
-      const existing = await this.prisma.productVariant.findFirst({
+      const existing = await client.productVariant.findFirst({
         where: { productId, sku },
         select: { id: true },
       });
@@ -1338,15 +1844,13 @@ export class ProductsService {
         variants: {
           where: {
             variantStatus: PUBLIC_VARIANT_STATUS,
-            inventoryRecords: {
-              some: {
-                quantityAvailable: { gt: 0 },
-              },
-            },
           },
           orderBy: [{ price: 'asc' }],
           include: {
             inventoryRecords: true,
+            images: {
+              orderBy: [{ isThumbnail: 'desc' }, { sortOrder: 'asc' }],
+            },
           },
         },
       },
@@ -1573,6 +2077,7 @@ export class ProductsService {
     return {
       ...this.toListItem(product),
       productStatus: product.productStatus,
+      warrantyMonths: product.warrantyMonths,
       isViolation: product.isViolation,
       isDeleted: product.isDeleted,
     };
@@ -1581,17 +2086,21 @@ export class ProductsService {
   private toVariantResponse(
     variant: VariantResponseSource,
   ): ProductListVariantResponse {
+    const attributes = this.readVariantAttributes(variant);
+    const image = variant.images?.[0];
     return {
       id: variant.id.toString(),
       idString: variant.id.toString(),
       sku: variant.sku,
       variantName: variant.variantName,
+      attributes,
       price: this.decimalToRequiredString(variant.price),
       compareAtPrice: this.decimalToString(variant.compareAtPrice),
       quantityAvailable: variant.inventoryRecords.reduce(
         (total, inventory) => total + inventory.quantityAvailable,
         0,
       ),
+      image: image ? this.toImageResponse(image) : null,
     };
   }
 
@@ -1600,7 +2109,7 @@ export class ProductsService {
     productId: bigint;
     sku: string;
     variantName: string;
-    variantOptionJson: string | null;
+    attributes: Prisma.JsonValue;
     price: { toString(): string };
     compareAtPrice: { toString(): string } | null;
     weightGram: number;
@@ -1608,12 +2117,12 @@ export class ProductsService {
     createdAt: Date;
     updatedAt: Date | null;
     inventoryRecords: Array<{ quantityAvailable: number }>;
+    images?: ProductImageEntity[];
   }): SellerProductVariantResponse {
     return {
       ...this.toVariantResponse(variant),
       productId: variant.productId.toString(),
       productIdString: variant.productId.toString(),
-      variantOptionJson: variant.variantOptionJson,
       weightGram: variant.weightGram,
       variantStatus: variant.variantStatus,
       createdAt: variant.createdAt,
@@ -1634,6 +2143,7 @@ export class ProductsService {
 
   private toSellerImageResponse(image: {
     id: bigint;
+    assetId: bigint | null;
     productId: bigint;
     productVariantId: bigint | null;
     imageUrl: string;
@@ -1847,6 +2357,31 @@ export class ProductsService {
     return value.toString();
   }
 
+  private parseUniqueIds(values: string[], field: string): bigint[] {
+    return [...new Set(values)].map((value) => this.parseId(value, field));
+  }
+
+  private async requireShopCategories(
+    shopId: bigint,
+    shopCategoryIds: bigint[],
+  ): Promise<void> {
+    if (shopCategoryIds.length === 0) return;
+    const count = await this.prisma.shopCategory.count({
+      where: {
+        id: { in: shopCategoryIds },
+        shopId,
+        isActive: true,
+      },
+    });
+    if (count !== shopCategoryIds.length) {
+      throw new BadRequestException({
+        code: 'INVALID_SHOP_CATEGORIES',
+        message: 'Danh mục gian hàng không hợp lệ',
+        details: [{ field: 'shopCategoryIds' }],
+      });
+    }
+  }
+
   private parseId(value: string, field: string): bigint {
     if (!/^\d+$/.test(value)) {
       throw new BadRequestException({
@@ -1931,23 +2466,108 @@ export class ProductsService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
-  private normalizeVariantOptionJson(value: string | undefined): string | null {
-    const trimmed = this.normalizeNullableText(value);
-
-    if (!trimmed) {
-      return null;
-    }
-
-    try {
-      JSON.parse(trimmed);
-    } catch {
+  private normalizeVariantAttributes(
+    attributes: Record<string, string> | undefined,
+  ): Record<string, string> {
+    if (
+      !attributes ||
+      Array.isArray(attributes) ||
+      typeof attributes !== 'object'
+    ) {
       throw new BadRequestException({
-        code: 'INVALID_VARIANT_OPTION_JSON',
-        message: 'Variant option JSON is invalid',
-        details: [{ field: 'variantOptionJson' }],
+        code: 'INVALID_VARIANT_ATTRIBUTES',
+        message: 'Thuộc tính phân loại phải là một đối tượng',
+        details: [{ field: 'attributes' }],
       });
     }
+    const entries = Object.entries(attributes);
+    if (entries.length < 1 || entries.length > 2) {
+      throw new BadRequestException({
+        code: 'INVALID_VARIANT_ATTRIBUTE_LEVELS',
+        message: 'Mỗi sản phẩm chỉ được có từ 1 đến 2 cấp phân loại',
+        details: [{ field: 'attributes' }],
+      });
+    }
+    const normalized: Record<string, string> = {};
+    const seen = new Set<string>();
+    for (const [rawName, rawValue] of entries) {
+      if (typeof rawValue !== 'string') {
+        throw new BadRequestException({
+          code: 'INVALID_VARIANT_ATTRIBUTES',
+          message: 'Tên và giá trị thuộc tính phải là chuỗi',
+          details: [{ field: 'attributes' }],
+        });
+      }
+      const name = rawName.trim();
+      const value = rawValue.trim();
+      const key = name.toLocaleLowerCase('vi');
+      if (
+        !name ||
+        !value ||
+        name.length > 100 ||
+        value.length > 255 ||
+        seen.has(key)
+      ) {
+        throw new BadRequestException({
+          code: 'INVALID_VARIANT_ATTRIBUTES',
+          message: 'Tên và giá trị thuộc tính không hợp lệ hoặc bị trùng',
+          details: [{ field: 'attributes' }],
+        });
+      }
+      seen.add(key);
+      normalized[name] = value;
+    }
+    return normalized;
+  }
 
-    return trimmed;
+  private assertVariantAttributeSchema(
+    attributes: Record<string, string>,
+    existingAttributes: Record<string, string>[],
+  ): void {
+    const names = Object.keys(attributes).sort((left, right) =>
+      left.localeCompare(right, 'vi'),
+    );
+    const hasMismatch = existingAttributes.some((candidate) => {
+      const candidateNames = Object.keys(candidate).sort((left, right) =>
+        left.localeCompare(right, 'vi'),
+      );
+      return (
+        names.length !== candidateNames.length ||
+        names.some((name, index) => name !== candidateNames[index])
+      );
+    });
+
+    if (hasMismatch) {
+      throw new BadRequestException({
+        code: 'VARIANT_ATTRIBUTE_SCHEMA_MISMATCH',
+        message:
+          'Tên các cấp phân loại phải giống nhau trên mọi SKU của sản phẩm',
+        details: [{ field: 'attributes' }],
+      });
+    }
+  }
+
+  private variantAttributesEqual(
+    left: Record<string, string>,
+    right: Prisma.InputJsonObject,
+  ): boolean {
+    const rightEntries = Object.entries(right);
+    return (
+      Object.keys(left).length === rightEntries.length &&
+      rightEntries.every(([name, value]) => left[name] === value)
+    );
+  }
+
+  private readVariantAttributes(
+    variant: Pick<VariantResponseSource, 'attributes'>,
+  ): Record<string, string> {
+    const source = variant.attributes;
+    if (!source || Array.isArray(source) || typeof source !== 'object')
+      return {};
+    return Object.fromEntries(
+      Object.entries(source).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    );
   }
 }

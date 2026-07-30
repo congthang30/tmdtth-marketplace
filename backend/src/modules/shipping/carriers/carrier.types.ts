@@ -38,6 +38,7 @@ export type CarrierOrderInput = {
   weightGram: number;
   codAmount: number;
   note?: string | null;
+  pickupStationId?: number;
 };
 
 export type CarrierOrderResult = {
@@ -53,6 +54,7 @@ export type CarrierTrackingStatus =
   | 'InTransit'
   | 'Delivered'
   | 'Failed'
+  | 'Returned'
   | 'Cancelled';
 
 export type CarrierTrackingResult = {

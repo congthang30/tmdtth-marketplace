@@ -28,6 +28,9 @@ type ProductCreateArgs = {
     updatedByUserId: bigint;
     createdAt: Date;
     updatedAt: Date;
+    shopCategoryProducts?: {
+      create: Array<{ shopCategoryId: bigint }>;
+    };
   };
   include: unknown;
 };
@@ -50,6 +53,10 @@ type ProductUpdateArgs = {
     brand?: string | null;
     warrantyMonths?: number;
     weightGram?: number;
+    shopCategoryProducts?: {
+      deleteMany: Record<string, never>;
+      create: Array<{ shopCategoryId: bigint }>;
+    };
   };
   include: unknown;
 };
@@ -59,7 +66,7 @@ type ProductVariantCreateArgs = {
     productId: bigint;
     sku: string;
     variantName: string;
-    variantOptionJson: string | null;
+    attributes: Prisma.InputJsonValue;
     price: Prisma.Decimal;
     compareAtPrice: Prisma.Decimal | null;
     weightGram: number;
@@ -75,7 +82,7 @@ type ProductVariantUpdateArgs = {
   data: {
     sku?: string;
     variantName?: string;
-    variantOptionJson?: string | null;
+    attributes?: Prisma.InputJsonValue;
     price?: Prisma.Decimal;
     compareAtPrice?: Prisma.Decimal | null;
     weightGram?: number;
@@ -196,6 +203,12 @@ type ProductLookup = {
   basePrice?: Prisma.Decimal;
   compareAtPrice?: Prisma.Decimal | null;
   slug?: string;
+  categoryId?: bigint;
+  productName?: string;
+  description?: string | null;
+  brand?: string | null;
+  warrantyMonths?: number;
+  productStatus?: string;
 };
 
 type ProductVariantEntity = {
@@ -203,7 +216,7 @@ type ProductVariantEntity = {
   productId: bigint;
   sku: string;
   variantName: string;
-  variantOptionJson: string | null;
+  attributes: Prisma.JsonValue;
   price: Prisma.Decimal;
   compareAtPrice: Prisma.Decimal | null;
   weightGram: number;
@@ -258,6 +271,7 @@ type ProductVariantDelegateMock = {
 type ProductImageDelegateMock = {
   findMany: jest.Mock<Promise<ProductImageEntity[]>, [unknown]>;
   findFirst: jest.Mock<Promise<ProductImageEntity | null>, [unknown]>;
+  count: jest.Mock<Promise<number>, [unknown]>;
   create: jest.Mock<Promise<ProductImageEntity>, [ProductImageCreateArgs]>;
   update: jest.Mock<Promise<ProductImageEntity>, [ProductImageUpdateArgs]>;
   updateMany: jest.Mock<
@@ -285,7 +299,15 @@ type InventoryTransactionDelegateMock = {
   create: jest.Mock<Promise<{ id: bigint }>, [InventoryTransactionCreateArgs]>;
 };
 
+type UploadAssetDelegateMock = {
+  findFirst: jest.Mock<Promise<{ id: bigint; url: string } | null>, [unknown]>;
+  updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+};
+
 type PrismaTransactionMock = {
+  $executeRaw: jest.Mock<Promise<number>, unknown[]>;
+  uploadAsset: UploadAssetDelegateMock;
+  productVariant: ProductVariantDelegateMock;
   productImage: ProductImageDelegateMock;
   productInventory: ProductInventoryDelegateMock;
   inventoryTransaction: InventoryTransactionDelegateMock;
@@ -296,14 +318,19 @@ type TransactionInput = TransactionCallback | Promise<unknown>[];
 
 type PrismaMock = {
   $transaction: jest.Mock<Promise<unknown>, [TransactionInput]>;
+  $executeRaw: jest.Mock<Promise<number>, unknown[]>;
   shop: {
     findFirst: jest.Mock<Promise<{ id: bigint } | null>, [unknown]>;
   };
   category: {
     findFirst: jest.Mock<Promise<{ id: bigint } | null>, [unknown]>;
   };
+  shopCategory: {
+    count: jest.Mock<Promise<number>, [unknown]>;
+  };
   product: ProductDelegateMock;
   productVariant: ProductVariantDelegateMock;
+  uploadAsset: UploadAssetDelegateMock;
   productImage: ProductImageDelegateMock;
   productInventory: ProductInventoryDelegateMock;
   inventoryTransaction: InventoryTransactionDelegateMock;
@@ -376,7 +403,7 @@ function createVariantEntity(
     productId: 100n,
     sku: 'DEN-BAN-GO',
     variantName: 'Màu gỗ',
-    variantOptionJson: '{"color":"wood"}',
+    attributes: { 'Màu sắc': 'Gỗ' },
     price: new Prisma.Decimal('159000'),
     compareAtPrice: new Prisma.Decimal('199000'),
     weightGram: 450,
@@ -429,11 +456,15 @@ describe('ProductsService', () => {
   beforeEach(() => {
     prisma = {
       $transaction: jest.fn<Promise<unknown>, [TransactionCallback]>(),
+      $executeRaw: jest.fn<Promise<number>, unknown[]>(),
       shop: {
         findFirst: jest.fn<Promise<{ id: bigint } | null>, [unknown]>(),
       },
       category: {
         findFirst: jest.fn<Promise<{ id: bigint } | null>, [unknown]>(),
+      },
+      shopCategory: {
+        count: jest.fn<Promise<number>, [unknown]>(),
       },
       product: {
         findMany: jest.fn<Promise<ProductEntity[]>, [unknown]>(),
@@ -457,9 +488,18 @@ describe('ProductsService', () => {
           [ProductVariantUpdateArgs]
         >(),
       },
+
+      uploadAsset: {
+        findFirst: jest.fn<
+          Promise<{ id: bigint; url: string } | null>,
+          [unknown]
+        >(),
+        updateMany: jest.fn<Promise<{ count: number }>, [unknown]>(),
+      },
       productImage: {
         findMany: jest.fn<Promise<ProductImageEntity[]>, [unknown]>(),
         findFirst: jest.fn<Promise<ProductImageEntity | null>, [unknown]>(),
+        count: jest.fn<Promise<number>, [unknown]>(),
         create: jest.fn<
           Promise<ProductImageEntity>,
           [ProductImageCreateArgs]
@@ -503,6 +543,8 @@ describe('ProductsService', () => {
         >(),
       },
     };
+
+    prisma.$executeRaw.mockResolvedValue(1);
     prisma.$transaction.mockImplementation((input) =>
       Array.isArray(input) ? Promise.all(input) : input(prisma),
     );
@@ -565,6 +607,73 @@ describe('ProductsService', () => {
       'https://images.example.com/demo/den-ban-go.jpg',
     );
     expect(result.items[0].quantityAvailable).toBe(8);
+  });
+
+  it('atomically creates canonical seller shop-category assignments', async () => {
+    prisma.shop.findFirst.mockResolvedValue({ id: 1n });
+    prisma.category.findFirst.mockResolvedValue({ id: 10n });
+    prisma.product.findFirst.mockResolvedValue(null);
+    prisma.shopCategory.count.mockResolvedValue(2);
+    prisma.product.create.mockResolvedValue(createProductEntity());
+
+    await service.createSellerProduct(sellerUser, {
+      ...createProductDto,
+      shopCategoryIds: ['20', '20', '21'],
+    });
+
+    expect(prisma.shopCategory.count).toHaveBeenCalledWith({
+      where: { id: { in: [20n, 21n] }, shopId: 1n, isActive: true },
+    });
+    expect(
+      prisma.product.create.mock.calls[0][0].data.shopCategoryProducts,
+    ).toEqual({ create: [{ shopCategoryId: 20n }, { shopCategoryId: 21n }] });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects foreign or inactive shop categories before starting create transaction', async () => {
+    prisma.shop.findFirst.mockResolvedValue({ id: 1n });
+    prisma.category.findFirst.mockResolvedValue({ id: 10n });
+    prisma.product.findFirst.mockResolvedValue(null);
+    prisma.shopCategory.count.mockResolvedValue(1);
+
+    await expect(
+      service.createSellerProduct(sellerUser, {
+        ...createProductDto,
+        shopCategoryIds: ['20', '21'],
+      }),
+    ).rejects.toMatchObject({ response: { code: 'INVALID_SHOP_CATEGORIES' } });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+
+  it('preserves assignments when omitted and atomically clears them for an empty update', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      categoryId: 10n,
+      productName: createProductDto.productName,
+      description: createProductDto.description,
+      brand: createProductDto.brand,
+      warrantyMonths: 6,
+      productStatus: 'Draft',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: new Prisma.Decimal('199000'),
+    });
+    prisma.product.update.mockResolvedValue(createProductEntity());
+
+    await service.updateSellerProduct(sellerUser, '100', { brand: 'Mới' });
+    expect(
+      prisma.product.update.mock.calls[0][0].data.shopCategoryProducts,
+    ).toBeUndefined();
+
+    prisma.product.update.mockClear();
+    await service.updateSellerProduct(sellerUser, '100', {
+      shopCategoryIds: [],
+    });
+    expect(
+      prisma.product.update.mock.calls[0][0].data.shopCategoryProducts,
+    ).toEqual({ deleteMany: {}, create: [] });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it('creates a draft product for an owned approved shop', async () => {
@@ -725,7 +834,7 @@ describe('ProductsService', () => {
     expect(result.isDeleted).toBe(true);
   });
 
-  it('generates SKU and atomically creates variant inventory', async () => {
+  it('derives the name and atomically creates variant inventory from attributes', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
@@ -734,6 +843,7 @@ describe('ProductsService', () => {
       compareAtPrice: null,
     });
     prisma.productVariant.findFirst.mockResolvedValue(null);
+    prisma.productVariant.findMany.mockResolvedValue([]);
     prisma.productVariant.create.mockResolvedValue(createVariantEntity());
     prisma.productInventory.create.mockResolvedValue(
       createInventoryEntity({
@@ -745,8 +855,7 @@ describe('ProductsService', () => {
     prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
 
     const result = await service.createSellerProductVariant(sellerUser, '100', {
-      variantName: 'Màu gỗ',
-      variantOptionJson: '{"color":"wood"}',
+      attributes: { 'Màu sắc': 'Đen', 'Kích cỡ': 'S' },
       price: '159000',
       compareAtPrice: '199000',
       weightGram: 450,
@@ -755,7 +864,11 @@ describe('ProductsService', () => {
     const createArgs = prisma.productVariant.create.mock.calls[0][0];
     const inventoryArgs = prisma.productInventory.create.mock.calls[0][0];
 
-    expect(createArgs.data.productId).toBe(100n);
+    expect(createArgs.data).toMatchObject({
+      productId: 100n,
+      variantName: 'Đen / S',
+      attributes: { 'Màu sắc': 'Đen', 'Kích cỡ': 'S' },
+    });
     expect(createArgs.data.sku).toMatch(/^DENBANGO-[A-F0-9]{8}$/);
     expect(inventoryArgs.data).toMatchObject({
       productId: 100n,
@@ -768,6 +881,184 @@ describe('ProductsService', () => {
     expect(result.quantityAvailable).toBe(8);
   });
 
+  it('atomically creates a batch of materialized attribute combinations', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      slug: 'ao-thun',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(null);
+    prisma.productVariant.findMany.mockResolvedValue([]);
+    const combinations = [
+      { 'Màu sắc': 'Đen', 'Kích cỡ': 'S' },
+      { 'Màu sắc': 'Đen', 'Kích cỡ': 'M' },
+      { 'Màu sắc': 'Đỏ', 'Kích cỡ': 'S' },
+      { 'Màu sắc': 'Đỏ', 'Kích cỡ': 'M' },
+    ];
+    combinations.forEach((attributes, index) => {
+      prisma.productVariant.create.mockResolvedValueOnce(
+        createVariantEntity({
+          id: BigInt(200 + index),
+          attributes,
+          variantName: Object.values(attributes).join(' / '),
+        }),
+      );
+      prisma.productInventory.create.mockResolvedValueOnce(
+        createInventoryEntity({
+          id: BigInt(400 + index),
+          productVariantId: BigInt(200 + index),
+          quantityOnHand: 5,
+          quantityReserved: 0,
+          quantityAvailable: 5,
+        }),
+      );
+    });
+    prisma.inventoryTransaction.create.mockResolvedValue({ id: 500n });
+
+    const result = await service.createSellerProductVariantsBatch(
+      sellerUser,
+      '100',
+      {
+        variants: combinations.map((attributes) => ({
+          attributes,
+          price: '159000',
+          quantityOnHand: 5,
+        })),
+      },
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.productVariant.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.productVariant.create.mock.invocationCallOrder[0],
+    );
+    expect(prisma.productVariant.create).toHaveBeenCalledTimes(4);
+    expect(prisma.productInventory.create).toHaveBeenCalledTimes(4);
+    expect(prisma.inventoryTransaction.create).toHaveBeenCalledTimes(4);
+    expect(
+      prisma.productVariant.create.mock.calls.map(
+        ([call]) => call.data.attributes,
+      ),
+    ).toEqual(combinations);
+    expect(result.map((variant) => variant.attributes)).toEqual(combinations);
+  });
+
+  it('rejects duplicate combinations inside a batch before its transaction', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      slug: 'ao-thun',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+
+    await expect(
+      service.createSellerProductVariantsBatch(sellerUser, '100', {
+        variants: [
+          {
+            attributes: { 'Màu sắc': 'Đen', 'Kích cỡ': 'M' },
+            price: '159000',
+            quantityOnHand: 5,
+          },
+          {
+            attributes: { 'Kích cỡ': 'M', 'Màu sắc': 'Đen' },
+            price: '159000',
+            quantityOnHand: 7,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.productVariant.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a third classification level before its transaction', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      slug: 'ao-thun',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+
+    await expect(
+      service.createSellerProductVariantsBatch(sellerUser, '100', {
+        variants: [
+          {
+            attributes: {
+              'Màu sắc': 'Đen',
+              'Kích cỡ': 'M',
+              'Chất liệu': 'Cotton',
+            },
+            price: '159000',
+            quantityOnHand: 5,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'INVALID_VARIANT_ATTRIBUTE_LEVELS' },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects inconsistent classification level names inside a batch', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      slug: 'ao-thun',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+
+    await expect(
+      service.createSellerProductVariantsBatch(sellerUser, '100', {
+        variants: [
+          {
+            attributes: { 'Màu sắc': 'Đen', 'Kích cỡ': 'M' },
+            price: '159000',
+            quantityOnHand: 5,
+          },
+          {
+            attributes: { 'Màu sắc': 'Đỏ', 'Kích cỡ sss': 'L' },
+            price: '159000',
+            quantityOnHand: 5,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'VARIANT_ATTRIBUTE_SCHEMA_MISMATCH' },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate attributes combination', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      slug: 'den-ban-go',
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(null);
+    prisma.productVariant.findMany.mockResolvedValue([
+      createVariantEntity({ attributes: { 'Màu sắc': 'Đen' } }),
+    ]);
+
+    await expect(
+      service.createSellerProductVariant(sellerUser, '100', {
+        attributes: { 'Màu sắc': 'Đen' },
+        price: '159000',
+        quantityOnHand: 0,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.productVariant.create).not.toHaveBeenCalled();
+  });
+
   it('creates zero inventory without a zero-change transaction', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
@@ -777,6 +1068,7 @@ describe('ProductsService', () => {
       compareAtPrice: null,
     });
     prisma.productVariant.findFirst.mockResolvedValue(null);
+    prisma.productVariant.findMany.mockResolvedValue([]);
     prisma.productVariant.create.mockResolvedValue(createVariantEntity());
     prisma.productInventory.create.mockResolvedValue(
       createInventoryEntity({
@@ -787,7 +1079,7 @@ describe('ProductsService', () => {
     );
 
     const result = await service.createSellerProductVariant(sellerUser, '100', {
-      variantName: 'Màu gỗ',
+      attributes: { 'Phiên bản': 'Tiêu chuẩn' },
       price: '159000',
       quantityOnHand: 0,
     });
@@ -797,7 +1089,7 @@ describe('ProductsService', () => {
     expect(result.quantityAvailable).toBe(0);
   });
 
-  it('rejects invalid variant option JSON', async () => {
+  it('rejects empty variant attribute names and values', async () => {
     prisma.product.findFirst.mockResolvedValue({
       id: 100n,
       shopId: 1n,
@@ -809,8 +1101,7 @@ describe('ProductsService', () => {
 
     await expect(
       service.createSellerProductVariant(sellerUser, '100', {
-        variantName: 'Màu gỗ',
-        variantOptionJson: '{bad-json}',
+        attributes: { 'Màu sắc': '   ' },
         price: '159000',
         quantityOnHand: 1,
       }),
@@ -828,10 +1119,12 @@ describe('ProductsService', () => {
     prisma.productVariant.findFirst.mockResolvedValue(
       createVariantEntity({ sku: 'DEN-BAN-GO' }),
     );
+    prisma.productVariant.findMany.mockResolvedValue([]);
     prisma.productVariant.update.mockResolvedValue(
       createVariantEntity({
         sku: 'DEN-BAN-TRE',
-        variantName: 'Màu tre',
+        variantName: 'Tre',
+        attributes: { 'Màu sắc': 'Tre' },
         price: new Prisma.Decimal('179000'),
         compareAtPrice: null,
         variantStatus: 'Inactive',
@@ -843,7 +1136,7 @@ describe('ProductsService', () => {
       '100',
       '200',
       {
-        variantName: 'Màu tre',
+        attributes: { 'Màu sắc': 'Tre' },
         price: '179000',
         compareAtPrice: undefined,
         variantStatus: 'Inactive',
@@ -851,12 +1144,36 @@ describe('ProductsService', () => {
     );
     const updateArgs = prisma.productVariant.update.mock.calls[0][0];
 
-    expect(updateArgs.where.id).toBe(200n);
-    expect(updateArgs.data.variantName).toBe('Màu tre');
+    expect(updateArgs.data.attributes).toEqual({ 'Màu sắc': 'Tre' });
+    expect(updateArgs.data.variantName).toBe('Tre');
     expect(updateArgs.data.price?.toString()).toBe('179000');
     expect(updateArgs.data.variantStatus).toBe('Inactive');
-    expect(result.variantName).toBe('Màu tre');
+    expect(result.variantName).toBe('Tre');
     expect(result.variantStatus).toBe('Inactive');
+  });
+
+  it('rejects renaming a locked classification level', async () => {
+    prisma.product.findFirst.mockResolvedValue({
+      id: 100n,
+      shopId: 1n,
+      basePrice: new Prisma.Decimal('159000'),
+      compareAtPrice: null,
+    });
+    prisma.productVariant.findFirst.mockResolvedValue(
+      createVariantEntity({
+        attributes: { 'Màu sắc': 'Đen', 'Kích cỡ': 'M' },
+      }),
+    );
+
+    await expect(
+      service.updateSellerProductVariant(sellerUser, '100', '200', {
+        attributes: { 'Màu sắc': 'Đen', 'Kích cỡ sss': 'M' },
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'VARIANT_ATTRIBUTE_SCHEMA_MISMATCH' },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.productVariant.update).not.toHaveBeenCalled();
   });
 
   it('soft deletes an owned variant by marking it inactive', async () => {
@@ -913,11 +1230,17 @@ describe('ProductsService', () => {
       basePrice: new Prisma.Decimal('159000'),
       compareAtPrice: null,
     });
+    prisma.uploadAsset.findFirst.mockResolvedValue({
+      id: 400n,
+      url: 'https://images.example.com/demo/den-ban-go.jpg',
+    });
+    prisma.uploadAsset.updateMany.mockResolvedValue({ count: 1 });
+    prisma.productImage.count.mockResolvedValue(0);
     prisma.productImage.updateMany.mockResolvedValue({ count: 1 });
     prisma.productImage.create.mockResolvedValue(createImageEntity());
 
     const result = await service.createSellerProductImage(sellerUser, '100', {
-      imageUrl: 'https://images.example.com/demo/den-ban-go.jpg',
+      assetId: '400',
       altText: 'Đèn bàn gỗ',
       sortOrder: 1,
       isThumbnail: true,
@@ -955,7 +1278,7 @@ describe('ProductsService', () => {
       '100',
       '300',
       {
-        imageUrl: 'https://images.example.com/demo/den-ban-go-2.jpg',
+        altText: 'Đèn bàn gỗ mới',
         isThumbnail: true,
       },
     );
@@ -970,9 +1293,7 @@ describe('ProductsService', () => {
       data: { isThumbnail: false },
     });
     expect(updateArgs.where.id).toBe(300n);
-    expect(updateArgs.data.imageUrl).toBe(
-      'https://images.example.com/demo/den-ban-go-2.jpg',
-    );
+    expect(updateArgs.data.altText).toBe('Đèn bàn gỗ mới');
     expect(updateArgs.data.isThumbnail).toBe(true);
     expect(result.isThumbnail).toBe(true);
   });

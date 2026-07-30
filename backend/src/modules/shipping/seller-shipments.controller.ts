@@ -1,9 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
-  Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AppRole } from '../auth/app-role.enum';
@@ -13,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/types';
 import { CreateShipmentDto } from './dto/create-shipment.dto';
-import { UpdateShipmentTrackingDto } from './dto/update-shipment-tracking.dto';
+import { HandoverStationsQueryDto } from './dto/handover-stations-query.dto';
 import { ShippingService } from './shipping.service';
 
 @Controller('seller/orders/:shopOrderId/shipments')
@@ -21,6 +22,19 @@ import { ShippingService } from './shipping.service';
 @Roles(AppRole.Seller)
 export class SellerShipmentsController {
   constructor(private readonly shippingService: ShippingService) {}
+
+  @Get('handover-stations')
+  listHandoverStations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('shopOrderId') shopOrderId: string,
+    @Query() query: HandoverStationsQueryDto,
+  ) {
+    return this.shippingService.listSellerHandoverStations(
+      user,
+      shopOrderId,
+      query,
+    );
+  }
 
   @Post()
   createSellerShipment(
@@ -31,27 +45,6 @@ export class SellerShipmentsController {
     return this.shippingService.createSellerShipment(user, shopOrderId, dto);
   }
 
-  @Patch(':shipmentId/tracking')
-  updateSellerShipmentTracking(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('shopOrderId') shopOrderId: string,
-    @Param('shipmentId') shipmentId: string,
-    @Body() dto: UpdateShipmentTrackingDto,
-  ) {
-    return this.shippingService.updateSellerShipmentTracking(
-      user,
-      shopOrderId,
-      shipmentId,
-      dto,
-    );
-  }
-
-  /**
-   * Retries registering the shipment with its carrier (GHN/GHTK) when the
-   * initial createSellerShipment call succeeded locally but the carrier
-   * order-creation call failed (e.g. carrier API was down). Also refreshes
-   * the cached carrier status when the shipment is already registered.
-   */
   @Post(':shipmentId/sync')
   syncSellerShipment(
     @CurrentUser() user: AuthenticatedUser,
@@ -59,6 +52,19 @@ export class SellerShipmentsController {
     @Param('shipmentId') shipmentId: string,
   ) {
     return this.shippingService.syncSellerShipment(
+      user,
+      shopOrderId,
+      shipmentId,
+    );
+  }
+
+  @Post(':shipmentId/label')
+  createShipmentLabel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('shopOrderId') shopOrderId: string,
+    @Param('shipmentId') shipmentId: string,
+  ) {
+    return this.shippingService.getSellerShipmentLabel(
       user,
       shopOrderId,
       shipmentId,

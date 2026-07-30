@@ -19,6 +19,9 @@ import { ProductReviews } from "../components/ProductReviews";
 import { ProductVisual } from "../components/ProductVisual";
 import {
   canAddVariantToCart,
+  canSelectAttributeValue,
+  findSelectedAttributeVariant,
+  getAttributeGroups,
   getFirstAvailableVariantId,
 } from "../purchase-state";
 
@@ -29,6 +32,7 @@ export function ProductDetailPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     null,
   );
+  const [selectedOptionValues, setSelectedOptionValues] = useState<Record<string, string>>({});
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
 
@@ -45,19 +49,33 @@ export function ProductDetailPage() {
   });
 
   const product = productQuery.data;
-  const selectedVariant = useMemo(
-    () =>
-      product?.variants.find((variant) => variant.id === selectedVariantId) ??
-      null,
-    [product?.variants, selectedVariantId],
+  const attributeGroups = useMemo(
+    () => (product ? getAttributeGroups(product.variants) : []),
+    [product],
   );
+  const hasAttributeOptions = attributeGroups.length > 0;
+  const nextAttributeGroup = attributeGroups.find(
+    (group) => !selectedOptionValues[group.name],
+  );
+  const selectedVariant = useMemo(() => {
+    if (!product) return null;
+    if (!hasAttributeOptions) {
+      return product.variants.find((variant) => variant.id === selectedVariantId) ?? null;
+    }
+    return findSelectedAttributeVariant(
+      product.variants,
+      selectedOptionValues,
+      attributeGroups.length,
+    );
+  }, [attributeGroups.length, hasAttributeOptions, product, selectedOptionValues, selectedVariantId]);
   const selectedImage = useMemo(
     () =>
+      selectedVariant?.image ??
       product?.images.find((image) => image.id === selectedImageId) ??
       product?.thumbnailImage ??
       product?.images[0] ??
       null,
-    [product?.images, product?.thumbnailImage, selectedImageId],
+    [product?.images, product?.thumbnailImage, selectedImageId, selectedVariant?.image],
   );
 
   useEffect(() => {
@@ -65,12 +83,13 @@ export function ProductDetailPage() {
       return;
     }
 
-    setSelectedVariantId(getFirstAvailableVariantId(product.variants));
+    setSelectedVariantId(hasAttributeOptions ? null : getFirstAvailableVariantId(product.variants));
+    setSelectedOptionValues({});
     setSelectedImageId(
       product.thumbnailImage?.id ?? product.images[0]?.id ?? null,
     );
     setQuantity(1);
-  }, [product]);
+  }, [hasAttributeOptions, product]);
 
   const addToCartMutation = useMutation({
     mutationFn: cartApi.addItem,
@@ -190,57 +209,87 @@ export function ProductDetailPage() {
             ) : null}
           </div>
 
-          <fieldset className="mt-5">
-            <legend className="text-sm font-medium text-ink">Phân loại</legend>
-            {product.variants.length > 0 ? (
-              <div className="mt-2 grid gap-2">
-                {product.variants.map((variant) => {
-                  const isOutOfStock = variant.quantityAvailable < 1;
-                  const isSelected =
-                    !isOutOfStock && selectedVariant?.id === variant.id;
-
-                  return (
-                    <label
-                      key={variant.id}
-                      className={[
-                        "flex min-h-11 flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition",
-                        isOutOfStock
-                          ? "cursor-not-allowed border-border bg-surface text-muted"
-                          : "cursor-pointer border-border bg-white hover:bg-surface",
-                        isSelected
-                          ? "border-primary-600 bg-primary-50 text-primary-700"
-                          : "",
-                      ].join(" ")}
-                    >
-                      <input
-                        type="radio"
-                        name={`product-variant-${product.id}`}
-                        value={variant.id}
-                        className="h-4 w-4 shrink-0 accent-primary-600"
-                        checked={isSelected}
-                        disabled={isOutOfStock}
-                        onChange={() => {
-                          setSelectedVariantId(variant.id);
-                          setQuantity(1);
-                        }}
-                      />
-                      <span className="font-medium">{variant.variantName}</span>
-                      <span className="text-muted">
-                        {isOutOfStock
-                          ? "Hết hàng"
-                          : `Còn ${variant.quantityAvailable} sản phẩm`}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                title="Không có phân loại để mua"
-                description="Sản phẩm hiện chưa có phân loại đang bán và còn hàng."
-              />
-            )}
-          </fieldset>
+          {hasAttributeOptions ? (
+            <div className="mt-5 space-y-4">
+              {attributeGroups.map((group, groupIndex) => {
+                const previousSelection = Object.fromEntries(
+                  attributeGroups
+                    .slice(0, groupIndex)
+                    .flatMap((previousGroup) => {
+                      const selectedValue = selectedOptionValues[previousGroup.name];
+                      return selectedValue ? [[previousGroup.name, selectedValue]] : [];
+                    }),
+                );
+                return (
+                <fieldset key={group.name}>
+                  <legend className="text-sm font-medium text-ink">{group.name}</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {group.values.map((value, valueIndex) => {
+                      const isSelected = selectedOptionValues[group.name] === value;
+                      const canMatch =
+                        Object.keys(previousSelection).length === groupIndex &&
+                        canSelectAttributeValue(
+                          product.variants,
+                          previousSelection,
+                          group.name,
+                          value,
+                        );
+                      return (
+                        <button
+                          key={value}
+                          id={`variant-attribute-${groupIndex}-${valueIndex}`}
+                          type="button"
+                          aria-pressed={isSelected}
+                          disabled={!canMatch}
+                          className={`min-h-11 rounded-md border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2 ${isSelected ? "border-primary-600 bg-primary-50 font-medium text-primary-700" : "border-border bg-white text-ink hover:border-primary-300"} disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted disabled:line-through`}
+                          onClick={() => {
+                            setSelectedOptionValues({
+                              ...previousSelection,
+                              [group.name]: value,
+                            });
+                            setQuantity(1);
+                          }}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+                );
+              })}
+              {!selectedVariant ? (
+                <p className="text-sm text-muted" aria-live="polite">
+                  {nextAttributeGroup
+                    ? `Hãy chọn ${nextAttributeGroup.name}.`
+                    : "Tổ hợp này hiện không khả dụng."}
+                </p>
+              ) : (
+                <p className="text-sm text-muted" aria-live="polite">
+                  Còn {selectedVariant.quantityAvailable} sản phẩm
+                </p>
+              )}
+            </div>
+          ) : (
+            <fieldset className="mt-5">
+              <legend className="text-sm font-medium text-ink">Phân loại</legend>
+              {product.variants.length > 0 ? (
+                <div className="mt-2 grid gap-2">
+                  {product.variants.map((variant) => {
+                    const isOutOfStock = variant.quantityAvailable < 1;
+                    const isSelected = !isOutOfStock && selectedVariant?.id === variant.id;
+                    return (
+                      <label key={variant.id} className={`flex min-h-11 flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-left text-sm ${isOutOfStock ? "cursor-not-allowed bg-surface text-muted" : "cursor-pointer"} ${isSelected ? "border-primary-600 bg-primary-50 text-primary-700" : "border-border"}`}>
+                        <input type="radio" name={`product-variant-${product.id}`} value={variant.id} checked={isSelected} disabled={isOutOfStock} onChange={() => { setSelectedVariantId(variant.id); setQuantity(1); }} />
+                        <span className="font-medium">{variant.variantName}</span>
+                        <span className="text-muted">{isOutOfStock ? "Hết hàng" : `Còn ${variant.quantityAvailable} sản phẩm`}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : <EmptyState title="Không có phân loại để mua" description="Sản phẩm hiện chưa có phân loại đang bán và còn hàng." />}
+            </fieldset>
+          )}
 
           <div className="mt-5">
             <p className="text-sm font-medium text-ink">Số lượng</p>
@@ -280,10 +329,10 @@ export function ProductDetailPage() {
           ) : null}
 
           <div className="mt-6">
-            {!selectedVariant || selectedVariant.quantityAvailable < 1 ? (
+            {!selectedVariant ? (
               <Button type="button" className="w-full" disabled>
                 <ShoppingCart size={16} aria-hidden="true" />
-                Sản phẩm đã hết hàng
+                {hasAttributeOptions ? "Vui lòng chọn phân loại" : "Sản phẩm đã hết hàng"}
               </Button>
             ) : accessToken ? (
               <Button

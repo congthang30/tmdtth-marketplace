@@ -20,6 +20,7 @@ import { AdjustDamagedInventoryDto } from './dto/adjust-damaged-inventory.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
+import { CreateProductVariantsBatchDto } from './dto/create-product-variants-batch.dto';
 import { ReceiveProductInventoryDto } from './dto/set-product-inventory.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
@@ -40,12 +41,44 @@ export class SellerProductsController {
     return this.productsService.listSellerProducts(user, query);
   }
 
+  @Get(':id')
+  getSellerProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') productId: string,
+  ) {
+    return this.productsService.getSellerProduct(user, productId);
+  }
+
   @Post()
   createSellerProduct(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateProductDto,
   ) {
     return this.productsService.createSellerProduct(user, dto);
+  }
+
+  @Post(':id/submit')
+  submitSellerProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') productId: string,
+  ) {
+    return this.productsService.submitSellerProduct(user, productId);
+  }
+
+  @Post(':id/stop-selling')
+  stopSellingProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') productId: string,
+  ) {
+    return this.productsService.stopSellingProduct(user, productId);
+  }
+
+  @Post(':id/resume-selling')
+  resumeSellingProduct(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') productId: string,
+  ) {
+    return this.productsService.resumeSellingProduct(user, productId);
   }
 
   @Patch(':id')
@@ -80,6 +113,19 @@ export class SellerProductsController {
     @Body() dto: CreateProductVariantDto,
   ) {
     return this.productsService.createSellerProductVariant(
+      user,
+      productId,
+      dto,
+    );
+  }
+
+  @Post(':productId/variants/batch')
+  createSellerProductVariantsBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId') productId: string,
+    @Body() dto: CreateProductVariantsBatchDto,
+  ) {
+    return this.productsService.createSellerProductVariantsBatch(
       user,
       productId,
       dto,

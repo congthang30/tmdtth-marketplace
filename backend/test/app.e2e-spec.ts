@@ -221,6 +221,7 @@ type ProductE2eResponse = {
   createdAt: string;
   updatedAt: string;
   productStatus: string;
+  warrantyMonths: number;
   isViolation: boolean;
   isDeleted: boolean;
 };
@@ -232,7 +233,7 @@ type ProductVariantE2eResponse = {
   productIdString: string;
   sku: string;
   variantName: string;
-  variantOptionJson: string | null;
+  attributes: Record<string, string>;
   price: string;
   compareAtPrice: string | null;
   weightGram: number;
@@ -320,8 +321,16 @@ type OrderShipmentE2eResponse = {
   idString: string;
   shipmentCode: string;
   trackingNumber: string | null;
+  carrierOrderCode: string | null;
+  carrierStatus: string | null;
   shipmentStatus: string;
   shippingFee: string;
+  handoverMethod: 'Pickup' | 'Dropoff';
+  pickupStation: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
   shippingCompany: {
     id: string;
     idString: string;
@@ -514,6 +523,12 @@ type ShipmentE2eResponse = {
   shipmentStatus: string;
   shippingFee: string;
   codAmount: string;
+  handoverMethod: 'Pickup' | 'Dropoff';
+  pickupStation: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
   pickupAddress: string | null;
   deliveryAddress: string;
   recipientName: string;
@@ -665,6 +680,10 @@ type ProductsServiceMock = {
     Promise<ProductVariantE2eResponse>,
     [AuthenticatedUser, string, unknown]
   >;
+  createSellerProductVariantsBatch: jest.Mock<
+    Promise<ProductVariantE2eResponse[]>,
+    [AuthenticatedUser, string, unknown]
+  >;
   updateSellerProductVariant: jest.Mock<
     Promise<ProductVariantE2eResponse>,
     [AuthenticatedUser, string, string, unknown]
@@ -693,13 +712,29 @@ type ProductsServiceMock = {
     Promise<InventoryE2eResponse>,
     [AuthenticatedUser, string, string]
   >;
-  setSellerVariantInventory: jest.Mock<
+  receiveSellerVariantInventory: jest.Mock<
     Promise<InventoryE2eResponse>,
     [AuthenticatedUser, string, string, unknown]
   >;
   listSellerProducts: jest.Mock<
     Promise<PaginatedE2eResponse<ProductE2eResponse>>,
     [AuthenticatedUser, unknown]
+  >;
+  getSellerProduct: jest.Mock<
+    Promise<ProductE2eResponse>,
+    [AuthenticatedUser, string]
+  >;
+  submitSellerProduct: jest.Mock<
+    Promise<ProductE2eResponse>,
+    [AuthenticatedUser, string]
+  >;
+  stopSellingProduct: jest.Mock<
+    Promise<ProductE2eResponse>,
+    [AuthenticatedUser, string]
+  >;
+  resumeSellingProduct: jest.Mock<
+    Promise<ProductE2eResponse>,
+    [AuthenticatedUser, string]
   >;
 };
 
@@ -747,10 +782,6 @@ type PaymentsServiceMock = {
     Promise<CheckoutPreviewE2eResponse['paymentMethod'][]>,
     []
   >;
-  markFakeSuccess: jest.Mock<
-    Promise<OrderPaymentE2eResponse>,
-    [AuthenticatedUser, string]
-  >;
 };
 
 type ShippingServiceMock = {
@@ -767,14 +798,27 @@ type ShippingServiceMock = {
     Promise<ShipmentE2eResponse>,
     [AuthenticatedUser, string, unknown]
   >;
-  updateSellerShipmentTracking: jest.Mock<
-    Promise<ShipmentE2eResponse>,
-    [AuthenticatedUser, string, string, unknown]
+  listSellerHandoverStations: jest.Mock<
+    Promise<{ items: HandoverStationE2eResponse[] }>,
+    [AuthenticatedUser, string, unknown]
   >;
   syncSellerShipment: jest.Mock<
     Promise<ShipmentE2eResponse>,
     [AuthenticatedUser, string, string]
   >;
+  getSellerShipmentLabel: jest.Mock<
+    Promise<{ printUrl: string; expiresAt: Date }>,
+    [AuthenticatedUser, string, string]
+  >;
+};
+
+type HandoverStationE2eResponse = {
+  id: number;
+  name: string;
+  address: string;
+  wardName: string | null;
+  districtName: string | null;
+  provinceName: string | null;
 };
 
 type ReviewsServiceMock = {
@@ -853,6 +897,7 @@ const productResponse: ProductE2eResponse = {
   createdAt: '2026-07-03T00:00:00.000Z',
   updatedAt: '2026-07-03T00:00:00.000Z',
   productStatus: 'Draft',
+  warrantyMonths: 6,
   isViolation: false,
   isDeleted: false,
 };
@@ -864,7 +909,7 @@ const variantResponse: ProductVariantE2eResponse = {
   productIdString: '100',
   sku: 'DEN-BAN-GO',
   variantName: 'Màu gỗ',
-  variantOptionJson: '{"color":"wood"}',
+  attributes: { 'Màu sắc': 'Gỗ' },
   price: '159000',
   compareAtPrice: '199000',
   weightGram: 450,
@@ -1225,8 +1270,12 @@ const myOrderResponse: OrderListItemE2eResponse = {
           idString: '800',
           shipmentCode: 'SHP-20260703-DEMO',
           trackingNumber: 'TRACK-001',
+          carrierOrderCode: 'GHN-123456',
+          carrierStatus: 'transporting',
           shipmentStatus: 'InTransit',
           shippingFee: '35000',
+          handoverMethod: 'Pickup',
+          pickupStation: null,
           shippingCompany: {
             id: '10',
             idString: '10',
@@ -1284,26 +1333,6 @@ const myOrderResponse: OrderListItemE2eResponse = {
   ],
   createdAt: '2026-07-03T00:00:00.000Z',
   updatedAt: '2026-07-03T03:00:00.000Z',
-};
-
-const fakePaidPaymentResponse: OrderPaymentE2eResponse = {
-  id: '850',
-  idString: '850',
-  paymentCode: 'PAY-20260703-DEMO',
-  paymentMethod: {
-    id: '21',
-    idString: '21',
-    methodCode: 'FAKE_ONLINE',
-    methodName: 'Fake online',
-    isOnline: true,
-  },
-  providerName: 'FAKE_ONLINE',
-  amount: '195000',
-  paymentStatus: 'Paid',
-  paidAt: '2026-07-03T01:00:00.000Z',
-  expiredAt: null,
-  createdAt: '2026-07-03T00:00:00.000Z',
-  updatedAt: '2026-07-03T01:00:00.000Z',
 };
 
 const carrierProviderResponse: CarrierProviderE2eResponse = {
@@ -1375,6 +1404,8 @@ const shipmentResponse: ShipmentE2eResponse = {
   shipmentStatus: 'Pending',
   shippingFee: '35000',
   codAmount: '0',
+  handoverMethod: 'Pickup',
+  pickupStation: null,
   pickupAddress: 'Seller warehouse',
   deliveryAddress: '10 Demo, PhÆ°á»ng Báº¿n NghÃ©, Quáº­n 1, TP.HCM',
   recipientName: 'Customer Demo',
@@ -1514,6 +1545,10 @@ describe('App API (e2e)', () => {
         Promise<ProductVariantE2eResponse>,
         [AuthenticatedUser, string, unknown]
       >(),
+      createSellerProductVariantsBatch: jest.fn<
+        Promise<ProductVariantE2eResponse[]>,
+        [AuthenticatedUser, string, unknown]
+      >(),
       updateSellerProductVariant: jest.fn<
         Promise<ProductVariantE2eResponse>,
         [AuthenticatedUser, string, string, unknown]
@@ -1542,13 +1577,29 @@ describe('App API (e2e)', () => {
         Promise<InventoryE2eResponse>,
         [AuthenticatedUser, string, string]
       >(),
-      setSellerVariantInventory: jest.fn<
+      receiveSellerVariantInventory: jest.fn<
         Promise<InventoryE2eResponse>,
         [AuthenticatedUser, string, string, unknown]
       >(),
       listSellerProducts: jest.fn<
         Promise<PaginatedE2eResponse<ProductE2eResponse>>,
         [AuthenticatedUser, unknown]
+      >(),
+      getSellerProduct: jest.fn<
+        Promise<ProductE2eResponse>,
+        [AuthenticatedUser, string]
+      >(),
+      submitSellerProduct: jest.fn<
+        Promise<ProductE2eResponse>,
+        [AuthenticatedUser, string]
+      >(),
+      stopSellingProduct: jest.fn<
+        Promise<ProductE2eResponse>,
+        [AuthenticatedUser, string]
+      >(),
+      resumeSellingProduct: jest.fn<
+        Promise<ProductE2eResponse>,
+        [AuthenticatedUser, string]
       >(),
     };
     ordersService = {
@@ -1594,10 +1645,6 @@ describe('App API (e2e)', () => {
         Promise<CheckoutPreviewE2eResponse['paymentMethod'][]>,
         []
       >(),
-      markFakeSuccess: jest.fn<
-        Promise<OrderPaymentE2eResponse>,
-        [AuthenticatedUser, string]
-      >(),
     };
     shippingService = {
       listCarrierProviders: jest.fn<
@@ -1616,12 +1663,16 @@ describe('App API (e2e)', () => {
         Promise<ShipmentE2eResponse>,
         [AuthenticatedUser, string, unknown]
       >(),
-      updateSellerShipmentTracking: jest.fn<
-        Promise<ShipmentE2eResponse>,
-        [AuthenticatedUser, string, string, unknown]
+      listSellerHandoverStations: jest.fn<
+        Promise<{ items: HandoverStationE2eResponse[] }>,
+        [AuthenticatedUser, string, unknown]
       >(),
       syncSellerShipment: jest.fn<
         Promise<ShipmentE2eResponse>,
+        [AuthenticatedUser, string, string]
+      >(),
+      getSellerShipmentLabel: jest.fn<
+        Promise<{ printUrl: string; expiresAt: Date }>,
         [AuthenticatedUser, string, string]
       >(),
     };
@@ -1721,6 +1772,7 @@ describe('App API (e2e)', () => {
     productsService.deleteSellerProduct.mockReset();
     productsService.listSellerProductVariants.mockReset();
     productsService.createSellerProductVariant.mockReset();
+    productsService.createSellerProductVariantsBatch.mockReset();
     productsService.updateSellerProductVariant.mockReset();
     productsService.deleteSellerProductVariant.mockReset();
     productsService.listSellerProductImages.mockReset();
@@ -1728,8 +1780,12 @@ describe('App API (e2e)', () => {
     productsService.updateSellerProductImage.mockReset();
     productsService.deleteSellerProductImage.mockReset();
     productsService.getSellerVariantInventory.mockReset();
-    productsService.setSellerVariantInventory.mockReset();
+    productsService.receiveSellerVariantInventory.mockReset();
     productsService.listSellerProducts.mockReset();
+    productsService.getSellerProduct.mockReset();
+    productsService.submitSellerProduct.mockReset();
+    productsService.stopSellingProduct.mockReset();
+    productsService.resumeSellingProduct.mockReset();
     ordersService.checkoutPreview.mockReset();
     ordersService.createOrder.mockReset();
     ordersService.cancelMyOrder.mockReset();
@@ -1739,14 +1795,14 @@ describe('App API (e2e)', () => {
     ordersService.getSellerShopOrderDetail.mockReset();
     ordersService.confirmSellerShopOrder.mockReset();
     ordersService.prepareSellerShopOrder.mockReset();
-    paymentsService.markFakeSuccess.mockReset();
     paymentsService.listActiveMethods.mockReset();
     shippingService.listCarrierProviders.mockReset();
     shippingService.listActiveShippingServices.mockReset();
     shippingService.createShippingQuote.mockReset();
     shippingService.createSellerShipment.mockReset();
-    shippingService.updateSellerShipmentTracking.mockReset();
+    shippingService.listSellerHandoverStations.mockReset();
     shippingService.syncSellerShipment.mockReset();
+    shippingService.getSellerShipmentLabel.mockReset();
     reviewsService.createProductReview.mockReset();
     reviewsService.listPublicProductReviews.mockReset();
   });
@@ -2253,29 +2309,6 @@ describe('App API (e2e)', () => {
     expect(paymentsService.listActiveMethods).toHaveBeenCalledTimes(1);
   });
 
-  it('POST /api/payments/:id/fake-success marks fake payment paid', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    paymentsService.markFakeSuccess.mockResolvedValue(fakePaidPaymentResponse);
-
-    await request(server)
-      .post('/api/payments/850/fake-success')
-      .expect(201)
-      .expect((response) => {
-        const body = response.body as SuccessBody<OrderPaymentE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.paymentStatus).toBe('Paid');
-        expect(body.data.paymentMethod.methodCode).toBe('FAKE_ONLINE');
-        expect(body.data.paidAt).toBe('2026-07-03T01:00:00.000Z');
-      });
-
-    expect(paymentsService.markFakeSuccess).toHaveBeenCalledWith(
-      sellerUser,
-      '850',
-    );
-  });
-
   it('GET /api/seller/products lists products for current seller', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
@@ -2314,6 +2347,52 @@ describe('App API (e2e)', () => {
     expect(query.limit).toBe(20);
   });
 
+  it('GET /api/seller/products/:id returns current seller product detail', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+    productsService.getSellerProduct.mockResolvedValue(productResponse);
+
+    await request(server)
+      .get('/api/seller/products/100')
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as SuccessBody<ProductE2eResponse>;
+        expect(body.success).toBe(true);
+        expect(body.data.id).toBe('100');
+        expect(body.data.warrantyMonths).toBe(6);
+      });
+
+    expect(productsService.getSellerProduct).toHaveBeenCalledWith(
+      sellerUser,
+      '100',
+    );
+    expect(productsService.listSellerProducts).not.toHaveBeenCalled();
+    expect(productsService.listSellerProductVariants).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['submit', 'submitSellerProduct', 'PendingApproval'],
+    ['stop-selling', 'stopSellingProduct', 'Inactive'],
+    ['resume-selling', 'resumeSellingProduct', 'Published'],
+  ] as const)(
+    'POST /api/seller/products/:id/%s executes lifecycle action',
+    async (route, method, status) => {
+      const server = app.getHttpServer() as Parameters<typeof request>[0];
+      const response = { ...productResponse, productStatus: status };
+      productsService[method].mockResolvedValue(response);
+
+      await request(server)
+        .post(`/api/seller/products/100/${route}`)
+        .expect(201)
+        .expect((httpResponse) => {
+          const body = httpResponse.body as SuccessBody<ProductE2eResponse>;
+          expect(body.success).toBe(true);
+          expect(body.data.productStatus).toBe(status);
+        });
+
+      expect(productsService[method]).toHaveBeenCalledWith(sellerUser, '100');
+    },
+  );
+
   it('POST /api/seller/products creates a product with current seller', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
@@ -2330,7 +2409,6 @@ describe('App API (e2e)', () => {
         basePrice: '159000',
         compareAtPrice: '199000',
         warrantyMonths: 6,
-        weightGram: 450,
       })
       .expect(201)
       .expect((response) => {
@@ -2472,12 +2550,11 @@ describe('App API (e2e)', () => {
     await request(server)
       .post('/api/seller/products/100/variants')
       .send({
-        sku: 'DEN-BAN-GO',
-        variantName: 'Màu gỗ',
-        variantOptionJson: '{"color":"wood"}',
+        attributes: { 'Màu sắc': 'Gỗ' },
         price: '159000',
         compareAtPrice: '199000',
         weightGram: 450,
+        quantityOnHand: 12,
       })
       .expect(201)
       .expect((response) => {
@@ -2490,22 +2567,104 @@ describe('App API (e2e)', () => {
 
     const [userArg, productIdArg, dtoArg] =
       productsService.createSellerProductVariant.mock.calls[0];
-    const dto = dtoArg as { sku: string; price: string };
+    const dto = dtoArg as {
+      attributes: Record<string, string>;
+      price: string;
+      quantityOnHand: number;
+    };
 
     expect(userArg).toBe(sellerUser);
     expect(productIdArg).toBe('100');
-    expect(dto.sku).toBe('DEN-BAN-GO');
+    expect(dto.attributes).toEqual({ 'Màu sắc': 'Gỗ' });
     expect(dto.price).toBe('159000');
+    expect(dto.quantityOnHand).toBe(12);
   });
 
-  it('POST /api/seller/products/:productId/variants rejects invalid sku', async () => {
+  it('POST /api/seller/products/:productId/variants/batch creates combinations', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+    productsService.createSellerProductVariantsBatch.mockResolvedValue([
+      variantResponse,
+      {
+        ...variantResponse,
+        id: '201',
+        idString: '201',
+        variantName: 'Gỗ / M',
+        attributes: { 'Màu sắc': 'Gỗ', 'Kích cỡ': 'M' },
+      },
+    ]);
+
+    await request(server)
+      .post('/api/seller/products/100/variants/batch')
+      .send({
+        variants: [
+          {
+            attributes: { 'Màu sắc': 'Gỗ', 'Kích cỡ': 'S' },
+            price: '159000',
+            quantityOnHand: '12',
+          },
+          {
+            attributes: { 'Màu sắc': 'Gỗ', 'Kích cỡ': 'M' },
+            price: '159000',
+            quantityOnHand: '12',
+          },
+        ],
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as SuccessBody<ProductVariantE2eResponse[]>;
+        expect(body.success).toBe(true);
+        expect(body.data).toHaveLength(2);
+      });
+
+    const [userArg, productIdArg, dtoArg] =
+      productsService.createSellerProductVariantsBatch.mock.calls[0];
+    expect(userArg).toBe(sellerUser);
+    expect(productIdArg).toBe('100');
+    expect(dtoArg).toMatchObject({
+      variants: [
+        {
+          attributes: { 'Màu sắc': 'Gỗ', 'Kích cỡ': 'S' },
+          price: '159000',
+          quantityOnHand: 12,
+        },
+        {
+          attributes: { 'Màu sắc': 'Gỗ', 'Kích cỡ': 'M' },
+          price: '159000',
+          quantityOnHand: 12,
+        },
+      ],
+    });
+  });
+
+  it('POST /api/seller/products/:productId/variants rejects retired fields', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     await request(server)
       .post('/api/seller/products/100/variants')
       .send({
-        sku: 'bad sku with spaces',
-        variantName: 'Màu gỗ',
+        attributes: { 'Màu sắc': 'Gỗ' },
+        variantName: 'Tên cũ',
+        price: '159000',
+        quantityOnHand: 12,
+      })
+      .expect(400)
+      .expect((response) => {
+        const body = response.body as ErrorBody;
+
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+      });
+
+    expect(productsService.createSellerProductVariant).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/seller/products/:productId/variants rejects missing quantity', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+
+    await request(server)
+      .post('/api/seller/products/100/variants')
+      .send({
+        attributes: { 'Màu sắc': 'Gỗ' },
         price: '159000',
       })
       .expect(400)
@@ -2523,7 +2682,8 @@ describe('App API (e2e)', () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
     const updatedVariant = {
       ...variantResponse,
-      variantName: 'Màu tre',
+      variantName: 'Tre',
+      attributes: { 'Màu sắc': 'Tre' },
       price: '179000',
       variantStatus: 'Inactive',
     };
@@ -2535,7 +2695,7 @@ describe('App API (e2e)', () => {
     await request(server)
       .patch('/api/seller/products/100/variants/200')
       .send({
-        variantName: 'Màu tre',
+        attributes: { 'Màu sắc': 'Tre' },
         price: '179000',
         variantStatus: 'Inactive',
       })
@@ -2544,7 +2704,8 @@ describe('App API (e2e)', () => {
         const body = response.body as SuccessBody<ProductVariantE2eResponse>;
 
         expect(body.success).toBe(true);
-        expect(body.data.variantName).toBe('Màu tre');
+        expect(body.data.variantName).toBe('Tre');
+        expect(body.data.attributes).toEqual({ 'Màu sắc': 'Tre' });
         expect(body.data.variantStatus).toBe('Inactive');
       });
 
@@ -2618,7 +2779,7 @@ describe('App API (e2e)', () => {
     await request(server)
       .post('/api/seller/products/100/images')
       .send({
-        imageUrl: 'https://images.example.com/demo/den-ban-go.jpg',
+        assetId: '50',
         altText: 'Đèn bàn gỗ',
         sortOrder: 1,
         isThumbnail: true,
@@ -2629,18 +2790,15 @@ describe('App API (e2e)', () => {
 
         expect(body.success).toBe(true);
         expect(body.data.isThumbnail).toBe(true);
-        expect(body.data.imageUrl).toBe(
-          'https://images.example.com/demo/den-ban-go.jpg',
-        );
       });
 
     const [userArg, productIdArg, dtoArg] =
       productsService.createSellerProductImage.mock.calls[0];
-    const dto = dtoArg as { imageUrl: string; isThumbnail: boolean };
+    const dto = dtoArg as { assetId: string; isThumbnail: boolean };
 
     expect(userArg).toBe(sellerUser);
     expect(productIdArg).toBe('100');
-    expect(dto.imageUrl).toBe('https://images.example.com/demo/den-ban-go.jpg');
+    expect(dto.assetId).toBe('50');
     expect(dto.isThumbnail).toBe(true);
   });
 
@@ -2650,7 +2808,7 @@ describe('App API (e2e)', () => {
     await request(server)
       .post('/api/seller/products/100/images')
       .send({
-        imageUrl: 'javascript:alert(1)',
+        assetId: 'javascript:alert(1)',
       })
       .expect(400)
       .expect((response) => {
@@ -2667,7 +2825,7 @@ describe('App API (e2e)', () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
     const updatedImage = {
       ...imageResponse,
-      imageUrl: 'https://images.example.com/demo/den-ban-go-2.jpg',
+      altText: 'Ảnh đèn bàn mới',
       sortOrder: 2,
     };
 
@@ -2676,7 +2834,7 @@ describe('App API (e2e)', () => {
     await request(server)
       .patch('/api/seller/products/100/images/300')
       .send({
-        imageUrl: 'https://images.example.com/demo/den-ban-go-2.jpg',
+        altText: 'Ảnh đèn bàn mới',
         sortOrder: 2,
       })
       .expect(200)
@@ -2684,9 +2842,6 @@ describe('App API (e2e)', () => {
         const body = response.body as SuccessBody<ProductImageE2eResponse>;
 
         expect(body.success).toBe(true);
-        expect(body.data.imageUrl).toBe(
-          'https://images.example.com/demo/den-ban-go-2.jpg',
-        );
         expect(body.data.sortOrder).toBe(2);
       });
 
@@ -2753,15 +2908,14 @@ describe('App API (e2e)', () => {
   it('PATCH /api/seller/products/:productId/variants/:variantId/inventory sets inventory', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
-    productsService.setSellerVariantInventory.mockResolvedValue(
+    productsService.receiveSellerVariantInventory.mockResolvedValue(
       inventoryResponse,
     );
 
     await request(server)
       .patch('/api/seller/products/100/variants/200/inventory')
       .send({
-        quantityOnHand: 12,
-        lowStockThreshold: 3,
+        quantityReceived: 12,
       })
       .expect(200)
       .expect((response) => {
@@ -2772,14 +2926,13 @@ describe('App API (e2e)', () => {
       });
 
     const [userArg, productIdArg, variantIdArg, dtoArg] =
-      productsService.setSellerVariantInventory.mock.calls[0];
-    const dto = dtoArg as { quantityOnHand: number; lowStockThreshold: number };
+      productsService.receiveSellerVariantInventory.mock.calls[0];
+    const dto = dtoArg as { quantityReceived: number };
 
     expect(userArg).toBe(sellerUser);
     expect(productIdArg).toBe('100');
     expect(variantIdArg).toBe('200');
-    expect(dto.quantityOnHand).toBe(12);
-    expect(dto.lowStockThreshold).toBe(3);
+    expect(dto.quantityReceived).toBe(12);
   });
 
   it('PATCH /api/seller/products/:productId/variants/:variantId/inventory rejects negative quantity', async () => {
@@ -2788,7 +2941,7 @@ describe('App API (e2e)', () => {
     await request(server)
       .patch('/api/seller/products/100/variants/200/inventory')
       .send({
-        quantityOnHand: -1,
+        quantityReceived: -1,
       })
       .expect(400)
       .expect((response) => {
@@ -2798,7 +2951,9 @@ describe('App API (e2e)', () => {
         expect(body.error.code).toBe('VALIDATION_ERROR');
       });
 
-    expect(productsService.setSellerVariantInventory).not.toHaveBeenCalled();
+    expect(
+      productsService.receiveSellerVariantInventory,
+    ).not.toHaveBeenCalled();
   });
 
   it('GET /api/seller/orders lists seller shop orders', async () => {
@@ -3116,10 +3271,46 @@ describe('App API (e2e)', () => {
     expect(shippingService.createShippingQuote).not.toHaveBeenCalled();
   });
 
+  it('GET /api/seller/orders/:shopOrderId/shipments/handover-stations lists GHN stations', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+    const station: HandoverStationE2eResponse = {
+      id: 2443,
+      name: 'Bưu cục Nguyễn Thị Minh Khai',
+      address: '2 Bis Nguyễn Thị Minh Khai, Quận 1, TP.HCM',
+      wardName: 'Phường Đa Kao',
+      districtName: 'Quận 1',
+      provinceName: 'Hồ Chí Minh',
+    };
+    shippingService.listSellerHandoverStations.mockResolvedValue({
+      items: [station],
+    });
+
+    await request(server)
+      .get(
+        '/api/seller/orders/501/shipments/handover-stations?handoverMethod=Dropoff',
+      )
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as SuccessBody<{
+          items: HandoverStationE2eResponse[];
+        }>;
+
+        expect(body.success).toBe(true);
+        expect(body.data.items[0].id).toBe(2443);
+      });
+
+    expect(shippingService.listSellerHandoverStations).toHaveBeenCalledWith(
+      sellerUser,
+      '501',
+      expect.objectContaining({ handoverMethod: 'Dropoff' }),
+    );
+  });
+
   it('POST /api/seller/orders/:shopOrderId/shipments/:shipmentId/sync retries carrier registration', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
     const syncedShipment = {
       ...shipmentResponse,
+      trackingNumber: 'GHN-123456',
       carrierOrderCode: 'GHN-123456',
       carrierStatus: 'ready_to_pick',
     };
@@ -3136,140 +3327,102 @@ describe('App API (e2e)', () => {
         expect(body.data.carrierOrderCode).toBe('GHN-123456');
       });
 
-    const [userArg, shopOrderIdArg, shipmentIdArg] =
-      shippingService.syncSellerShipment.mock.calls[0];
-
-    expect(userArg).toBe(sellerUser);
-    expect(shopOrderIdArg).toBe('501');
-    expect(shipmentIdArg).toBe('800');
+    expect(shippingService.syncSellerShipment).toHaveBeenCalledWith(
+      sellerUser,
+      '501',
+      '800',
+    );
   });
 
-  it('POST /api/seller/orders/:shopOrderId/shipments creates a shipment', async () => {
+  it('POST /api/seller/orders/:shopOrderId/shipments creates a drop-off shipment', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
-
-    shippingService.createSellerShipment.mockResolvedValue(shipmentResponse);
+    const dropoffShipment: ShipmentE2eResponse = {
+      ...shipmentResponse,
+      handoverMethod: 'Dropoff',
+      pickupStation: {
+        id: 2443,
+        name: 'Bưu cục Nguyễn Thị Minh Khai',
+        address: '2 Bis Nguyễn Thị Minh Khai, Quận 1, TP.HCM',
+      },
+    };
+    shippingService.createSellerShipment.mockResolvedValue(dropoffShipment);
 
     await request(server)
       .post('/api/seller/orders/501/shipments')
-      .send({
-        shippingServiceId: '20',
-        shippingQuoteId: '30',
-        trackingNumber: 'TRACK-001',
-        pickupAddress: 'Seller warehouse',
-        expectedDeliveryAt: '2026-07-05T00:00:00.000Z',
-        note: 'Ready for courier',
-      })
+      .send({ handoverMethod: 'Dropoff', pickupStationId: 2443 })
       .expect(201)
       .expect((response) => {
         const body = response.body as SuccessBody<ShipmentE2eResponse>;
 
         expect(body.success).toBe(true);
-        expect(body.data.shipmentStatus).toBe('Pending');
-        expect(body.data.shippingFee).toBe('35000');
-        expect(body.data.items).toHaveLength(1);
+        expect(body.data.handoverMethod).toBe('Dropoff');
+        expect(body.data.pickupStation?.id).toBe(2443);
       });
 
-    const [userArg, shopOrderIdArg, dtoArg] =
-      shippingService.createSellerShipment.mock.calls[0];
-    const dto = dtoArg as {
-      shippingServiceId: string;
-      shippingQuoteId: string;
-      trackingNumber: string;
-    };
-
-    expect(userArg).toBe(sellerUser);
-    expect(shopOrderIdArg).toBe('501');
-    expect(dto.shippingServiceId).toBe('20');
-    expect(dto.shippingQuoteId).toBe('30');
-    expect(dto.trackingNumber).toBe('TRACK-001');
+    expect(shippingService.createSellerShipment).toHaveBeenCalledWith(
+      sellerUser,
+      '501',
+      expect.objectContaining({
+        handoverMethod: 'Dropoff',
+        pickupStationId: 2443,
+      }),
+    );
   });
 
-  it('POST /api/seller/orders/:shopOrderId/shipments rejects invalid tracking number', async () => {
+  it('POST /api/seller/orders/:shopOrderId/shipments rejects drop-off without station', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     await request(server)
       .post('/api/seller/orders/501/shipments')
-      .send({
-        shippingServiceId: '20',
-        trackingNumber: 'bad tracking',
-      })
+      .send({ handoverMethod: 'Dropoff' })
       .expect(400)
       .expect((response) => {
         const body = response.body as ErrorBody;
-
-        expect(body.success).toBe(false);
         expect(body.error.code).toBe('VALIDATION_ERROR');
       });
 
     expect(shippingService.createSellerShipment).not.toHaveBeenCalled();
   });
 
-  it('PATCH /api/seller/orders/:shopOrderId/shipments/:shipmentId/tracking updates tracking', async () => {
-    const server = app.getHttpServer() as Parameters<typeof request>[0];
-    const inTransitShipment = {
-      ...shipmentResponse,
-      shipmentStatus: 'InTransit',
-      trackingNumber: 'TRACK-002',
-      pickedUpAt: '2026-07-03T03:00:00.000Z',
-      updatedAt: '2026-07-03T03:00:00.000Z',
-    };
-
-    shippingService.updateSellerShipmentTracking.mockResolvedValue(
-      inTransitShipment,
-    );
-
-    await request(server)
-      .patch('/api/seller/orders/501/shipments/800/tracking')
-      .send({
-        shipmentStatus: 'InTransit',
-        trackingNumber: 'TRACK-002',
-        locationText: 'Sorting hub',
-        note: 'Package scanned',
-      })
-      .expect(200)
-      .expect((response) => {
-        const body = response.body as SuccessBody<ShipmentE2eResponse>;
-
-        expect(body.success).toBe(true);
-        expect(body.data.shipmentStatus).toBe('InTransit');
-        expect(body.data.trackingNumber).toBe('TRACK-002');
-      });
-
-    const [userArg, shopOrderIdArg, shipmentIdArg, dtoArg] =
-      shippingService.updateSellerShipmentTracking.mock.calls[0];
-    const dto = dtoArg as {
-      shipmentStatus: string;
-      trackingNumber: string;
-      locationText: string;
-      note: string;
-    };
-
-    expect(userArg).toBe(sellerUser);
-    expect(shopOrderIdArg).toBe('501');
-    expect(shipmentIdArg).toBe('800');
-    expect(dto.shipmentStatus).toBe('InTransit');
-    expect(dto.trackingNumber).toBe('TRACK-002');
-    expect(dto.locationText).toBe('Sorting hub');
-    expect(dto.note).toBe('Package scanned');
-  });
-
-  it('PATCH /api/seller/orders/:shopOrderId/shipments/:shipmentId/tracking rejects invalid status', async () => {
+  it('POST /api/seller/orders/:shopOrderId/shipments rejects manual tracking fields', async () => {
     const server = app.getHttpServer() as Parameters<typeof request>[0];
 
     await request(server)
-      .patch('/api/seller/orders/501/shipments/800/tracking')
-      .send({
-        shipmentStatus: 'Returned',
-      })
+      .post('/api/seller/orders/501/shipments')
+      .send({ handoverMethod: 'Pickup', trackingNumber: 'MANUAL-TRACKING' })
       .expect(400)
       .expect((response) => {
         const body = response.body as ErrorBody;
-
-        expect(body.success).toBe(false);
         expect(body.error.code).toBe('VALIDATION_ERROR');
       });
 
-    expect(shippingService.updateSellerShipmentTracking).not.toHaveBeenCalled();
+    expect(shippingService.createSellerShipment).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/seller/orders/:shopOrderId/shipments/:shipmentId/label creates a transient GHN label URL', async () => {
+    const server = app.getHttpServer() as Parameters<typeof request>[0];
+    shippingService.getSellerShipmentLabel.mockResolvedValue({
+      printUrl:
+        'https://dev-online-gateway.ghn.vn/a5/public-api/printA5?token=test',
+      expiresAt: new Date('2026-07-03T00:30:00.000Z'),
+    });
+
+    await request(server)
+      .post('/api/seller/orders/501/shipments/800/label')
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as SuccessBody<{
+          printUrl: string;
+          expiresAt: string;
+        }>;
+        expect(body.data.printUrl).toContain('/printA5?token=');
+      });
+
+    expect(shippingService.getSellerShipmentLabel).toHaveBeenCalledWith(
+      sellerUser,
+      '501',
+      '800',
+    );
   });
 
   it('GET /api/products/:slug/reviews lists public product reviews', async () => {

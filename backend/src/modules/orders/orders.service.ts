@@ -187,6 +187,27 @@ const sellerShopOrderInclude = {
       updatedAt: true,
     },
   },
+  shippingCompany: {
+    select: {
+      id: true,
+      companyName: true,
+      slug: true,
+    },
+  },
+  shippingService: {
+    select: {
+      id: true,
+      serviceCode: true,
+      serviceName: true,
+    },
+  },
+  shippingQuote: {
+    select: {
+      id: true,
+      estimatedMinDays: true,
+      estimatedMaxDays: true,
+    },
+  },
   items: {
     orderBy: [{ createdAt: 'asc' }],
   },
@@ -2215,8 +2236,21 @@ export class OrdersService {
       idString: shipment.id.toString(),
       shipmentCode: shipment.shipmentCode,
       trackingNumber: shipment.trackingNumber,
+      carrierOrderCode: shipment.carrierOrderCode,
+      carrierStatus: shipment.carrierStatus,
       shipmentStatus: shipment.shipmentStatus,
       shippingFee: this.formatMoney(this.toDecimal(shipment.shippingFee)),
+      handoverMethod: shipment.handoverMethod,
+      pickupStation:
+        shipment.pickupStationId &&
+        shipment.pickupStationName &&
+        shipment.pickupStationAddress
+          ? {
+              id: shipment.pickupStationId,
+              name: shipment.pickupStationName,
+              address: shipment.pickupStationAddress,
+            }
+          : null,
       shippingCompany: {
         id: shipment.shippingCompany.id.toString(),
         idString: shipment.shippingCompany.id.toString(),
@@ -2294,6 +2328,29 @@ export class OrdersService {
       confirmedAt: shopOrder.confirmedAt,
       preparedAt: shopOrder.preparedAt,
       completedAt: shopOrder.completedAt,
+      shippingSelection:
+        shopOrder.shippingQuote &&
+        shopOrder.shippingCompany &&
+        shopOrder.shippingService
+          ? {
+              shippingQuoteId: shopOrder.shippingQuote.id.toString(),
+              shippingQuoteIdString: shopOrder.shippingQuote.id.toString(),
+              shippingCompany: {
+                id: shopOrder.shippingCompany.id.toString(),
+                idString: shopOrder.shippingCompany.id.toString(),
+                companyName: shopOrder.shippingCompany.companyName,
+                slug: shopOrder.shippingCompany.slug,
+              },
+              shippingService: {
+                id: shopOrder.shippingService.id.toString(),
+                idString: shopOrder.shippingService.id.toString(),
+                serviceCode: shopOrder.shippingService.serviceCode,
+                serviceName: shopOrder.shippingService.serviceName,
+              },
+              estimatedMinDays: shopOrder.shippingQuote.estimatedMinDays,
+              estimatedMaxDays: shopOrder.shippingQuote.estimatedMaxDays,
+            }
+          : null,
       items: shopOrder.items.map((item) => this.toOrderItemResponse(item)),
       shipments: (shopOrder.shipments ?? []).map((shipment) =>
         this.toOrderShipmentResponse(shipment),

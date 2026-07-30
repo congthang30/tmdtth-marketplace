@@ -26,9 +26,11 @@ export type ProductVariant = {
   idString: string;
   sku: string;
   variantName: string;
+  attributes: Record<string, string>;
   price: string;
   compareAtPrice: string | null;
   quantityAvailable: number;
+  image: ProductImage | null;
 };
 
 export type ProductListItem = {

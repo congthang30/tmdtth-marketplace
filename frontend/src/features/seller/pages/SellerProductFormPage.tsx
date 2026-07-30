@@ -45,11 +45,6 @@ const productSchema = z.object({
     .string()
     .regex(integerPattern, "Số tháng bảo hành phải là số nguyên không âm")
     .optional(),
-  weightGram: z
-    .string()
-    .regex(integerPattern, "Khối lượng phải là số nguyên không âm")
-    .optional(),
-  productStatus: z.enum(["Draft", "Published"]),
   shopCategoryIds: z.array(z.string()),
 });
 
@@ -63,8 +58,6 @@ const defaultValues: ProductFormValues = {
   basePrice: "",
   compareAtPrice: "",
   warrantyMonths: "",
-  weightGram: "",
-  productStatus: "Draft",
   shopCategoryIds: [],
 };
 
@@ -86,10 +79,7 @@ function toFormValues(product: SellerProduct, shopCategories: SellerShopCategory
     brand: product.brand ?? "",
     basePrice: product.basePrice,
     compareAtPrice: product.compareAtPrice ?? "",
-    warrantyMonths: "",
-    weightGram: "",
-    productStatus:
-      product.productStatus === "Published" ? "Published" : "Draft",
+    warrantyMonths: String(product.warrantyMonths),
     shopCategoryIds: shopCategories
       .filter((category) => category.productIds.includes(product.id))
       .map((category) => category.id),
@@ -106,8 +96,7 @@ function toRequest(values: ProductFormValues, shopId?: string): ProductRequest {
     basePrice: values.basePrice.trim(),
     compareAtPrice: optionalString(values.compareAtPrice),
     warrantyMonths: optionalNumber(values.warrantyMonths),
-    weightGram: optionalNumber(values.weightGram),
-    productStatus: values.productStatus,
+    shopCategoryIds: values.shopCategoryIds,
   };
 }
 
@@ -134,13 +123,13 @@ export function SellerProductFormPage() {
     queryKey: ["seller", "shop-categories", "product-form"],
     queryFn: sellerShopCategoriesApi.list,
   });
-  const productsQuery = useQuery({
-    queryKey: ["seller", "products", "lookup"],
-    queryFn: () => sellerProductsApi.list(1, 100),
+  const productQuery = useQuery({
+    queryKey: ["seller", "products", "detail", id],
+    queryFn: () => sellerProductsApi.get(id ?? ""),
     enabled: isEdit,
   });
 
-  const product = productsQuery.data?.items.find((item) => item.id === id);
+  const product = productQuery.data;
   const categories = flattenCategories(categoriesQuery.data ?? []);
   const watchedBasePrice = form.watch("basePrice");
   const watchedCompareAtPrice = form.watch("compareAtPrice");
@@ -150,32 +139,20 @@ export function SellerProductFormPage() {
     ? Math.round((1 - numericBasePrice / numericCompareAtPrice) * 100)
     : 0;
 
-  const shopCategories = shopCategoriesQuery.data ?? [];
+  const shopCategories = shopCategoriesQuery.data;
+  const availableShopCategories = shopCategories ?? [];
 
   useEffect(() => {
-    if (product && shopCategoriesQuery.isSuccess) {
+    if (product && shopCategories) {
       form.reset(toFormValues(product, shopCategories));
     }
-  }, [form, product, shopCategories, shopCategoriesQuery.isSuccess]);
+  }, [form, product, shopCategories]);
 
   const mutation = useMutation({
-    mutationFn: async (values: ProductFormValues) => {
-      const savedProduct = isEdit && id
-        ? await sellerProductsApi.update(id, toRequest(values))
-        : await sellerProductsApi.create(toRequest(values, shopQuery.data?.id));
-      await Promise.all(
-        shopCategories.map((category) => {
-          const shouldContain = values.shopCategoryIds.includes(category.id);
-          const productIds = category.productIds.filter((productId) => productId !== savedProduct.id);
-          if (shouldContain) productIds.push(savedProduct.id);
-          const changed = shouldContain !== category.productIds.includes(savedProduct.id);
-          return changed
-            ? sellerShopCategoriesApi.assignProducts(category.id, productIds)
-            : Promise.resolve();
-        }),
-      );
-      return savedProduct;
-    },
+    mutationFn: (values: ProductFormValues) =>
+      isEdit && id
+        ? sellerProductsApi.update(id, toRequest(values))
+        : sellerProductsApi.create(toRequest(values, shopQuery.data?.id)),
     onSuccess: async (savedProduct) => {
        await Promise.all([
          queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
@@ -194,12 +171,12 @@ export function SellerProductFormPage() {
     shopQuery.isLoading ||
     categoriesQuery.isLoading ||
     shopCategoriesQuery.isLoading ||
-    productsQuery.isLoading
+    productQuery.isLoading
   ) {
     return <Skeleton className="h-96 w-full" />;
   }
 
-  if (shopQuery.isError || categoriesQuery.isError || shopCategoriesQuery.isError || productsQuery.isError) {
+  if (shopQuery.isError || categoriesQuery.isError || shopCategoriesQuery.isError || productQuery.isError) {
     return (
       <ErrorState
         title="Không thể tải biểu mẫu sản phẩm"
@@ -303,31 +280,22 @@ export function SellerProductFormPage() {
             error={form.formState.errors.brand?.message}
             {...form.register("brand")}
           />
-          <SelectInput
-            label="Trạng thái"
-            error={form.formState.errors.productStatus?.message}
-            {...form.register("productStatus")}
-          >
-            <option value="Draft">Lưu bản nháp</option>
-            <option value="Published">Gửi phê duyệt</option>
-          </SelectInput>
+          {isEdit && product?.productStatus === "PendingApproval" ? (
+            <Alert tone="info" className="md:col-span-2">
+              Sản phẩm đang chờ phê duyệt. Bạn có thể chỉnh sửa sau khi có kết quả.
+            </Alert>
+          ) : null}
           <TextInput
             label="Thời hạn bảo hành (tháng)"
             inputMode="numeric"
             error={form.formState.errors.warrantyMonths?.message}
             {...form.register("warrantyMonths")}
           />
-          <TextInput
-            label="Khối lượng (gam)"
-            inputMode="numeric"
-            error={form.formState.errors.weightGram?.message}
-            {...form.register("weightGram")}
-          />
           <fieldset className="md:col-span-2 rounded-lg border border-border p-4">
             <legend className="px-1 text-sm font-medium text-ink">Danh mục của gian hàng</legend>
-            {shopCategories.length > 0 ? (
+            {availableShopCategories.length > 0 ? (
               <div className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                {shopCategories.filter((category) => category.isActive).map((category) => (
+                {availableShopCategories.filter((category) => category.isActive).map((category) => (
                   <label key={category.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 hover:bg-surface">
                     <input
                       type="checkbox"
@@ -351,7 +319,7 @@ export function SellerProductFormPage() {
             {...form.register("description")}
           />
           <div className="md:col-span-2">
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button type="submit" disabled={mutation.isPending || product?.productStatus === "PendingApproval"}>
               <Save size={16} aria-hidden="true" />
               {mutation.isPending ? "Đang lưu..." : "Lưu sản phẩm"}
             </Button>

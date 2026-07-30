@@ -22,7 +22,7 @@ import type { ProductImageRequest, SellerImage } from "../types";
 
 const imageSchema = z.object({
   productVariantId: z.string().optional(),
-  imageUrl: z.string().trim().min(1, "Vui lòng chọn và tải hình ảnh lên"),
+  assetId: z.string().trim().optional(),
   altText: z.string().trim().max(255, "Văn bản thay thế quá dài").optional(),
   sortOrder: z
     .string()
@@ -35,7 +35,7 @@ type ImageFormValues = z.infer<typeof imageSchema>;
 
 const defaultValues: ImageFormValues = {
   productVariantId: "",
-  imageUrl: "",
+  assetId: "",
   altText: "",
   sortOrder: "0",
   isThumbnail: false,
@@ -48,7 +48,7 @@ const optionalString = (value: string | undefined) => {
 
 const toRequest = (values: ImageFormValues): ProductImageRequest => ({
   productVariantId: optionalString(values.productVariantId),
-  imageUrl: values.imageUrl.trim(),
+  assetId: optionalString(values.assetId),
   altText: optionalString(values.altText),
   sortOrder: optionalString(values.sortOrder)
     ? Number(values.sortOrder)
@@ -58,7 +58,7 @@ const toRequest = (values: ImageFormValues): ProductImageRequest => ({
 
 const toFormValues = (image: SellerImage): ImageFormValues => ({
   productVariantId: image.productVariantId ?? "",
-  imageUrl: image.imageUrl,
+  assetId: "",
   altText: image.altText ?? "",
   sortOrder: String(image.sortOrder),
   isThumbnail: image.isThumbnail,
@@ -101,7 +101,7 @@ export function SellerProductImagesPage() {
     mutationFn: (selectedFile: File) => sellerUploadsApi.upload(selectedFile),
     onSuccess: async (uploaded) => {
       await queryClient.invalidateQueries({ queryKey: ["seller", "uploads"] });
-      form.setValue("imageUrl", uploaded.url, { shouldValidate: true });
+      form.setValue("assetId", uploaded.assetId, { shouldValidate: true });
       pushToast({ tone: "success", title: "Đã tải hình ảnh lên" });
     },
   });
@@ -128,6 +128,29 @@ export function SellerProductImagesPage() {
       setFile(null);
     },
   });
+
+  const closeImageModal = () => {
+    saveMutation.reset();
+    uploadMutation.reset();
+    form.reset(defaultValues);
+    setFile(null);
+    setEditingImage(null);
+    setIsCreateOpen(false);
+  };
+
+  const openCreateImage = () => {
+    saveMutation.reset();
+    uploadMutation.reset();
+    setEditingImage(null);
+    setIsCreateOpen(true);
+  };
+
+  const openEditImage = (image: SellerImage) => {
+    saveMutation.reset();
+    uploadMutation.reset();
+    setIsCreateOpen(false);
+    setEditingImage(image);
+  };
 
   const thumbnailMutation = useMutation({
     mutationFn: (imageId: string) =>
@@ -176,7 +199,7 @@ export function SellerProductImagesPage() {
             </p>
             <h1 className="mt-2 text-2xl font-semibold">Hình ảnh sản phẩm</h1>
           </div>
-          <Button type="button" onClick={() => setIsCreateOpen(true)}>
+          <Button type="button" onClick={openCreateImage}>
             <ImagePlus size={16} aria-hidden="true" />
             Thêm hình ảnh
           </Button>
@@ -216,7 +239,7 @@ export function SellerProductImagesPage() {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => setEditingImage(image)}
+                      onClick={() => openEditImage(image)}
                     >
                       Chỉnh sửa
                     </Button>
@@ -249,7 +272,7 @@ export function SellerProductImagesPage() {
             title="Chưa có hình ảnh"
             description="Hãy chọn và tải hình ảnh lên cho sản phẩm này."
             action={
-              <Button type="button" onClick={() => setIsCreateOpen(true)}>
+              <Button type="button" onClick={openCreateImage}>
                 <ImagePlus size={16} aria-hidden="true" />
                 Thêm hình ảnh
               </Button>
@@ -261,19 +284,15 @@ export function SellerProductImagesPage() {
       <Modal
         open={isModalOpen}
         title={editingImage ? "Chỉnh sửa hình ảnh" : "Thêm hình ảnh"}
-        onClose={() => {
-          setEditingImage(null);
-          setIsCreateOpen(false);
-        }}
+        onClose={closeImageModal}
+        closeDisabled={saveMutation.isPending || uploadMutation.isPending}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
-              onClick={() => {
-                setEditingImage(null);
-                setIsCreateOpen(false);
-              }}
+              disabled={saveMutation.isPending || uploadMutation.isPending}
+              onClick={closeImageModal}
             >
               Hủy
             </Button>
@@ -311,15 +330,15 @@ export function SellerProductImagesPage() {
           />
           {uploadMutation.isPending ? (
             <p className="flex min-h-11 items-center text-sm font-medium text-primary-700">Đang tải hình ảnh lên...</p>
-          ) : file && form.formState.dirtyFields.imageUrl ? (
+          ) : file && form.formState.dirtyFields.assetId ? (
             <p className="text-sm font-medium text-success">Ảnh mới đã tải lên và sẵn sàng để lưu.</p>
           ) : editingImage ? (
             <p className="text-xs text-muted">Chọn tệp mới để thay thế hình ảnh hiện tại.</p>
           ) : (
             <p className="text-xs text-muted">Chọn tệp, hệ thống sẽ tự động tải ảnh lên.</p>
           )}
-          {form.formState.errors.imageUrl ? (
-            <p className="text-xs text-danger">{form.formState.errors.imageUrl.message}</p>
+          {form.formState.errors.assetId ? (
+            <p className="text-xs text-danger">{form.formState.errors.assetId.message}</p>
           ) : null}
         </div>
         {uploadsQuery.isLoading ? (
@@ -332,11 +351,11 @@ export function SellerProductImagesPage() {
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {uploads.map((upload) => (
                 <button
-                  key={upload.fileName}
+                  key={upload.assetId}
                   type="button"
                   className="flex items-center gap-3 rounded-md border border-border bg-surface p-2 text-left text-sm hover:border-primary-300"
                   onClick={() =>
-                    form.setValue("imageUrl", upload.url, {
+                    form.setValue("assetId", upload.assetId, {
                       shouldDirty: true,
                       shouldValidate: true,
                     })
@@ -365,7 +384,13 @@ export function SellerProductImagesPage() {
         <form
           id="image-form"
           className="space-y-4"
-          onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) => {
+            if (!editingImage && !values.assetId) {
+              form.setError("assetId", { message: "Vui lòng chọn và tải hình ảnh lên" });
+              return;
+            }
+            saveMutation.mutate(values);
+          })}
         >
           <SelectInput
             label="Phân loại"
@@ -390,8 +415,8 @@ export function SellerProductImagesPage() {
             error={form.formState.errors.sortOrder?.message}
             {...form.register("sortOrder")}
           />
-          <label className="flex items-center gap-2 text-sm font-medium text-ink">
-            <input type="checkbox" {...form.register("isThumbnail")} />
+          <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-ink">
+            <input className="h-5 w-5" type="checkbox" {...form.register("isThumbnail")} />
             Đặt làm ảnh đại diện
           </label>
         </form>
@@ -400,13 +425,23 @@ export function SellerProductImagesPage() {
       <Modal
         open={Boolean(deleteTarget)}
         title="Xóa hình ảnh"
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => {
+          if (!deleteMutation.isPending) {
+            deleteMutation.reset();
+            setDeleteTarget(null);
+          }
+        }}
+        closeDisabled={deleteMutation.isPending}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setDeleteTarget(null)}
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                deleteMutation.reset();
+                setDeleteTarget(null);
+              }}
             >
               Hủy
             </Button>

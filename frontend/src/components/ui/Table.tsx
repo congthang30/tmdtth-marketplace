@@ -16,8 +16,8 @@ export function Table({
   ...props
 }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-panel">
-      <div className="overflow-x-auto">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white shadow-panel">
+      <div className="max-w-full overflow-x-auto">
         <table
           className={joinClasses('min-w-full divide-y divide-border', className)}
           {...props}

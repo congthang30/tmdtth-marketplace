@@ -5,21 +5,28 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { createPaginatedResult } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
 import { CarrierRegistry } from './carriers/carrier.registry';
-import { CarrierApiError } from './carriers/carrier.types';
+import {
+  CarrierApiError,
+  CarrierNotConfiguredError,
+  CarrierOrderResult,
+  CarrierTrackingResult,
+} from './carriers/carrier.types';
+import { GhnClient } from './carriers/ghn.client';
 import { ActiveShippingServiceQueryDto } from './dto/active-shipping-service-query.dto';
 import { CreateShippingQuoteDto } from './dto/create-shipping-quote.dto';
 import { CreateShipmentDto } from './dto/create-shipment.dto';
+import { HandoverStationsQueryDto } from './dto/handover-stations-query.dto';
 import { ShippingServiceQueryDto } from './dto/shipping-service-query.dto';
-import { UpdateShipmentTrackingDto } from './dto/update-shipment-tracking.dto';
 import {
+  HandoverStationResponse,
   ShippingQuoteResponse,
   ShippingServiceResponse,
   ShipmentItemResponse,
+  ShipmentLabelResponse,
   ShipmentResponse,
 } from './types';
 
@@ -33,6 +40,8 @@ const SHOP_ORDER_STATUS_COMPLETED = 'Completed';
 const ORDER_STATUS_SHIPPING = 'Shipping';
 const ORDER_STATUS_DELIVERED = 'Delivered';
 const ORDER_STATUS_COMPLETED = 'Completed';
+const SHIPMENT_STATUS_REGISTERING = 'Registering';
+const SHIPMENT_STATUS_SYNC_FAILED = 'SyncFailed';
 const SHIPMENT_STATUS_PENDING = 'Pending';
 const SHIPMENT_STATUS_PICKED_UP = 'PickedUp';
 const SHIPMENT_STATUS_IN_TRANSIT = 'InTransit';
@@ -54,20 +63,32 @@ const PARENT_ORDER_PRE_DELIVERED_STATUSES = [
   'Shipping',
 ] as const;
 const SHIPMENT_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  [SHIPMENT_STATUS_REGISTERING]: [
+    SHIPMENT_STATUS_PENDING,
+    SHIPMENT_STATUS_SYNC_FAILED,
+  ],
+  [SHIPMENT_STATUS_SYNC_FAILED]: [
+    SHIPMENT_STATUS_REGISTERING,
+    SHIPMENT_STATUS_PENDING,
+  ],
   [SHIPMENT_STATUS_PENDING]: [
     SHIPMENT_STATUS_PICKED_UP,
     SHIPMENT_STATUS_IN_TRANSIT,
+    SHIPMENT_STATUS_DELIVERED,
     SHIPMENT_STATUS_FAILED,
+    SHIPMENT_STATUS_RETURNED,
     SHIPMENT_STATUS_CANCELLED,
   ],
   [SHIPMENT_STATUS_PICKED_UP]: [
     SHIPMENT_STATUS_IN_TRANSIT,
     SHIPMENT_STATUS_DELIVERED,
     SHIPMENT_STATUS_FAILED,
+    SHIPMENT_STATUS_RETURNED,
   ],
   [SHIPMENT_STATUS_IN_TRANSIT]: [
     SHIPMENT_STATUS_DELIVERED,
     SHIPMENT_STATUS_FAILED,
+    SHIPMENT_STATUS_RETURNED,
   ],
   [SHIPMENT_STATUS_DELIVERED]: [],
   [SHIPMENT_STATUS_FAILED]: [SHIPMENT_STATUS_RETURNED],
@@ -146,6 +167,8 @@ const createShipmentShopOrderInclude = {
       id: true,
       ownerUserId: true,
       isDeleted: true,
+      shopName: true,
+      phoneNumber: true,
       province: true,
       ward: true,
       streetAddress: true,
@@ -160,6 +183,9 @@ const createShipmentShopOrderInclude = {
       shippingProvince: true,
       shippingWard: true,
       shippingStreetAddress: true,
+      paymentMethod: {
+        select: { methodCode: true },
+      },
     },
   },
   items: {
@@ -219,6 +245,10 @@ type ShipmentEntity = {
   shipmentStatus: string;
   shippingFee: { toString(): string };
   codAmount: { toString(): string };
+  handoverMethod: string;
+  pickupStationId: number | null;
+  pickupStationName: string | null;
+  pickupStationAddress: string | null;
   pickupAddress: string | null;
   deliveryAddress: string;
   recipientName: string;
@@ -243,6 +273,7 @@ export class ShippingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly carrierRegistry: CarrierRegistry,
+    private readonly ghnClient: GhnClient,
   ) {}
 
   /**
@@ -257,22 +288,20 @@ export class ShippingService {
       orderBy: [{ companyName: 'asc' }],
     });
 
-    const withHealth = await Promise.all(
-      companies.map(async (company) => {
-        const client = this.carrierRegistry.getClient(company.provider);
-        const isConfigured = client.isConfigured();
-        return {
-          id: company.id.toString(),
-          idString: company.id.toString(),
-          provider: company.provider,
-          code: company.code,
-          companyName: company.companyName,
-          slug: company.slug,
-          companyStatus: company.companyStatus,
-          isConfigured,
-        };
-      }),
-    );
+    const withHealth = companies.map((company) => {
+      const client = this.carrierRegistry.getClient(company.provider);
+      const isConfigured = client.isConfigured();
+      return {
+        id: company.id.toString(),
+        idString: company.id.toString(),
+        provider: company.provider,
+        code: company.code,
+        companyName: company.companyName,
+        slug: company.slug,
+        companyStatus: company.companyStatus,
+        isConfigured,
+      };
+    });
 
     return {
       message: 'Carrier providers retrieved successfully',
@@ -424,229 +453,297 @@ export class ShippingService {
     dto: CreateShipmentDto,
   ): Promise<ShipmentResponse> {
     const id = this.parseShopOrderId(shopOrderId);
-    const shippingServiceId = this.parseShippingServiceId(
-      dto.shippingServiceId,
+    const existingShipment = await this.prisma.shipment.findFirst({
+      where: {
+        shopOrderId: id,
+        shopOrder: {
+          shop: { ownerUserId: user.id, isDeleted: false },
+        },
+      },
+      include: updateShipmentTrackingInclude,
+    });
+
+    if (existingShipment) {
+      if (
+        existingShipment.carrierOrderCode ||
+        existingShipment.shipmentStatus !== SHIPMENT_STATUS_SYNC_FAILED
+      ) {
+        throw new BadRequestException({
+          code: 'SHOP_ORDER_SHIPMENT_EXISTS',
+          message: 'Shipment already exists for this shop order',
+          details: [{ field: 'shopOrderId' }],
+        });
+      }
+
+      throw new BadRequestException({
+        code: 'SHIPMENT_RETRY_REQUIRED',
+        message: 'Retry the failed shipment instead of creating another one',
+        details: [{ shipmentId: existingShipment.id.toString() }],
+      });
+    }
+
+    const shopOrder = await this.prisma.shopOrder.findFirst({
+      where: {
+        id,
+        shop: { ownerUserId: user.id, isDeleted: false },
+      },
+      include: createShipmentShopOrderInclude,
+    });
+
+    if (!shopOrder) {
+      throw new NotFoundException({
+        code: 'SHOP_ORDER_NOT_FOUND',
+        message: 'Shop order not found',
+        details: [{ field: 'shopOrderId' }],
+      });
+    }
+    if (shopOrder.orderStatus !== SHOP_ORDER_STATUS_PREPARED) {
+      throw new BadRequestException({
+        code: 'SHOP_ORDER_INVALID_STATUS',
+        message: 'Only prepared shop orders can arrange shipment handover',
+        details: [{ field: 'orderStatus' }],
+      });
+    }
+    if (shopOrder.items.length === 0) {
+      throw new BadRequestException({
+        code: 'SHOP_ORDER_HAS_NO_ITEMS',
+        message: 'Shop order has no items to ship',
+        details: [{ field: 'shopOrderId' }],
+      });
+    }
+    if (
+      !shopOrder.shippingServiceId ||
+      !shopOrder.shippingCompanyId ||
+      !shopOrder.shippingQuoteId
+    ) {
+      throw new BadRequestException({
+        code: 'SHOP_ORDER_SHIPPING_SELECTION_MISSING',
+        message: 'Shop order has no committed shipping selection',
+        details: [{ field: 'shopOrderId' }],
+      });
+    }
+
+    const service = await this.requireShipmentShippingService(
+      this.prisma,
+      shopOrder.shippingServiceId,
     );
-    const shippingQuoteId = dto.shippingQuoteId
-      ? this.parseShippingQuoteId(dto.shippingQuoteId)
-      : null;
+    if (service.shippingCompanyId !== shopOrder.shippingCompanyId) {
+      throw new BadRequestException({
+        code: 'SHOP_ORDER_SHIPPING_SELECTION_MISMATCH',
+        message: 'Shipment must use the customer shipping selection',
+        details: [{ field: 'shippingServiceId' }],
+      });
+    }
 
-    const { shipment, service, shipmentItems, shopOrder } =
-      await this.prisma.$transaction(async (tx) => {
-        const shopOrder = await tx.shopOrder.findFirst({
-          where: {
-            id,
-            shop: {
-              ownerUserId: user.id,
-              isDeleted: false,
-            },
-          },
-          include: createShipmentShopOrderInclude,
-        });
-
-        if (!shopOrder) {
-          throw new NotFoundException({
-            code: 'SHOP_ORDER_NOT_FOUND',
-            message: 'Shop order not found',
-            details: [{ field: 'shopOrderId' }],
-          });
-        }
-
-        if (shopOrder.orderStatus !== SHOP_ORDER_STATUS_PREPARED) {
-          throw new BadRequestException({
-            code: 'SHOP_ORDER_INVALID_STATUS',
-            message: 'Only prepared shop orders can create shipments',
-            details: [
-              {
-                field: 'orderStatus',
-                currentStatus: shopOrder.orderStatus,
-                allowedStatus: SHOP_ORDER_STATUS_PREPARED,
-              },
-            ],
-          });
-        }
-
-        if (shopOrder.items.length === 0) {
-          throw new BadRequestException({
-            code: 'SHOP_ORDER_HAS_NO_ITEMS',
-            message: 'Shop order has no items to ship',
-            details: [{ field: 'shopOrderId' }],
-          });
-        }
-
-        const existingShipmentCount = await tx.shipment.count({
-          where: { shopOrderId: shopOrder.id },
-        });
-
-        if (existingShipmentCount > 0) {
-          throw new BadRequestException({
-            code: 'SHOP_ORDER_SHIPMENT_EXISTS',
-            message: 'Shipment already exists for this shop order',
-            details: [{ field: 'shopOrderId' }],
-          });
-        }
-
-        const service = await this.requireShipmentShippingService(
-          tx,
-          shippingServiceId,
-        );
-        const now = new Date();
-        const weightGram = this.calculateShopOrderWeightGram(shopOrder);
-        const shippingFee = shippingQuoteId
-          ? await this.requireShipmentQuoteFee(
-              tx,
-              shippingQuoteId,
-              shopOrder,
-              service,
-              now,
-            )
-          : null;
-
+    const station =
+      dto.handoverMethod === 'Dropoff'
+        ? await this.requireGhnStation(shopOrder, dto.pickupStationId)
+        : null;
+    const now = new Date();
+    const { shipment, shipmentItems } = await this.prisma.$transaction(
+      async (tx) => {
         const shipment = await tx.shipment.create({
           data: {
             shopOrderId: shopOrder.id,
             shippingCompanyId: service.shippingCompanyId,
             shippingServiceId: service.id,
             shipmentCode: this.createBusinessCode('SHP', now),
-            trackingNumber: this.normalizeNullableText(dto.trackingNumber),
-            shipmentStatus: SHIPMENT_STATUS_PENDING,
-            shippingFee: shippingFee ?? new Prisma.Decimal(0),
-            codAmount: new Prisma.Decimal(0),
-            pickupAddress: this.normalizeNullableText(dto.pickupAddress),
+            trackingNumber: null,
+            shipmentStatus: SHIPMENT_STATUS_REGISTERING,
+            shippingFee: new Prisma.Decimal(
+              shopOrder.shippingFeeAmount.toString(),
+            ),
+            codAmount: new Prisma.Decimal(
+              shopOrder.order.paymentMethod.methodCode === 'COD'
+                ? shopOrder.totalAmount.toString()
+                : 0,
+            ),
+            handoverMethod: dto.handoverMethod,
+            pickupStationId: station?.id ?? null,
+            pickupStationName: station?.name ?? null,
+            pickupStationAddress: station?.address ?? null,
+            pickupAddress: this.buildPickupAddress(shopOrder.shop),
             deliveryAddress: this.buildDeliveryAddress(shopOrder),
             recipientName: shopOrder.order.receiverName,
             recipientPhone: shopOrder.order.receiverPhone,
-            expectedDeliveryAt: dto.expectedDeliveryAt
-              ? new Date(dto.expectedDeliveryAt)
-              : null,
+            expectedDeliveryAt: null,
             createdAt: now,
             updatedAt: now,
           },
         });
         const shipmentItems: ShipmentItemEntity[] = [];
-
         for (const item of shopOrder.items) {
-          const shipmentItem = await tx.shipmentItem.create({
-            data: {
-              shipmentId: shipment.id,
-              orderItemId: item.id,
-              quantity: item.quantity,
-              createdAt: now,
-            },
-          });
-          shipmentItems.push(shipmentItem);
+          shipmentItems.push(
+            await tx.shipmentItem.create({
+              data: {
+                shipmentId: shipment.id,
+                orderItemId: item.id,
+                quantity: item.quantity,
+                createdAt: now,
+              },
+            }),
+          );
         }
-
         await tx.shipmentTrackingHistory.create({
           data: {
             shipmentId: shipment.id,
             fromStatus: null,
-            toStatus: SHIPMENT_STATUS_PENDING,
-            note: this.normalizeNullableText(dto.note) ?? 'Shipment created',
+            toStatus: SHIPMENT_STATUS_REGISTERING,
+            note: 'Đang đăng ký vận đơn với GHN',
             updatedByUserId: user.id,
             createdAt: now,
           },
         });
+        return { shipment, shipmentItems };
+      },
+    );
 
-        await tx.shopOrder.update({
-          where: { id: shopOrder.id },
-          data: {
-            shippingCompanyId: service.shippingCompanyId,
-            shippingServiceId: service.id,
-            shippingQuoteId,
-            shippingFeeAmount: shippingFee ?? new Prisma.Decimal(0),
-            orderStatus: SHOP_ORDER_STATUS_SHIPPING,
-            updatedAt: now,
-          },
-        });
-
-        await tx.orderStatusHistory.create({
-          data: {
-            shopOrderId: shopOrder.id,
-            fromStatus: shopOrder.orderStatus,
-            toStatus: SHOP_ORDER_STATUS_SHIPPING,
-            changedByUserId: user.id,
-            reason: 'Shipment created',
-            createdAt: now,
-          },
-        });
-
-        await this.updateParentOrderStatusAfterShipmentCreate(
-          tx,
-          user,
-          shopOrder.orderId,
-          now,
-        );
-
-        return { shipment, service, shipmentItems, shopOrder, weightGram };
-      });
-
-    // Create the order with the carrier outside of the DB transaction, since
-    // it's a slow external network call. If it fails, the shipment already
-    // exists locally with shipmentStatus=Pending; the seller can retry
-    // syncing to the carrier via syncShipmentWithCarrier.
-    await this.trySyncShipmentToCarrier(shipment, service, shopOrder);
-
-    return this.toShipmentResponse(shipment, service, shipmentItems);
+    try {
+      const carrierOrder = await this.createCarrierOrder(
+        shipment,
+        service,
+        shopOrder,
+      );
+      const finalized = await this.finalizeCarrierRegistration(
+        user,
+        shipment,
+        shopOrder,
+        carrierOrder,
+      );
+      return this.toShipmentResponse(finalized, service, shipmentItems);
+    } catch (error) {
+      await this.markCarrierRegistrationFailed(user, shipment);
+      throw this.toCarrierRegistrationException(error);
+    }
   }
 
-  /**
-   * Attempts to register the shipment with its carrier (GHN/GHTK). Failures
-   * are swallowed (shipment stays in local "Pending" state, retriable via
-   * `syncShipmentWithCarrier`) since checkout/order creation must not fail
-   * just because the 3PL is temporarily unavailable.
-   */
-  private async trySyncShipmentToCarrier(
+  private async createCarrierOrder(
     shipment: ShipmentEntity,
     service: ShippingServiceWithCompanyEntity,
     shopOrder: CreateShipmentShopOrderEntity,
-  ): Promise<void> {
+  ): Promise<CarrierOrderResult> {
     const client = this.carrierRegistry.getClient(
       service.shippingCompany.provider,
     );
-
     if (!client.isConfigured()) {
-      return;
+      throw new CarrierNotConfiguredError('GHN');
     }
 
-    try {
-      const from = this.resolvePlatformPickupAddress(shopOrder.shop);
-      const order = await client.createOrder({
-        carrierServiceCode: service.carrierServiceCode,
-        clientOrderCode: shipment.shipmentCode,
-        from,
-        to: {
-          provinceName: shopOrder.order.shippingProvince,
-          wardName: shopOrder.order.shippingWard,
-          streetAddress: shopOrder.order.shippingStreetAddress,
-        },
-        recipientName: shopOrder.order.receiverName,
-        recipientPhone: shopOrder.order.receiverPhone,
-        weightGram: this.calculateShopOrderWeightGram(shopOrder),
-        codAmount: 0,
-        note: null,
-      });
-
-      await this.prisma.shipment.update({
-        where: { id: shipment.id },
-        data: {
-          carrierOrderCode: order.carrierOrderCode,
-          carrierStatus: 'ready_to_pick',
-          expectedDeliveryAt: order.expectedDeliveryAt,
-          updatedAt: new Date(),
-        },
-      });
-    } catch {
-      // Intentionally swallowed: shipment remains locally pending and can
-      // be retried via the seller sync endpoint.
-    }
+    const from = this.resolvePlatformPickupAddress(shopOrder.shop);
+    return client.createOrder({
+      carrierServiceCode: service.carrierServiceCode,
+      clientOrderCode: shipment.shipmentCode,
+      from: {
+        ...from,
+        name: shopOrder.shop.shopName,
+        phone: shopOrder.shop.phoneNumber ?? undefined,
+      },
+      to: {
+        provinceName: shopOrder.order.shippingProvince,
+        wardName: shopOrder.order.shippingWard,
+        streetAddress: shopOrder.order.shippingStreetAddress,
+      },
+      recipientName: shopOrder.order.receiverName,
+      recipientPhone: shopOrder.order.receiverPhone,
+      weightGram: this.calculateShopOrderWeightGram(shopOrder),
+      codAmount: Number(shipment.codAmount.toString()),
+      note: null,
+      pickupStationId: shipment.pickupStationId ?? undefined,
+    });
   }
 
-  /**
-   * Re-attempts carrier order creation for a shipment that was created
-   * locally but never successfully registered with the carrier (e.g. the
-   * carrier API was down at shipment-creation time).
-   */
+  private async finalizeCarrierRegistration(
+    user: AuthenticatedUser,
+    shipment: ShipmentEntity,
+    shopOrder: CreateShipmentShopOrderEntity,
+    carrierOrder: CarrierOrderResult,
+  ): Promise<ShipmentEntity> {
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updatedShipment = await tx.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          trackingNumber: carrierOrder.carrierOrderCode,
+          carrierOrderCode: carrierOrder.carrierOrderCode,
+          carrierStatus: 'ready_to_pick',
+          shipmentStatus: SHIPMENT_STATUS_PENDING,
+          expectedDeliveryAt: carrierOrder.expectedDeliveryAt,
+          updatedAt: now,
+        },
+      });
+      await tx.shipmentTrackingHistory.create({
+        data: {
+          shipmentId: shipment.id,
+          fromStatus: shipment.shipmentStatus,
+          toStatus: SHIPMENT_STATUS_PENDING,
+          note: 'GHN đã tiếp nhận vận đơn',
+          updatedByUserId: user.id,
+          createdAt: now,
+        },
+      });
+      await tx.shopOrder.update({
+        where: { id: shopOrder.id },
+        data: { orderStatus: SHOP_ORDER_STATUS_SHIPPING, updatedAt: now },
+      });
+      await tx.orderStatusHistory.create({
+        data: {
+          shopOrderId: shopOrder.id,
+          fromStatus: shopOrder.orderStatus,
+          toStatus: SHOP_ORDER_STATUS_SHIPPING,
+          changedByUserId: user.id,
+          reason: 'Carrier accepted shipment',
+          createdAt: now,
+        },
+      });
+      await this.updateParentOrderStatusAfterShipmentCreate(
+        tx,
+        user,
+        shopOrder.orderId,
+        now,
+      );
+      return updatedShipment;
+    });
+  }
+
+  private async markCarrierRegistrationFailed(
+    user: AuthenticatedUser,
+    shipment: ShipmentEntity,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      await tx.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          shipmentStatus: SHIPMENT_STATUS_SYNC_FAILED,
+          updatedAt: now,
+        },
+      });
+      await tx.shipmentTrackingHistory.create({
+        data: {
+          shipmentId: shipment.id,
+          fromStatus: shipment.shipmentStatus,
+          toStatus: SHIPMENT_STATUS_SYNC_FAILED,
+          note: 'GHN chưa tiếp nhận vận đơn. Có thể thử đồng bộ lại.',
+          updatedByUserId: user.id,
+          createdAt: now,
+        },
+      });
+    });
+  }
+
+  private toCarrierRegistrationException(error: unknown): BadRequestException {
+    const message =
+      error instanceof CarrierApiError ||
+      error instanceof CarrierNotConfiguredError
+        ? error.message
+        : 'Không thể đăng ký vận đơn với GHN. Vui lòng thử lại.';
+    return new BadRequestException({
+      code: 'CARRIER_ORDER_CREATE_FAILED',
+      message,
+      details: [{ provider: 'GHN' }],
+    });
+  }
+
   async syncSellerShipment(
     user: AuthenticatedUser,
     shopOrderId: string,
@@ -654,7 +751,6 @@ export class ShippingService {
   ): Promise<ShipmentResponse> {
     const parsedShopOrderId = this.parseShopOrderId(shopOrderId);
     const parsedShipmentId = this.parseShipmentId(shipmentId);
-
     const shipment = await this.prisma.shipment.findFirst({
       where: {
         id: parsedShipmentId,
@@ -665,7 +761,6 @@ export class ShippingService {
       },
       include: updateShipmentTrackingInclude,
     });
-
     if (!shipment) {
       throw new NotFoundException({
         code: 'SHIPMENT_NOT_FOUND',
@@ -675,28 +770,55 @@ export class ShippingService {
     }
 
     if (!shipment.carrierOrderCode) {
+      if (shipment.shipmentStatus !== SHIPMENT_STATUS_SYNC_FAILED) {
+        throw new BadRequestException({
+          code: 'SHIPMENT_SYNC_NOT_RETRIABLE',
+          message: 'Shipment registration is not retriable',
+          details: [{ field: 'shipmentStatus' }],
+        });
+      }
       const shopOrder = await this.prisma.shopOrder.findUniqueOrThrow({
         where: { id: shipment.shopOrderId },
         include: createShipmentShopOrderInclude,
       });
-      const serviceWithCompany: ShippingServiceWithCompanyEntity = {
+      const service = {
         ...shipment.shippingService,
         shippingCompany: shipment.shippingCompany,
       };
-      await this.trySyncShipmentToCarrier(
-        shipment,
-        serviceWithCompany,
-        shopOrder,
-      );
+      try {
+        await this.prisma.shipment.update({
+          where: { id: shipment.id },
+          data: {
+            shipmentStatus: SHIPMENT_STATUS_REGISTERING,
+            updatedAt: new Date(),
+          },
+        });
+        const carrierOrder = await this.createCarrierOrder(
+          shipment,
+          service,
+          shopOrder,
+        );
+        await this.finalizeCarrierRegistration(
+          user,
+          { ...shipment, shipmentStatus: SHIPMENT_STATUS_REGISTERING },
+          shopOrder,
+          carrierOrder,
+        );
+      } catch (error) {
+        await this.markCarrierRegistrationFailed(user, {
+          ...shipment,
+          shipmentStatus: SHIPMENT_STATUS_REGISTERING,
+        });
+        throw this.toCarrierRegistrationException(error);
+      }
     } else {
-      await this.refreshShipmentCarrierStatus(shipment);
+      await this.refreshShipmentCarrierStatus(user, shipment);
     }
 
     const refreshed = await this.prisma.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
       include: updateShipmentTrackingInclude,
     });
-
     return this.toShipmentResponse(
       refreshed,
       {
@@ -708,97 +830,70 @@ export class ShippingService {
   }
 
   private async refreshShipmentCarrierStatus(
+    user: AuthenticatedUser,
     shipment: UpdateShipmentTrackingEntity,
   ): Promise<void> {
-    if (!shipment.carrierOrderCode) {
-      return;
-    }
-
+    if (!shipment.carrierOrderCode) return;
     const client = this.carrierRegistry.getClient(
       shipment.shippingCompany.provider,
     );
-
-    if (!client.isConfigured()) {
-      return;
-    }
+    if (!client.isConfigured()) throw new CarrierNotConfiguredError('GHN');
 
     try {
       const tracking = await client.getOrderStatus(shipment.carrierOrderCode);
-      await this.prisma.shipment.update({
-        where: { id: shipment.id },
-        data: {
-          carrierStatus: tracking.carrierStatusRaw,
-          updatedAt: new Date(),
-        },
+      if (tracking.status === shipment.shipmentStatus) {
+        await this.prisma.shipment.update({
+          where: { id: shipment.id },
+          data: {
+            carrierStatus: tracking.carrierStatusRaw,
+            updatedAt: new Date(),
+          },
+        });
+        return;
+      }
+      await this.applyCarrierTrackingUpdate(user, shipment, tracking);
+    } catch (error) {
+      throw new BadRequestException({
+        code: 'CARRIER_STATUS_SYNC_FAILED',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Không thể đồng bộ trạng thái từ GHN.',
+        details: [{ provider: 'GHN' }],
       });
-    } catch {
-      // Swallow transient carrier polling errors; status will be retried
-      // on the next sync/webhook.
     }
   }
 
-  async updateSellerShipmentTracking(
+  private async applyCarrierTrackingUpdate(
     user: AuthenticatedUser,
-    shopOrderId: string,
-    shipmentId: string,
-    dto: UpdateShipmentTrackingDto,
-  ): Promise<ShipmentResponse> {
-    const parsedShopOrderId = this.parseShopOrderId(shopOrderId);
-    const parsedShipmentId = this.parseShipmentId(shipmentId);
+    shipment: UpdateShipmentTrackingEntity,
+    tracking: CarrierTrackingResult,
+  ): Promise<void> {
+    this.ensureShipmentStatusTransition(
+      shipment.shipmentStatus,
+      tracking.status,
+    );
 
-    return this.prisma.$transaction(async (tx) => {
-      const shipment = await tx.shipment.findFirst({
-        where: {
-          id: parsedShipmentId,
-          shopOrderId: parsedShopOrderId,
-          shopOrder: {
-            shop: {
-              ownerUserId: user.id,
-              isDeleted: false,
-            },
-          },
-        },
-        include: updateShipmentTrackingInclude,
-      });
-
-      if (!shipment) {
-        throw new NotFoundException({
-          code: 'SHIPMENT_NOT_FOUND',
-          message: 'Shipment not found',
-          details: [{ field: 'shipmentId' }],
-        });
-      }
-
-      this.ensureShipmentStatusTransition(
-        shipment.shipmentStatus,
-        dto.shipmentStatus,
-      );
-
+    await this.prisma.$transaction(async (tx) => {
       const now = new Date();
       const updateData: Prisma.ShipmentUpdateInput = {
-        shipmentStatus: dto.shipmentStatus,
+        shipmentStatus: tracking.status,
+        carrierStatus: tracking.carrierStatusRaw,
         updatedAt: now,
       };
-
-      if (dto.trackingNumber !== undefined) {
-        updateData.trackingNumber = this.normalizeNullableText(
-          dto.trackingNumber,
-        );
-      }
-
       if (
         !shipment.pickedUpAt &&
         [
           SHIPMENT_STATUS_PICKED_UP,
           SHIPMENT_STATUS_IN_TRANSIT,
           SHIPMENT_STATUS_DELIVERED,
-        ].includes(dto.shipmentStatus)
+        ].includes(tracking.status)
       ) {
         updateData.pickedUpAt = now;
       }
-
-      if (dto.shipmentStatus === SHIPMENT_STATUS_DELIVERED) {
-        updateData.deliveredAt = shipment.deliveredAt ?? now;
+      if (tracking.status === SHIPMENT_STATUS_DELIVERED) {
+        updateData.deliveredAt =
+          tracking.deliveredAt ?? shipment.deliveredAt ?? now;
       }
 
       const updatedShipment = await tx.shipment.update({
@@ -806,39 +901,107 @@ export class ShippingService {
         data: updateData,
         include: updateShipmentTrackingInclude,
       });
-
       await tx.shipmentTrackingHistory.create({
         data: {
           shipmentId: shipment.id,
           fromStatus: shipment.shipmentStatus,
-          toStatus: dto.shipmentStatus,
-          locationText: this.normalizeNullableText(dto.locationText),
-          note: this.normalizeNullableText(dto.note),
+          toStatus: tracking.status,
+          note: `Đồng bộ trạng thái từ GHN: ${tracking.carrierStatusRaw}`,
           updatedByUserId: user.id,
           createdAt: now,
         },
       });
-
-      if (dto.shipmentStatus === SHIPMENT_STATUS_DELIVERED) {
+      if (tracking.status === SHIPMENT_STATUS_DELIVERED) {
         await this.updateShopOrderStatusAfterShipmentDelivered(
           tx,
           user,
           updatedShipment.shopOrder,
           now,
         );
-      } else if (dto.shipmentStatus === SHIPMENT_STATUS_RETURNED) {
+      } else if (
+        tracking.status === SHIPMENT_STATUS_CANCELLED ||
+        tracking.status === SHIPMENT_STATUS_RETURNED
+      ) {
         await this.returnShipmentInventory(tx, user, updatedShipment, now);
       }
-
-      return this.toShipmentResponse(
-        updatedShipment,
-        {
-          ...updatedShipment.shippingService,
-          shippingCompany: updatedShipment.shippingCompany,
-        },
-        updatedShipment.items,
-      );
     });
+  }
+
+  async listSellerHandoverStations(
+    user: AuthenticatedUser,
+    shopOrderId: string,
+    query: HandoverStationsQueryDto,
+  ): Promise<{ items: HandoverStationResponse[] }> {
+    if (query.handoverMethod === 'Pickup') return { items: [] };
+    const shopOrder = await this.requireSellerPreparedShopOrder(
+      user,
+      this.parseShopOrderId(shopOrderId),
+    );
+    if (!this.ghnClient.isConfigured()) {
+      throw this.toCarrierRegistrationException(
+        new CarrierNotConfiguredError('GHN'),
+      );
+    }
+    const pickup = this.resolvePlatformPickupAddress(shopOrder.shop);
+    try {
+      return {
+        items: await this.ghnClient.getStations(
+          pickup.provinceName,
+          pickup.wardName,
+        ),
+      };
+    } catch (error) {
+      throw this.toCarrierRegistrationException(error);
+    }
+  }
+
+  async getSellerShipmentLabel(
+    user: AuthenticatedUser,
+    shopOrderId: string,
+    shipmentId: string,
+  ): Promise<ShipmentLabelResponse> {
+    const shipment = await this.prisma.shipment.findFirst({
+      where: {
+        id: this.parseShipmentId(shipmentId),
+        shopOrderId: this.parseShopOrderId(shopOrderId),
+        shopOrder: {
+          shop: { ownerUserId: user.id, isDeleted: false },
+        },
+      },
+      select: { carrierOrderCode: true },
+    });
+    if (!shipment) {
+      throw new NotFoundException({
+        code: 'SHIPMENT_NOT_FOUND',
+        message: 'Shipment not found',
+        details: [{ field: 'shipmentId' }],
+      });
+    }
+    if (!shipment.carrierOrderCode) {
+      throw new BadRequestException({
+        code: 'SHIPMENT_LABEL_NOT_READY',
+        message: 'Carrier has not issued a shipment code yet',
+        details: [{ field: 'carrierOrderCode' }],
+      });
+    }
+    try {
+      const printUrl = await this.ghnClient.getA5PrintUrl(
+        shipment.carrierOrderCode,
+      );
+      return {
+        printUrl,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      };
+    } catch (error) {
+      throw new BadRequestException({
+        code: 'SHIPMENT_LABEL_CREATE_FAILED',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Không thể tạo nhãn GHN. Vui lòng thử lại.',
+        details: [{ provider: 'GHN' }],
+      });
+    }
   }
 
   /**
@@ -857,6 +1020,82 @@ export class ShippingService {
       wardName: shop.ward ?? PLATFORM_PICKUP_WARD,
       streetAddress: shop.streetAddress ?? PLATFORM_PICKUP_STREET,
     };
+  }
+
+  private buildPickupAddress(shop: {
+    province: string | null;
+    ward: string | null;
+    streetAddress: string | null;
+  }): string {
+    const pickup = this.resolvePlatformPickupAddress(shop);
+    return [pickup.streetAddress, pickup.wardName, pickup.provinceName].join(
+      ', ',
+    );
+  }
+
+  private async requireSellerPreparedShopOrder(
+    user: AuthenticatedUser,
+    shopOrderId: bigint,
+  ): Promise<CreateShipmentShopOrderEntity> {
+    const shopOrder = await this.prisma.shopOrder.findFirst({
+      where: {
+        id: shopOrderId,
+        shop: { ownerUserId: user.id, isDeleted: false },
+      },
+      include: createShipmentShopOrderInclude,
+    });
+    if (!shopOrder) {
+      throw new NotFoundException({
+        code: 'SHOP_ORDER_NOT_FOUND',
+        message: 'Shop order not found',
+        details: [{ field: 'shopOrderId' }],
+      });
+    }
+    if (shopOrder.orderStatus !== SHOP_ORDER_STATUS_PREPARED) {
+      throw new BadRequestException({
+        code: 'SHOP_ORDER_INVALID_STATUS',
+        message: 'Only prepared shop orders can arrange shipment handover',
+        details: [{ field: 'orderStatus' }],
+      });
+    }
+    return shopOrder;
+  }
+
+  private async requireGhnStation(
+    shopOrder: CreateShipmentShopOrderEntity,
+    stationId: number | undefined,
+  ): Promise<HandoverStationResponse> {
+    if (!stationId) {
+      throw new BadRequestException({
+        code: 'PICKUP_STATION_REQUIRED',
+        message: 'A GHN station is required for drop-off',
+        details: [{ field: 'pickupStationId' }],
+      });
+    }
+    if (!this.ghnClient.isConfigured()) {
+      throw this.toCarrierRegistrationException(
+        new CarrierNotConfiguredError('GHN'),
+      );
+    }
+    const pickup = this.resolvePlatformPickupAddress(shopOrder.shop);
+    let stations: HandoverStationResponse[];
+    try {
+      stations = await this.ghnClient.getStations(
+        pickup.provinceName,
+        pickup.wardName,
+      );
+    } catch (error) {
+      throw this.toCarrierRegistrationException(error);
+    }
+    const station = stations.find((candidate) => candidate.id === stationId);
+    if (!station) {
+      throw new BadRequestException({
+        code: 'PICKUP_STATION_INVALID',
+        message: 'The selected GHN station is not available for this shop',
+        details: [{ field: 'pickupStationId' }],
+      });
+    }
+    return station;
   }
 
   private async requireQuotableShop(
@@ -984,48 +1223,6 @@ export class ShippingService {
     }
 
     return service;
-  }
-
-  private async requireShipmentQuoteFee(
-    client: Prisma.TransactionClient,
-    shippingQuoteId: bigint,
-    shopOrder: CreateShipmentShopOrderEntity,
-    service: ShippingServiceWithCompanyEntity,
-    now: Date,
-  ): Promise<Prisma.Decimal> {
-    const quote = await client.shippingQuote.findUnique({
-      where: { id: shippingQuoteId },
-    });
-
-    if (!quote) {
-      throw new NotFoundException({
-        code: 'SHIPPING_QUOTE_NOT_FOUND',
-        message: 'Shipping quote not found',
-        details: [{ field: 'shippingQuoteId' }],
-      });
-    }
-
-    if (
-      quote.shopId !== shopOrder.shopId ||
-      quote.shippingServiceId !== service.id ||
-      quote.shippingCompanyId !== service.shippingCompanyId
-    ) {
-      throw new BadRequestException({
-        code: 'SHIPPING_QUOTE_MISMATCH',
-        message: 'Shipping quote does not match this shop order',
-        details: [{ field: 'shippingQuoteId' }],
-      });
-    }
-
-    if (quote.expiresAt <= now) {
-      throw new BadRequestException({
-        code: 'SHIPPING_QUOTE_EXPIRED',
-        message: 'Shipping quote has expired',
-        details: [{ field: 'shippingQuoteId' }],
-      });
-    }
-
-    return new Prisma.Decimal(quote.quotedFee.toString());
   }
 
   private parseShippingCompanyId(value: string): bigint {
@@ -1549,15 +1746,6 @@ export class ShippingService {
     });
   }
 
-  private normalizeNullableText(value: string | undefined): string | null {
-    if (value === undefined) {
-      return null;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
   private toShippingServiceResponse(
     service: ShippingServiceEntity,
   ): ShippingServiceResponse {
@@ -1632,6 +1820,17 @@ export class ShippingService {
       shipmentStatus: shipment.shipmentStatus,
       shippingFee: shipment.shippingFee.toString(),
       codAmount: shipment.codAmount.toString(),
+      handoverMethod: shipment.handoverMethod,
+      pickupStation:
+        shipment.pickupStationId &&
+        shipment.pickupStationName &&
+        shipment.pickupStationAddress
+          ? {
+              id: shipment.pickupStationId,
+              name: shipment.pickupStationName,
+              address: shipment.pickupStationAddress,
+            }
+          : null,
       pickupAddress: shipment.pickupAddress,
       deliveryAddress: shipment.deliveryAddress,
       recipientName: shipment.recipientName,

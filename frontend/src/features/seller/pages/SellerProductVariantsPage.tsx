@@ -1,6 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Edit, Layers, Plus, Trash2, X } from "lucide-react";
+import {
+  CalendarClock,
+  Edit,
+  Layers,
+  LockKeyhole,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useParams } from "react-router-dom";
@@ -29,22 +36,12 @@ import { formatMoney, formatStatus } from "@/utils/format";
 import { sellerProductsApi } from "../api";
 import { sellerSaleCampaignsApi } from "@/features/shops/sale-api";
 import type { SaleCampaign } from "@/features/shops/sale-api";
-import type { SellerVariant, VariantCreateRequest, VariantUpdateRequest } from "../types";
+import type { SellerVariant, VariantUpdateRequest } from "../types";
 
 const moneyPattern = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/;
 const integerPattern = /^\d*$/;
 
 const variantSchema = z.object({
-  variantName: z
-    .string()
-    .trim()
-    .min(1, "Vui lòng nhập tên phân loại")
-    .max(255, "Tên phân loại quá dài"),
-  variantOptionJson: z
-    .string()
-    .trim()
-    .max(4000, "Dữ liệu tùy chọn quá dài")
-    .optional(),
   price: z.string().trim().regex(moneyPattern, "Giá bán không hợp lệ"),
   compareAtPrice: z
     .string()
@@ -55,18 +52,24 @@ const variantSchema = z.object({
   weightGram: z
     .string()
     .regex(integerPattern, "Khối lượng phải là số nguyên không âm")
+    .refine(
+      (value) => !value || Number(value) <= 100_000_000,
+      "Khối lượng không được vượt quá 100.000.000 gam",
+    )
     .optional(),
   quantityOnHand: z
     .string()
-    .regex(/^\d+$/, "Tồn kho ban đầu phải là số nguyên không âm"),
+    .regex(/^\d+$/, "Tồn kho ban đầu phải là số nguyên không âm")
+    .refine(
+      (value) => Number(value) <= 100_000_000,
+      "Tồn kho không được vượt quá 100.000.000",
+    ),
   variantStatus: z.enum(["Active", "Inactive"]),
 });
 
 type VariantFormValues = z.infer<typeof variantSchema>;
 
 const defaultValues: VariantFormValues = {
-  variantName: "",
-  variantOptionJson: "",
   price: "",
   compareAtPrice: "",
   weightGram: "",
@@ -80,8 +83,6 @@ const optionalString = (value: string | undefined) => {
 };
 
 const toUpdateRequest = (values: VariantFormValues): VariantUpdateRequest => ({
-  variantName: values.variantName.trim(),
-  variantOptionJson: optionalString(values.variantOptionJson),
   price: values.price.trim(),
   compareAtPrice: optionalString(values.compareAtPrice),
   weightGram: optionalString(values.weightGram)
@@ -91,8 +92,6 @@ const toUpdateRequest = (values: VariantFormValues): VariantUpdateRequest => ({
 });
 
 const toFormValues = (variant: SellerVariant): VariantFormValues => ({
-  variantName: variant.variantName,
-  variantOptionJson: variant.variantOptionJson ?? "",
   price: variant.price,
   compareAtPrice: variant.compareAtPrice ?? "",
   weightGram: String(variant.weightGram ?? ""),
@@ -102,24 +101,34 @@ const toFormValues = (variant: SellerVariant): VariantFormValues => ({
 
 type AttributeRow = { id: number; name: string; value: string };
 const emptyAttribute = (id: number): AttributeRow => ({ id, name: "", value: "" });
-const parseAttributes = (json: string | null | undefined): AttributeRow[] => {
-  if (!json) return [emptyAttribute(1)];
-  try {
-    const parsed = JSON.parse(json) as Record<string, unknown>;
-    const entries = Object.entries(parsed).filter(([, value]) => typeof value === "string");
-    return entries.length > 0
-      ? entries.map(([name, value], index) => ({ id: index + 1, name, value: String(value) }))
-      : [emptyAttribute(1)];
-  } catch {
-    return [emptyAttribute(1)];
-  }
+const parseAttributes = (variant: Pick<SellerVariant, "attributes">): AttributeRow[] => {
+  const entries = Object.entries(variant.attributes).filter(([, value]) => typeof value === "string");
+  return entries.length > 0
+    ? entries.map(([name, value], index) => ({ id: index + 1, name, value }))
+    : [emptyAttribute(1)];
 };
-const serializeAttributes = (attributes: AttributeRow[]) => {
-  const entries = attributes
-    .map(({ name, value }) => [name.trim(), value.trim()] as const)
-    .filter(([name, value]) => name && value);
-  return entries.length > 0 ? JSON.stringify(Object.fromEntries(entries)) : undefined;
-};
+const splitAttributeValues = (value: string) =>
+  value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+const serializeAttributes = (attributes: AttributeRow[]) =>
+  Object.fromEntries(
+    attributes
+      .map(({ name, value }) => [name.trim(), value.trim()] as const)
+      .filter(([name, value]) => name && value),
+  );
+const createAttributeCombinations = (attributes: AttributeRow[]) =>
+  attributes.reduce<Record<string, string>[]>(
+    (combinations, attribute) =>
+      combinations.flatMap((combination) =>
+        splitAttributeValues(attribute.value).map((value) => ({
+          ...combination,
+          [attribute.name.trim()]: value,
+        })),
+      ),
+    [{}],
+  );
 
 export function SellerProductVariantsPage() {
   const { id } = useParams<{ id: string }>();
@@ -129,6 +138,7 @@ export function SellerProductVariantsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SellerVariant | null>(null);
   const [attributes, setAttributes] = useState<AttributeRow[]>([emptyAttribute(1)]);
+  const [attributeError, setAttributeError] = useState<string | null>(null);
   const [saleTarget, setSaleTarget] = useState<SellerVariant | null>(null);
   const [salePrice, setSalePrice] = useState("");
   const [saleStartsAt, setSaleStartsAt] = useState("");
@@ -147,10 +157,9 @@ export function SellerProductVariantsPage() {
     enabled: Boolean(productId),
   });
   const productQuery = useQuery({
-    queryKey: ["seller", "products", "variant-price-default", productId],
-    queryFn: () => sellerProductsApi.list(1, 100),
+    queryKey: ["seller", "products", "detail", productId],
+    queryFn: () => sellerProductsApi.get(productId),
     enabled: Boolean(productId),
-    select: (data) => data.items.find((product) => product.id === productId),
   });
   const saleCampaignsQuery = useQuery({
     queryKey: ["seller", "sale-campaigns"],
@@ -175,41 +184,152 @@ export function SellerProductVariantsPage() {
   const discountPercent = numericCompareAtPrice > numericPrice && numericPrice > 0
     ? Math.round((1 - numericPrice / numericCompareAtPrice) * 100)
     : 0;
+  const variants = variantsQuery.data ?? [];
+  const schemaVariant = variants.find(
+    (variant) => Object.keys(variant.attributes).length > 0,
+  );
+  const existingAttributeNames = schemaVariant
+    ? Object.keys(schemaVariant.attributes)
+    : [];
+  const hasLockedAttributeSchema = existingAttributeNames.length > 0;
+  const existingValuesByAttribute = Object.fromEntries(
+    existingAttributeNames.map((name) => [
+      name,
+      [
+        ...new Set(
+          variants
+            .map((variant) => variant.attributes[name])
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ],
+    ]),
+  );
+  const matrixCombinations = editingVariant
+    ? []
+    : createAttributeCombinations(attributes);
+  const matrixCombinationCount = editingVariant
+    ? 1
+    : matrixCombinations.length;
 
   const invalidate = () =>
     queryClient.invalidateQueries({
       queryKey: ["seller", "products", productId, "variants"],
     });
 
-  const saveMutation = useMutation({
-    mutationFn: (values: VariantFormValues) => {
-      const request = {
-        ...toUpdateRequest(values),
-        variantOptionJson: serializeAttributes(attributes),
-      };
+  const saveMutation = useMutation<
+    SellerVariant | SellerVariant[],
+    Error,
+    VariantFormValues
+  >({
+    mutationFn: (values) => {
+      const request = toUpdateRequest(values);
       return editingVariant
         ? sellerProductsApi.updateVariant(
             productId,
             editingVariant.id,
-            request,
+            { ...request, attributes: serializeAttributes(attributes) },
           )
-        : sellerProductsApi.createVariant(productId, {
-            ...request,
-            quantityOnHand: Number(values.quantityOnHand),
-          } as VariantCreateRequest);
+        : sellerProductsApi.createVariantsBatch(productId, {
+            variants: createAttributeCombinations(attributes).map(
+              (combination) => ({
+                attributes: combination,
+                price: values.price.trim(),
+                compareAtPrice: optionalString(values.compareAtPrice),
+                weightGram: optionalString(values.weightGram)
+                  ? Number(values.weightGram)
+                  : undefined,
+                variantStatus: values.variantStatus,
+                quantityOnHand: Number(values.quantityOnHand),
+              }),
+            ),
+          });
     },
-    onSuccess: async (variant) => {
+    onSuccess: async (result) => {
       await invalidate();
       pushToast({
         tone: "success",
-        title: "Đã lưu phân loại",
-        description: variant.sku,
+        title: editingVariant ? "Đã lưu phân loại" : "Đã tạo ma trận phân loại",
+        description: Array.isArray(result)
+          ? `${result.length} phân loại đã được tạo`
+          : result.sku,
       });
       setEditingVariant(null);
       setIsCreateOpen(false);
       form.reset(defaultValues);
     },
   });
+
+  const submitVariant = (values: VariantFormValues) => {
+    const names = attributes.map(({ name }) =>
+      name.trim().toLocaleLowerCase("vi"),
+    );
+    if (attributes.length < 1 || attributes.length > 2) {
+      setAttributeError("Mỗi sản phẩm chỉ được có 1 hoặc 2 cấp phân loại.");
+      return;
+    }
+    if (attributes.some(({ name, value }) => !name.trim() || !value.trim())) {
+      setAttributeError("Vui lòng nhập đầy đủ tên và giá trị phân loại.");
+      return;
+    }
+    if (new Set(names).size !== names.length) {
+      setAttributeError("Tên các cấp phân loại không được trùng nhau.");
+      return;
+    }
+    if (!editingVariant) {
+      const hasDuplicateValue = attributes.some(({ value }) => {
+        const values = splitAttributeValues(value).map((item) =>
+          item.toLocaleLowerCase("vi"),
+        );
+        return new Set(values).size !== values.length;
+      });
+      if (hasDuplicateValue) {
+        setAttributeError("Giá trị trong cùng một cấp không được trùng nhau.");
+        return;
+      }
+      if (matrixCombinationCount < 1 || matrixCombinationCount > 100) {
+        setAttributeError("Mỗi lần phải tạo từ 1 đến 100 tổ hợp phân loại.");
+        return;
+      }
+    }
+    setAttributeError(null);
+    saveMutation.mutate(values);
+  };
+
+  const closeVariantModal = () => {
+    saveMutation.reset();
+    form.reset(defaultValues);
+    setAttributes([emptyAttribute(1)]);
+    setAttributeError(null);
+    setEditingVariant(null);
+    setIsCreateOpen(false);
+  };
+
+  const openCreateVariant = () => {
+    saveMutation.reset();
+    setEditingVariant(null);
+    setAttributes(
+      hasLockedAttributeSchema
+        ? existingAttributeNames.map((name, index) => ({
+            id: index + 1,
+            name,
+            value: "",
+          }))
+        : [emptyAttribute(1)],
+    );
+    setAttributeError(null);
+    form.reset({
+      ...defaultValues,
+      price: productQuery.data?.basePrice ?? "",
+      compareAtPrice: productQuery.data?.compareAtPrice ?? "",
+    });
+    setIsCreateOpen(true);
+  };
+
+  const openEditVariant = (variant: SellerVariant) => {
+    saveMutation.reset();
+    setIsCreateOpen(false);
+    setEditingVariant(variant);
+  };
 
   const quickSaleMutation = useMutation({
     mutationFn: () => sellerSaleCampaignsApi.create({
@@ -231,7 +351,7 @@ export function SellerProductVariantsPage() {
       sellerProductsApi.deleteVariant(productId, variantId),
     onSuccess: async () => {
       await invalidate();
-      pushToast({ tone: "success", title: "Đã xóa phân loại" });
+      pushToast({ tone: "success", title: "Đã ngừng bán phân loại" });
       setDeleteTarget(null);
     },
   });
@@ -239,16 +359,9 @@ export function SellerProductVariantsPage() {
   useEffect(() => {
     if (editingVariant) {
       form.reset(toFormValues(editingVariant));
-      setAttributes(parseAttributes(editingVariant.variantOptionJson));
-    } else if (isCreateOpen) {
-      form.reset({
-        ...defaultValues,
-        price: productQuery.data?.basePrice ?? "",
-        compareAtPrice: productQuery.data?.compareAtPrice ?? "",
-      });
-      setAttributes([emptyAttribute(1)]);
+      setAttributes(parseAttributes(editingVariant));
     }
-  }, [editingVariant, form, isCreateOpen, productQuery.data]);
+  }, [editingVariant, form]);
 
   const isModalOpen = isCreateOpen || Boolean(editingVariant);
 
@@ -262,12 +375,19 @@ export function SellerProductVariantsPage() {
             </p>
             <h1 className="mt-2 text-2xl font-semibold">Phân loại sản phẩm</h1>
           </div>
-          <Button type="button" onClick={() => setIsCreateOpen(true)}>
+          <Button type="button" onClick={openCreateVariant}>
             <Plus size={16} aria-hidden="true" />
-            Thêm phân loại
+            {hasLockedAttributeSchema
+              ? "Thêm giá trị phân loại"
+              : "Thiết lập phân loại"}
           </Button>
         </div>
       </section>
+
+      <Alert tone="info">
+        Mỗi sản phẩm có tối đa 2 cấp phân loại. Sau khi tạo SKU đầu tiên,
+        tên cấp được khóa để mọi SKU luôn cùng cấu trúc.
+      </Alert>
 
       <ManagementSearch scope="variant" value={search} onChange={setSearch} placeholder="Tìm theo SKU, tên phân loại hoặc trạng thái sale" resultCount={filteredVariants.length} />
 
@@ -311,7 +431,7 @@ export function SellerProductVariantsPage() {
                   </TableCell>
                   <TableCell>{variant.quantityAvailable}</TableCell>
                   <TableCell>
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         type="button"
                         variant="secondary"
@@ -324,7 +444,7 @@ export function SellerProductVariantsPage() {
                       <Button
                         type="button"
                         variant="secondary"
-                        onClick={() => setEditingVariant(variant)}
+                        onClick={() => openEditVariant(variant)}
                       >
                         <Edit size={15} aria-hidden="true" />
                         Chỉnh sửa
@@ -335,7 +455,7 @@ export function SellerProductVariantsPage() {
                         onClick={() => setDeleteTarget(variant)}
                       >
                         <Trash2 size={15} aria-hidden="true" />
-                        Xóa
+                        Ngừng bán
                       </Button>
                     </div>
                   </TableCell>
@@ -348,7 +468,7 @@ export function SellerProductVariantsPage() {
             title={search ? "Không tìm thấy phân loại" : "Chưa có phân loại"}
             description={search ? "Hãy thử từ khóa khác hoặc xóa nội dung tìm kiếm." : "Hãy thêm ít nhất một phân loại trước khi thiết lập tồn kho."}
             action={
-              <Button type="button" onClick={() => setIsCreateOpen(true)}>
+              <Button type="button" onClick={openCreateVariant}>
                 <Layers size={16} aria-hidden="true" />
                 Thêm phân loại
               </Button>
@@ -359,29 +479,39 @@ export function SellerProductVariantsPage() {
 
       <Modal
         open={isModalOpen}
-        title={editingVariant ? "Chỉnh sửa phân loại" : "Tạo phân loại"}
-        onClose={() => {
-          setEditingVariant(null);
-          setIsCreateOpen(false);
-        }}
+        title={
+          editingVariant
+            ? "Chỉnh sửa tổ hợp"
+            : hasLockedAttributeSchema
+              ? "Thêm giá trị phân loại"
+              : "Thiết lập phân loại"
+        }
+        onClose={closeVariantModal}
+        closeDisabled={saveMutation.isPending}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
-              onClick={() => {
-                setEditingVariant(null);
-                setIsCreateOpen(false);
-              }}
+              disabled={saveMutation.isPending}
+              onClick={closeVariantModal}
             >
               Hủy
             </Button>
             <Button
               type="submit"
               form="variant-form"
-              disabled={saveMutation.isPending}
+              disabled={
+                saveMutation.isPending ||
+                (!editingVariant &&
+                  (matrixCombinationCount < 1 || matrixCombinationCount > 100))
+              }
             >
-              {saveMutation.isPending ? "Đang lưu..." : "Lưu"}
+              {saveMutation.isPending
+                ? "Đang lưu..."
+                : editingVariant
+                  ? "Lưu thay đổi"
+                  : `Tạo ${matrixCombinationCount} tổ hợp`}
             </Button>
           </>
         }
@@ -394,18 +524,18 @@ export function SellerProductVariantsPage() {
         <form
           id="variant-form"
           className="space-y-4"
-          onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+          onSubmit={form.handleSubmit(submitVariant)}
         >
           {editingVariant ? (
             <TextInput label="SKU" value={editingVariant.sku} readOnly />
           ) : (
             <Alert tone="info">SKU sẽ được hệ thống tự động tạo sau khi lưu.</Alert>
           )}
-          <TextInput
-            label="Tên phân loại"
-            error={form.formState.errors.variantName?.message}
-            {...form.register("variantName")}
-          />
+          <Alert tone="info">
+            {editingVariant
+              ? "Tên phân loại được tự động tạo từ các giá trị thuộc tính."
+              : "Nhập nhiều giá trị, cách nhau bằng dấu phẩy. Hệ thống sẽ tạo mọi tổ hợp và SKU tương ứng."}
+          </Alert>
           <div>
             <TextInput
               label="Giá bán của phân loại"
@@ -448,7 +578,9 @@ export function SellerProductVariantsPage() {
                 error={form.formState.errors.quantityOnHand?.message}
                 {...form.register("quantityOnHand")}
               />
-              <p className="mt-1 text-xs text-muted">Sản phẩm chỉ hiển thị để bán khi phân loại đang hoạt động và tồn kho lớn hơn 0.</p>
+              <p className="mt-1 text-xs text-muted">
+                Số lượng này được áp dụng riêng cho từng tổ hợp vừa tạo.
+              </p>
             </div>
           ) : null}
           <SelectInput
@@ -459,46 +591,202 @@ export function SellerProductVariantsPage() {
             <option value="Active">Đang hoạt động</option>
             <option value="Inactive">Ngừng hoạt động</option>
           </SelectInput>
-          <fieldset className="space-y-3 rounded-lg border border-border p-3">
-            <legend className="px-1 text-sm font-medium text-ink">Thuộc tính phân loại</legend>
-            <p className="text-xs text-muted">Ví dụ: Kích thước – 20 cm, hoặc Màu sắc – Đen.</p>
-            {attributes.map((attribute, index) => (
-              <div key={attribute.id} className="grid gap-2 sm:grid-cols-[1fr_1fr_44px] sm:items-end">
-                <TextInput
-                  id={`attribute-name-${attribute.id}`}
-                  label={index === 0 ? "Tên thuộc tính" : "Tên thuộc tính khác"}
-                  value={attribute.name}
-                  maxLength={100}
-                  placeholder="Ví dụ: Kích thước"
-                  onChange={(event) => setAttributes((current) => current.map((item) => item.id === attribute.id ? { ...item, name: event.target.value } : item))}
-                />
-                <TextInput
-                  id={`attribute-value-${attribute.id}`}
-                  label={index === 0 ? "Giá trị" : "Giá trị khác"}
-                  value={attribute.value}
-                  maxLength={255}
-                  placeholder="Ví dụ: 20 cm"
-                  onChange={(event) => setAttributes((current) => current.map((item) => item.id === attribute.id ? { ...item, value: event.target.value } : item))}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  aria-label={`Xóa thuộc tính ${index + 1}`}
-                  disabled={attributes.length === 1}
-                  onClick={() => setAttributes((current) => current.filter((item) => item.id !== attribute.id))}
-                >
-                  <X size={17} aria-hidden="true" />
-                </Button>
+          <fieldset className="space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-5">
+            <legend className="px-2 text-base font-semibold text-ink">
+              Cấu trúc phân loại
+            </legend>
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-ink">
+                  {hasLockedAttributeSchema || editingVariant
+                    ? "Tên cấp đã được khóa"
+                    : "Chọn tối đa 2 cấp"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  {hasLockedAttributeSchema || editingVariant
+                    ? "Bạn chỉ có thể thêm hoặc sửa giá trị; tên cấp phải giống nhau trên mọi SKU."
+                    : "Ví dụ: cấp 1 là Màu sắc, cấp 2 là Kích cỡ."}
+                </p>
               </div>
-            ))}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setAttributes((current) => [...current, emptyAttribute(Math.max(0, ...current.map((item) => item.id)) + 1)])}
-            >
-              <Plus size={16} aria-hidden="true" />
-              Thêm thuộc tính
-            </Button>
+              {hasLockedAttributeSchema || editingVariant ? (
+                <span className="inline-flex min-h-11 items-center gap-2 self-start rounded-full border border-border px-3 text-xs font-semibold text-muted sm:self-center">
+                  <LockKeyhole size={15} aria-hidden="true" />
+                  Đã khóa
+                </span>
+              ) : null}
+            </div>
+
+            {attributes.map((attribute, index) => {
+              const isNameLocked = Boolean(editingVariant) || hasLockedAttributeSchema;
+              const existingValues =
+                existingValuesByAttribute[attribute.name] ?? [];
+              return (
+                <section
+                  key={attribute.id}
+                  className="rounded-xl border border-border bg-white p-4 shadow-sm"
+                  aria-labelledby={`attribute-level-${attribute.id}`}
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        id={`attribute-level-${attribute.id}`}
+                        className="text-sm font-semibold text-primary-700"
+                      >
+                        Phân loại cấp {index + 1}
+                      </p>
+                      <p className="mt-1 text-xs text-muted">
+                        {index === 0 ? "Khách chọn cấp này trước." : "Khách chọn sau cấp 1."}
+                      </p>
+                    </div>
+                    {!editingVariant &&
+                    !hasLockedAttributeSchema &&
+                    attributes.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        aria-label={`Xóa phân loại cấp ${index + 1}`}
+                        onClick={() =>
+                          setAttributes((current) =>
+                            current.filter((item) => item.id !== attribute.id),
+                          )
+                        }
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                        Xóa cấp
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <TextInput
+                        id={`attribute-name-${attribute.id}`}
+                        label={`Tên cấp ${index + 1}`}
+                        placeholder={index === 0 ? "Màu sắc" : "Kích cỡ"}
+                        value={attribute.name}
+                        readOnly={isNameLocked}
+                        aria-invalid={Boolean(attributeError)}
+                        aria-describedby={
+                          attributeError ? "variant-attribute-error" : undefined
+                        }
+                        className={isNameLocked ? "bg-surface text-muted" : ""}
+                        onChange={(event) => {
+                          setAttributeError(null);
+                          setAttributes((current) =>
+                            current.map((item) =>
+                              item.id === attribute.id
+                                ? { ...item, name: event.target.value }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-muted">
+                        {isNameLocked
+                          ? "Tên cấp không thể đổi sau khi đã tạo SKU."
+                          : "Dùng tên ngắn, dễ hiểu với khách hàng."}
+                      </p>
+                    </div>
+                    <div>
+                      <TextInput
+                        id={`attribute-values-${attribute.id}`}
+                        label={editingVariant ? "Giá trị" : "Giá trị mới"}
+                        placeholder={
+                          editingVariant
+                            ? index === 0
+                              ? "Đen"
+                              : "XL"
+                            : index === 0
+                              ? "Đen, Đỏ"
+                              : "XS, XL, XXL"
+                        }
+                        value={attribute.value}
+                        aria-invalid={Boolean(attributeError)}
+                        aria-describedby={
+                          attributeError ? "variant-attribute-error" : undefined
+                        }
+                        onChange={(event) => {
+                          setAttributeError(null);
+                          setAttributes((current) =>
+                            current.map((item) =>
+                              item.id === attribute.id
+                                ? { ...item, value: event.target.value }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                      <p className="mt-1 text-xs leading-5 text-muted">
+                        {editingVariant
+                          ? "Nhập một giá trị cho tổ hợp này."
+                          : "Nhập nhiều giá trị, cách nhau bằng dấu phẩy."}
+                      </p>
+                      {!editingVariant && existingValues.length > 0 ? (
+                        <p className="mt-1 text-xs text-muted">
+                          Đã có: {existingValues.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+              );
+            })}
+
+            {attributeError ? (
+              <div id="variant-attribute-error" role="alert">
+                <Alert tone="danger">{attributeError}</Alert>
+              </div>
+            ) : null}
+
+            {!editingVariant && matrixCombinationCount > 0 ? (
+              <div
+                className="rounded-xl border border-primary-100 bg-primary-50 p-4"
+                aria-live="polite"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-primary-700">
+                    Xem trước ma trận
+                  </p>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-primary-700">
+                    {matrixCombinationCount} tổ hợp
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {matrixCombinations.slice(0, 8).map((combination) => (
+                    <span
+                      key={JSON.stringify(combination)}
+                      className="rounded-full border border-primary-100 bg-white px-3 py-1 text-xs text-ink"
+                    >
+                      {Object.values(combination).join(" / ")}
+                    </span>
+                  ))}
+                  {matrixCombinationCount > 8 ? (
+                    <span className="px-2 py-1 text-xs font-medium text-muted">
+                      +{matrixCombinationCount - 8} tổ hợp khác
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {!editingVariant &&
+            !hasLockedAttributeSchema &&
+            attributes.length < 2 ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setAttributes((current) => [
+                    ...current,
+                    emptyAttribute(
+                      Math.max(...current.map(({ id }) => id)) + 1,
+                    ),
+                  ])
+                }
+              >
+                <Plus size={16} aria-hidden="true" />
+                Thêm phân loại cấp 2
+              </Button>
+            ) : null}
           </fieldset>
         </form>
       </Modal>
@@ -542,14 +830,24 @@ export function SellerProductVariantsPage() {
 
       <Modal
         open={Boolean(deleteTarget)}
-        title="Xóa phân loại"
-        onClose={() => setDeleteTarget(null)}
+        title="Ngừng bán phân loại"
+        onClose={() => {
+          if (!deleteMutation.isPending) {
+            deleteMutation.reset();
+            setDeleteTarget(null);
+          }
+        }}
+        closeDisabled={deleteMutation.isPending}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setDeleteTarget(null)}
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                deleteMutation.reset();
+                setDeleteTarget(null);
+              }}
             >
               Hủy
             </Button>
@@ -561,7 +859,7 @@ export function SellerProductVariantsPage() {
                 deleteTarget && deleteMutation.mutate(deleteTarget.id)
               }
             >
-              {deleteMutation.isPending ? "Đang xóa..." : "Xóa"}
+              {deleteMutation.isPending ? "Đang ngừng bán..." : "Ngừng bán"}
             </Button>
           </>
         }
@@ -569,7 +867,7 @@ export function SellerProductVariantsPage() {
         <p className="text-sm text-muted">
           {deleteMutation.isError
             ? getErrorMessage(deleteMutation.error)
-            : `Bạn có muốn xóa phân loại ${deleteTarget?.sku ?? ""} không?`}
+            : `Phân loại ${deleteTarget?.sku ?? "này"} sẽ ngừng bán và không còn khả dụng cho đơn hàng mới.`}
         </p>
       </Modal>
     </div>

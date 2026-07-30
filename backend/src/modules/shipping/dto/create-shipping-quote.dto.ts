@@ -1,7 +1,6 @@
 import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
   IsInt,
-  IsOptional,
   IsString,
   Matches,
   Max,

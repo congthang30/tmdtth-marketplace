@@ -4,7 +4,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -28,11 +27,10 @@ export class CreateProductImageDto {
   @Matches(idPattern)
   productVariantId?: string;
 
-  @Transform(({ value }) => trimString(value))
+  @Transform(({ value }) => normalizeStringInput(value))
   @IsString()
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  @MaxLength(1000)
-  imageUrl!: string;
+  @Matches(idPattern)
+  assetId!: string;
 
   @Transform(({ value }) => trimString(value))
   @IsOptional()

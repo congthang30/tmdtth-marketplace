@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CirclePause,
+  CirclePlay,
   Edit,
   Images,
   Layers,
+  PackageCheck,
   PackagePlus,
   Trash2,
   Warehouse,
@@ -36,6 +39,16 @@ export function SellerProductsPage() {
   const [deleteTarget, setDeleteTarget] = useState<SellerProduct | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const closeDeleteModal = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setDeleteTarget(null);
+  };
+  const openDeleteModal = (product: SellerProduct) => {
+    deleteMutation.reset();
+    setDeleteTarget(product);
+  };
+
   const pushToast = useToastStore((state) => state.pushToast);
   const productsQuery = useQuery({
     queryKey: ["seller", "products", page],
@@ -48,6 +61,28 @@ export function SellerProductsPage() {
       await queryClient.invalidateQueries({ queryKey: ["seller", "products"] });
       pushToast({ tone: "success", title: "Đã xóa sản phẩm" });
       setDeleteTarget(null);
+    },
+  });
+
+  const lifecycleMutation = useMutation({
+    mutationFn: ({ productId, action }: { productId: string; action: "submit" | "stop" | "resume" }) => {
+      if (action === "submit") return sellerProductsApi.submit(productId);
+      if (action === "stop") return sellerProductsApi.stopSelling(productId);
+      return sellerProductsApi.resumeSelling(productId);
+    },
+    onSuccess: async (product) => {
+      await queryClient.invalidateQueries({ queryKey: ["seller", "products"] });
+      pushToast({
+        tone: "success",
+        title: product.productStatus === "PendingApproval"
+          ? "Đã gửi phê duyệt"
+          : product.productStatus === "Inactive"
+            ? "Đã ngừng bán sản phẩm"
+            : "Đã mở bán lại sản phẩm",
+      });
+    },
+    onError: (error) => {
+      pushToast({ tone: "danger", title: "Không thể cập nhật trạng thái", description: getErrorMessage(error) });
     },
   });
 
@@ -151,10 +186,41 @@ export function SellerProductsPage() {
                           <Warehouse size={15} aria-hidden="true" />
                           Tồn kho
                         </ButtonLink>
+                        {(product.productStatus === "Draft" || product.productStatus === "Rejected") ? (
+                          <Button
+                            type="button"
+                            disabled={lifecycleMutation.isPending}
+                            onClick={() => lifecycleMutation.mutate({ productId: product.id, action: "submit" })}
+                          >
+                            <PackageCheck size={15} aria-hidden="true" />
+                            Gửi phê duyệt
+                          </Button>
+                        ) : null}
+                        {product.productStatus === "Published" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={lifecycleMutation.isPending}
+                            onClick={() => lifecycleMutation.mutate({ productId: product.id, action: "stop" })}
+                          >
+                            <CirclePause size={15} aria-hidden="true" />
+                            Ngừng bán
+                          </Button>
+                        ) : null}
+                        {product.productStatus === "Inactive" ? (
+                          <Button
+                            type="button"
+                            disabled={lifecycleMutation.isPending}
+                            onClick={() => lifecycleMutation.mutate({ productId: product.id, action: "resume" })}
+                          >
+                            <CirclePlay size={15} aria-hidden="true" />
+                            Mở bán lại
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="danger"
-                          onClick={() => setDeleteTarget(product)}
+                          onClick={() => openDeleteModal(product)}
                         >
                           <Trash2 size={15} aria-hidden="true" />
                           Xóa
@@ -188,13 +254,15 @@ export function SellerProductsPage() {
       <Modal
         open={Boolean(deleteTarget)}
         title="Xóa sản phẩm"
-        onClose={() => setDeleteTarget(null)}
+        onClose={closeDeleteModal}
+        closeDisabled={deleteMutation.isPending}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setDeleteTarget(null)}
+              disabled={deleteMutation.isPending}
+              onClick={closeDeleteModal}
             >
               Hủy
             </Button>
