@@ -13,6 +13,7 @@ import {
   UsersRound,
   WalletCards,
   Landmark,
+  Settings2,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
@@ -30,8 +31,14 @@ const navItems = [
   },
   {
     to: "/seller/shop/register",
-    label: "Hồ sơ người bán",
-    icon: Store,
+    label: "Hồ sơ xét duyệt",
+    icon: ShieldCheck,
+    roles: ["Seller"],
+  },
+  {
+    to: "/seller/shop/profile",
+    label: "Thông tin gian hàng",
+    icon: Settings2,
     roles: ["Seller"],
   },
   {

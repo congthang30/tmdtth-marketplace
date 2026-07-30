@@ -217,6 +217,7 @@ model Address {
 model Shop {
   id                       BigInt            @id @default(autoincrement()) @map("ShopID")
   ownerUserId              BigInt            @map("OwnerUserID")
+  avatarAssetId            BigInt?           @unique @map("AvatarAssetID")
   code                     String            @unique @default(uuid()) @map("ShopCode") @db.Uuid
   shopName                 String            @map("ShopName") @db.VarChar(150)
   slug                     String            @unique @map("Slug") @db.VarChar(180)
@@ -242,9 +243,10 @@ model Shop {
   updatedAt                DateTime?         @map("UpdatedAt") @db.Timestamp(3)
   deletedAt                DateTime?         @map("DeletedAt") @db.Timestamp(3)
 
-  ownerUser              User  @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approvedByUser         User? @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  operationUpdatedByUser User? @relation("ShopOperationUpdatedBy", fields: [operationUpdatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownerUser              User         @relation("ShopOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  avatarAsset            UploadAsset? @relation("ShopAvatar", fields: [avatarAssetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser         User?        @relation("ShopApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  operationUpdatedByUser User?        @relation("ShopOperationUpdatedBy", fields: [operationUpdatedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   products       Product[]
   shopCategories ShopCategory[]
@@ -572,6 +574,7 @@ model UploadAsset {
 
   owner        User          @relation("UploadAssetOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   productImage ProductImage?
+  shopAvatar   Shop?         @relation("ShopAvatar")
 
   @@index([ownerUserId, status, createdAt])
   @@map("UploadAssets")

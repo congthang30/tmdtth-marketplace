@@ -82,8 +82,17 @@ describe('UploadService', () => {
         status: 'Pending',
         createdAt: { lt: new Date('2026-07-28T12:00:00.000Z') },
         productImage: null,
+        shopAvatar: null,
       },
       select: { id: true, storagePublicId: true },
+    });
+    expect(prisma.uploadAsset.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 1n,
+        status: 'Pending',
+        productImage: null,
+        shopAvatar: null,
+      },
     });
   });
 

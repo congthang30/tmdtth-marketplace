@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { PauseShopIndefinitelyDto } from './dto/pause-shop-indefinitely.dto';
 import { RejectShopDto } from './dto/reject-shop.dto';
 import { ScheduleShopPauseDto } from './dto/schedule-shop-pause.dto';
 import { ShopCatalogQueryDto } from './dto/shop-catalog-query.dto';
+import { UpdateShopProfileDto } from './dto/update-shop-profile.dto';
 import { UpsertShopCategoryDto } from './dto/upsert-shop-category.dto';
 import { ShopResponse } from './types';
 
@@ -69,9 +71,85 @@ export class ShopsService {
         isDeleted: false,
       },
       orderBy: [{ createdAt: 'desc' }],
+      include: { avatarAsset: { select: { url: true } } },
     });
 
     return shop ? this.toShopResponse(shop) : null;
+  }
+
+  async updateMyShopProfile(
+    user: AuthenticatedUser,
+    dto: UpdateShopProfileDto,
+  ): Promise<ShopResponse> {
+    const shop = await this.prisma.shop.findFirst({
+      where: {
+        ownerUserId: user.id,
+        shopStatus: SHOP_STATUS_APPROVED,
+        isDeleted: false,
+      },
+      select: { id: true },
+    });
+    if (!shop) {
+      throw new NotFoundException({
+        code: 'SHOP_NOT_FOUND',
+        message: 'Không tìm thấy gian hàng đã được duyệt.',
+        details: [],
+      });
+    }
+
+    const avatarAssetId =
+      dto.avatarAssetId === undefined || dto.avatarAssetId === null
+        ? dto.avatarAssetId
+        : this.parseAssetId(dto.avatarAssetId);
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      if (typeof avatarAssetId === 'bigint') {
+        const attached = await tx.uploadAsset.updateMany({
+          where: {
+            id: avatarAssetId,
+            ownerUserId: user.id,
+            status: 'Pending',
+            productImage: null,
+            shopAvatar: null,
+          },
+          data: { status: 'Attached', attachedAt: now },
+        });
+        if (attached.count !== 1) {
+          throw new ConflictException({
+            code: 'UPLOAD_ASSET_NOT_ATTACHABLE',
+            message:
+              'Ảnh đại diện không tồn tại, không thuộc tài khoản hoặc đã được sử dụng.',
+            details: [{ field: 'avatarAssetId' }],
+          });
+        }
+      }
+
+      const updated = await tx.shop.update({
+        where: { id: shop.id },
+        data: {
+          shopName: dto.shopName,
+          description: this.normalizeNullableText(dto.description),
+          email: this.normalizeNullableText(dto.email),
+          phoneNumber: this.normalizeNullableText(dto.phoneNumber),
+          province: this.normalizeNullableText(dto.province),
+          ward: this.normalizeNullableText(dto.ward),
+          streetAddress: this.normalizeNullableText(dto.streetAddress),
+          ...(avatarAssetId === undefined
+            ? {}
+            : {
+                avatarAsset:
+                  avatarAssetId === null
+                    ? { disconnect: true }
+                    : { connect: { id: avatarAssetId } },
+              }),
+          updatedAt: now,
+        },
+        include: { avatarAsset: { select: { url: true } } },
+      });
+
+      return this.toShopResponse(updated);
+    });
   }
 
   async getMyShopOperation(user: AuthenticatedUser) {
@@ -278,6 +356,7 @@ export class ShopsService {
         operationMode: true,
         pauseStartsAt: true,
         pauseEndsAt: true,
+        avatarAsset: { select: { url: true } },
       },
     });
     if (!shop)
@@ -338,11 +417,13 @@ export class ShopsService {
       }),
       this.prisma.product.count({ where }),
     ]);
+    const { avatarAsset, ...publicShop } = shop;
     return {
       shop: {
-        ...shop,
+        ...publicShop,
         id: shop.id.toString(),
         idString: shop.id.toString(),
+        avatarUrl: avatarAsset?.url ?? null,
         isAcceptingOrders: !isPaused,
       },
       categories: categories.map((item) => ({
@@ -818,6 +899,7 @@ export class ShopsService {
     isDeleted: boolean;
     createdAt: Date;
     updatedAt: Date | null;
+    avatarAsset?: { url: string } | null;
   }): ShopResponse {
     return {
       id: shop.id.toString(),
@@ -832,6 +914,7 @@ export class ShopsService {
       province: shop.province,
       ward: shop.ward,
       streetAddress: shop.streetAddress,
+      avatarUrl: shop.avatarAsset?.url ?? null,
       taxCode: shop.taxCode,
       shopStatus: shop.shopStatus,
       operationMode: shop.operationMode,
@@ -857,6 +940,18 @@ export class ShopsService {
         code: 'INVALID_SHOP_ID',
         message: 'Shop id is invalid',
         details: [{ field: 'shopId' }],
+      });
+    }
+
+    return BigInt(value);
+  }
+
+  private parseAssetId(value: string): bigint {
+    if (!/^\d+$/.test(value)) {
+      throw new BadRequestException({
+        code: 'INVALID_UPLOAD_ASSET_ID',
+        message: 'Ảnh đại diện không hợp lệ.',
+        details: [{ field: 'avatarAssetId' }],
       });
     }
 

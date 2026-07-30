@@ -167,13 +167,19 @@ export class UploadService implements OnModuleInit, OnModuleDestroy {
         status: 'Pending',
         createdAt: { lt: cutoff },
         productImage: null,
+        shopAvatar: null,
       },
       select: { id: true, storagePublicId: true },
     });
     let removed = 0;
     for (const asset of assets) {
       const claimed = await this.prisma.uploadAsset.deleteMany({
-        where: { id: asset.id, status: 'Pending', productImage: null },
+        where: {
+          id: asset.id,
+          status: 'Pending',
+          productImage: null,
+          shopAvatar: null,
+        },
       });
       if (claimed.count !== 1) continue;
       try {

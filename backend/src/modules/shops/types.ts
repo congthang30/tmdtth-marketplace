@@ -11,6 +11,7 @@ export type ShopResponse = {
   province: string | null;
   ward: string | null;
   streetAddress: string | null;
+  avatarUrl: string | null;
   taxCode: string | null;
   shopStatus: string;
   operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';

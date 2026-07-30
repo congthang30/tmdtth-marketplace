@@ -15,6 +15,13 @@ type ShopDelegateMock = {
 
 type PrismaMock = {
   shop: ShopDelegateMock;
+  uploadAsset: {
+    updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+  };
+  $transaction: jest.Mock<
+    Promise<unknown>,
+    [(tx: PrismaMock) => Promise<unknown>]
+  >;
 };
 
 type ShopEntity = {
@@ -41,17 +48,14 @@ type ShopEntity = {
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date | null;
+  avatarAsset?: { url: string } | null;
   sellerVerification?: { verificationStatus: 'Approved' } | null;
 };
 
 type ShopUpdateArgs = {
   where: { id: bigint };
-  data: {
-    shopStatus: string;
-    approvedByUserId: bigint;
-    approvedAt: Date;
-    updatedAt: Date;
-  };
+  data: Record<string, unknown>;
+  include?: unknown;
 };
 
 type ShopCreateArgs = {
@@ -136,7 +140,15 @@ describe('ShopsService', () => {
         create: jest.fn<Promise<ShopEntity>, [ShopCreateArgs]>(),
         update: jest.fn<Promise<ShopEntity>, [ShopUpdateArgs]>(),
       },
+      uploadAsset: {
+        updateMany: jest.fn<Promise<{ count: number }>, [unknown]>(),
+      },
+      $transaction: jest.fn<
+        Promise<unknown>,
+        [(tx: PrismaMock) => Promise<unknown>]
+      >(),
     };
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
     service = new ShopsService(prisma as unknown as PrismaService);
   });
 
@@ -173,27 +185,165 @@ describe('ShopsService', () => {
   });
 
   describe('getMyShop', () => {
-    it('returns the latest non-deleted shop owned by the current user', async () => {
+    it('returns the latest non-deleted shop owned by the current user with avatar', async () => {
       prisma.shop.findFirst.mockResolvedValue(
-        createShopEntity({ ownerUserId: sellerUser.id }),
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          avatarAsset: { url: 'https://example.com/shop.jpg' },
+        }),
       );
 
       const result = await service.getMyShop(sellerUser);
       const findArgs = prisma.shop.findFirst.mock.calls[0][0] as {
         where: { ownerUserId: bigint; isDeleted: boolean };
+        include: unknown;
       };
 
       expect(findArgs.where).toEqual({
         ownerUserId: sellerUser.id,
         isDeleted: false,
       });
+      expect(findArgs.include).toEqual({
+        avatarAsset: { select: { url: true } },
+      });
       expect(result?.ownerUserId).toBe('7');
+      expect(result?.avatarUrl).toBe('https://example.com/shop.jpg');
     });
 
     it('returns null when the current user has no shop', async () => {
       prisma.shop.findFirst.mockResolvedValue(null);
 
       await expect(service.getMyShop(sellerUser)).resolves.toBeNull();
+    });
+  });
+
+  describe('updateMyShopProfile', () => {
+    it('updates only storefront fields, preserves slug, and attaches an owned avatar', async () => {
+      prisma.shop.findFirst.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+        }),
+      );
+      prisma.uploadAsset.updateMany.mockResolvedValue({ count: 1 });
+      prisma.shop.update.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+          shopName: 'Nông sản mới',
+          description: 'Giới thiệu mới',
+          email: null,
+          phoneNumber: '0900000001',
+          province: 'Hà Nội',
+          ward: 'Phường Hoàn Kiếm',
+          streetAddress: '10 Tràng Tiền',
+          avatarAsset: { url: 'https://example.com/avatar.jpg' },
+        }),
+      );
+
+      const result = await service.updateMyShopProfile(sellerUser, {
+        shopName: 'Nông sản mới',
+        description: ' Giới thiệu mới ',
+        email: ' ',
+        phoneNumber: ' 0900000001 ',
+        province: ' Hà Nội ',
+        ward: ' Phường Hoàn Kiếm ',
+        streetAddress: ' 10 Tràng Tiền ',
+        avatarAssetId: '12',
+      });
+
+      expect(prisma.shop.findFirst).toHaveBeenCalledWith({
+        where: {
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+          isDeleted: false,
+        },
+        select: { id: true },
+      });
+      const uploadCall = prisma.uploadAsset.updateMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+        data: { status: unknown; attachedAt: unknown };
+      };
+      expect(uploadCall.where).toEqual({
+        id: 12n,
+        ownerUserId: sellerUser.id,
+        status: 'Pending',
+        productImage: null,
+        shopAvatar: null,
+      });
+      expect(uploadCall.data.status).toBe('Attached');
+      expect(uploadCall.data.attachedAt).toBeInstanceOf(Date);
+      const update = prisma.shop.update.mock.calls[0][0];
+      expect(update.data).toMatchObject({
+        shopName: 'Nông sản mới',
+        description: 'Giới thiệu mới',
+        email: null,
+        phoneNumber: '0900000001',
+        province: 'Hà Nội',
+        ward: 'Phường Hoàn Kiếm',
+        streetAddress: '10 Tràng Tiền',
+        avatarAsset: { connect: { id: 12n } },
+      });
+      expect(update.data).not.toHaveProperty('slug');
+      expect(update.data).not.toHaveProperty('taxCode');
+      expect(update.data).not.toHaveProperty('shopStatus');
+      expect(update.data).not.toHaveProperty('sellerVerification');
+      expect(result.avatarUrl).toBe('https://example.com/avatar.jpg');
+    });
+
+    it('rejects an avatar that cannot be atomically claimed', async () => {
+      prisma.shop.findFirst.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+        }),
+      );
+      prisma.uploadAsset.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateMyShopProfile(sellerUser, {
+          shopName: 'Nông sản mới',
+          avatarAssetId: '12',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'UPLOAD_ASSET_NOT_ATTACHABLE' },
+      });
+      expect(prisma.shop.update).not.toHaveBeenCalled();
+    });
+
+    it('allows removing the avatar without touching upload assets', async () => {
+      prisma.shop.findFirst.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+        }),
+      );
+      prisma.shop.update.mockResolvedValue(
+        createShopEntity({
+          ownerUserId: sellerUser.id,
+          shopStatus: 'Approved',
+          avatarAsset: null,
+        }),
+      );
+
+      await service.updateMyShopProfile(sellerUser, {
+        shopName: 'Seller Home',
+        avatarAssetId: null,
+      });
+
+      expect(prisma.uploadAsset.updateMany).not.toHaveBeenCalled();
+      expect(prisma.shop.update.mock.calls[0][0].data).toMatchObject({
+        avatarAsset: { disconnect: true },
+      });
+    });
+
+    it('does not expose profile updates for a non-approved owned shop', async () => {
+      prisma.shop.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateMyShopProfile(sellerUser, { shopName: 'Seller Home' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

@@ -8,13 +8,17 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { AppRole } from '../auth/app-role.enum';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/types';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { PauseShopIndefinitelyDto } from './dto/pause-shop-indefinitely.dto';
 import { ScheduleShopPauseDto } from './dto/schedule-shop-pause.dto';
 import { ShopCatalogQueryDto } from './dto/shop-catalog-query.dto';
+import { UpdateShopProfileDto } from './dto/update-shop-profile.dto';
 import { ShopsService } from './shops.service';
 
 @Controller('shops')
@@ -25,6 +29,16 @@ export class ShopsController {
   @UseGuards(JwtAuthGuard)
   getMyShop(@CurrentUser() user: AuthenticatedUser) {
     return this.shopsService.getMyShop(user);
+  }
+
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(AppRole.Seller)
+  updateMyShopProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateShopProfileDto,
+  ) {
+    return this.shopsService.updateMyShopProfile(user, dto);
   }
 
   @Get('me/operation')

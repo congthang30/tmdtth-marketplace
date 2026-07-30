@@ -1,14 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
-import { Boxes, ClipboardList, FolderTree, Store, ExternalLink } from "lucide-react";
+import {
+  Boxes,
+  ClipboardList,
+  ExternalLink,
+  FolderTree,
+  Settings2,
+  Store,
+} from "lucide-react";
+import { useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { resolveMediaUrl } from "@/features/catalog/utils";
 import { formatMoney, formatStatus } from "@/utils/format";
 import { sellerOrdersApi, sellerProductsApi, sellerShopApi } from "../api";
 
 export function SellerDashboardPage() {
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const shopQuery = useQuery({
     queryKey: ["seller", "shop", "me"],
     queryFn: sellerShopApi.getMyShop,
@@ -55,25 +65,45 @@ export function SellerDashboardPage() {
     <div className="space-y-5">
       <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-              Khu vực người bán
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold">{shop.shopName}</h1>
-              <Badge>{formatStatus(shop.shopStatus)}</Badge>
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-primary-50 text-primary-700">
+              {resolveMediaUrl(shop.avatarUrl) && !avatarLoadFailed ? (
+                <img
+                  src={resolveMediaUrl(shop.avatarUrl) ?? undefined}
+                  alt={`Ảnh đại diện ${shop.shopName}`}
+                  className="h-full w-full object-cover"
+                  onError={() => setAvatarLoadFailed(true)}
+                />
+              ) : (
+                <Store size={28} aria-hidden="true" />
+              )}
             </div>
-            <p className="mt-2 max-w-2xl text-sm text-muted">
-              {shop.description ??
-                "Quản lý sản phẩm, tồn kho và xử lý đơn hàng."}
-            </p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
+                Khu vực người bán
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold">{shop.shopName}</h1>
+                <Badge>{formatStatus(shop.shopStatus)}</Badge>
+              </div>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                {shop.description ??
+                  "Quản lý sản phẩm, tồn kho và xử lý đơn hàng."}
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {shop.shopStatus === "Approved" ? (
-              <ButtonLink to={`/shops/${shop.slug}`} variant="secondary">
-                <ExternalLink size={16} aria-hidden="true" />
-                Xem gian hàng
-              </ButtonLink>
+              <>
+                <ButtonLink to="/seller/shop/profile" variant="secondary">
+                  <Settings2 size={16} aria-hidden="true" />
+                  Chỉnh thông tin
+                </ButtonLink>
+                <ButtonLink to={`/shops/${shop.slug}`} variant="secondary">
+                  <ExternalLink size={16} aria-hidden="true" />
+                  Xem gian hàng
+                </ButtonLink>
+              </>
             ) : null}
             <ButtonLink to="/seller/shop-operation" variant="secondary">
               <Store size={16} aria-hidden="true" />

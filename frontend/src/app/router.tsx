@@ -18,6 +18,7 @@ import { ProtectedRoute } from "@/features/auth/components/ProtectedRoute";
 import { RoleRoute } from "@/features/auth/components/RoleRoute";
 import { SellerDashboardPage } from "@/features/seller/pages/SellerDashboardPage";
 import { SellerShopOperationPage } from "@/features/seller/pages/SellerShopOperationPage";
+import { SellerShopProfilePage } from "@/features/seller/pages/SellerShopProfilePage";
 import { SellerShopRegisterPage } from "@/features/seller/pages/SellerShopRegisterPage";
 import { SellerProductsPage } from "@/features/seller/pages/SellerProductsPage";
 import { SellerProductFormPage } from "@/features/seller/pages/SellerProductFormPage";
@@ -163,6 +164,14 @@ export const router = createBrowserRouter([
       {
         path: "seller/shop/register",
         element: <SellerShopRegisterPage />,
+      },
+      {
+        path: "seller/shop/profile",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerShopProfilePage />
+          </RoleRoute>
+        ),
       },
       {
         path: "seller/products",

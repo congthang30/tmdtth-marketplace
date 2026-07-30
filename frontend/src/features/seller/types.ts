@@ -15,6 +15,7 @@ export type Shop = {
   province: string | null;
   ward: string | null;
   streetAddress: string | null;
+  avatarUrl: string | null;
   taxCode: string | null;
   shopStatus: string;
   operationMode: 'Open' | 'PausedUntil' | 'PausedIndefinitely';
@@ -42,6 +43,17 @@ export type ShopRequest = {
   ward?: string;
   streetAddress?: string;
   taxCode?: string;
+};
+
+export type ShopProfileRequest = {
+  shopName: string;
+  description?: string;
+  email?: string;
+  phoneNumber?: string;
+  province?: string;
+  ward?: string;
+  streetAddress?: string;
+  avatarAssetId?: string | null;
 };
 
 export type SellerProduct = ProductListItem & {

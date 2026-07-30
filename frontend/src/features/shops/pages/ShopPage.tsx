@@ -8,10 +8,12 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatMoney } from '@/utils/format';
+import { resolveMediaUrl } from '@/features/catalog/utils';
 import { shopsApi } from '../api';
 
 export function ShopPage() {
   const { slug = '' } = useParams<{ slug: string }>();
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [params, setParams] = useSearchParams();
   const category = params.get('category') ?? undefined;
   const page = Number(params.get('page') ?? '1');
@@ -30,7 +32,7 @@ export function ShopPage() {
 
   return <div className="space-y-6">
     <header className="overflow-hidden rounded-xl border border-border bg-white shadow-panel">
-      <div className="bg-gradient-to-r from-primary-700 to-primary-500 p-6 text-white sm:p-8"><div className="flex items-start gap-4"><div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white/15"><Store size={30} aria-hidden="true"/></div><div><p className="text-sm font-medium text-white/80">Gian hàng đã được duyệt</p><h1 className="mt-1 text-2xl font-semibold sm:text-3xl">{shop.shopName}</h1><p className="mt-2 max-w-2xl text-sm text-white/85">{shop.description ?? 'Khám phá các sản phẩm đang được gian hàng cung cấp.'}</p></div></div></div>
+      <div className="bg-gradient-to-r from-primary-700 to-primary-500 p-6 text-white sm:p-8"><div className="flex items-start gap-4"><div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/20 bg-white/15"><>{resolveMediaUrl(shop.avatarUrl) && !avatarLoadFailed ? <img src={resolveMediaUrl(shop.avatarUrl) ?? undefined} alt={`Ảnh đại diện ${shop.shopName}`} className="h-full w-full object-cover" onError={() => setAvatarLoadFailed(true)}/> : <Store size={30} aria-hidden="true"/>}</></div><div className="min-w-0"><p className="text-sm font-medium text-white/80">Gian hàng đã được duyệt</p><h1 className="mt-1 break-words text-2xl font-semibold sm:text-3xl">{shop.shopName}</h1><p className="mt-2 max-w-2xl text-sm text-white/85">{shop.description ?? 'Khám phá các sản phẩm đang được gian hàng cung cấp.'}</p></div></div></div>
       {!shop.isAcceptingOrders ? <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status"><p className="font-semibold">Gian hàng đang tạm nghỉ, chưa nhận đơn mới.</p><p className="mt-1">{shop.pauseEndsAt ? `Dự kiến mở lại: ${new Date(shop.pauseEndsAt).toLocaleString('vi-VN')}.` : 'Chưa có thời điểm mở lại.'}</p></div> : null}
       <form onSubmit={submitSearch} className="flex gap-2 p-4"><label className="relative flex-1"><span className="sr-only">Tìm trong gian hàng</span><Search className="absolute left-3 top-3.5 text-muted" size={18}/><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="h-11 w-full rounded-md border border-border pl-10 pr-3 focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-100" placeholder="Tìm trong gian hàng"/></label><Button type="submit">Tìm kiếm</Button></form>
     </header>

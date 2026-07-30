@@ -28,6 +28,7 @@ import type {
   ShipmentRequest,
   ShippingServiceListResponse,
   Shop,
+  ShopProfileRequest,
   ShopRequest,
   UploadListResponse,
   UploadedFile,
@@ -64,6 +65,9 @@ export const sellerShopApi = {
   },
   createShop(body: ShopRequest) {
     return apiPost<Shop, ShopRequest>('/shops', body);
+  },
+  updateProfile(body: ShopProfileRequest) {
+    return apiPatch<Shop, ShopProfileRequest>('/shops/me/profile', body);
   },
 };
 
