@@ -62,6 +62,8 @@ export type LedgerEntry = {
 export type PayoutBank = {
   code: string;
   name: string;
+  fullName: string;
+  logoUrl: string | null;
 };
 
 export type PayoutAccount = {

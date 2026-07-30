@@ -11,9 +11,12 @@ import {
 export type ComboboxOption = {
   value: string;
   label: string;
+  description?: string;
+  imageUrl?: string | null;
 };
 
 type ComboboxProps = {
+  id?: string;
   label: string;
   placeholder?: string;
   value: string;
@@ -37,6 +40,7 @@ type ComboboxProps = {
  * the option list, query and selection are fully controlled by the caller.
  */
 export function Combobox({
+  id,
   label,
   placeholder,
   value,
@@ -56,7 +60,8 @@ export function Combobox({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const inputId = useId();
+  const generatedInputId = useId();
+  const inputId = id ?? generatedInputId;
   const listboxId = useId();
   const errorId = useId();
 
@@ -186,11 +191,25 @@ export function Combobox({
           }}
           onKeyDown={handleKeyDown}
           className={[
-            "block w-full min-h-11 rounded-md border border-border bg-white px-3 py-2 pr-9 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100",
+            "block w-full min-h-11 rounded-md border border-border bg-white py-2 pr-9 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100",
+            selectedOption?.imageUrl && !isOpen ? "pl-14" : "pl-3",
             error ? "border-danger focus:border-danger focus:ring-red-100" : "",
             disabled ? "cursor-not-allowed bg-surface text-muted" : "",
           ].join(" ")}
         />
+        {selectedOption?.imageUrl && !isOpen ? (
+          <img
+            src={selectedOption.imageUrl}
+            alt=""
+            width={32}
+            height={24}
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+            }}
+            className="pointer-events-none absolute left-3 top-1/2 h-6 w-8 -translate-y-1/2 object-contain"
+          />
+        ) : null}
         <ChevronDown
           size={16}
           aria-hidden="true"
@@ -217,14 +236,35 @@ export function Combobox({
                   }}
                   onMouseEnter={() => setActiveIndex(index)}
                   className={[
-                    "cursor-pointer px-3 py-2 text-sm",
+                    "flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm",
                     index === activeIndex
                       ? "bg-primary-50 text-primary-700"
                       : "text-ink",
                     option.value === value ? "font-semibold" : "",
                   ].join(" ")}
                 >
-                  {option.label}
+                  {option.imageUrl ? (
+                    <img
+                      src={option.imageUrl}
+                      alt=""
+                      width={40}
+                      height={28}
+                      loading="lazy"
+                      decoding="async"
+                      onError={(event) => {
+                        event.currentTarget.hidden = true;
+                      }}
+                      className="h-7 w-10 shrink-0 object-contain"
+                    />
+                  ) : null}
+                  <span className="min-w-0">
+                    <span className="block truncate">{option.label}</span>
+                    {option.description ? (
+                      <span className="mt-0.5 block truncate text-xs font-normal text-muted">
+                        {option.description}
+                      </span>
+                    ) : null}
+                  </span>
                 </li>
               ))
             ) : (

@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Combobox } from '@/components/ui/Combobox';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { SelectInput } from '@/components/ui/SelectInput';
@@ -48,6 +49,7 @@ export function SellerFinancePage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [accountForm, setAccountForm] = useState(blankAccount);
+  const [bankQuery, setBankQuery] = useState('');
   const [amount, setAmount] = useState('');
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerType, setLedgerType] = useState<LedgerParams['entryType']>();
@@ -121,6 +123,21 @@ export function SellerFinancePage() {
       ? 'Số tài khoản phải gồm 6–30 chữ số.'
       : undefined;
   const accountFormComplete = Object.values(accountForm).every((value) => value.trim());
+  const normalizedBankQuery = bankQuery.trim().toLocaleLowerCase('vi');
+  const bankOptions = (banksQuery.data ?? [])
+    .filter(
+      (bank) =>
+        !normalizedBankQuery ||
+        `${bank.name} ${bank.fullName} ${bank.code}`
+          .toLocaleLowerCase('vi')
+          .includes(normalizedBankQuery),
+    )
+    .map((bank) => ({
+      value: bank.code,
+      label: `${bank.name} (${bank.code})`,
+      description: bank.fullName === bank.name ? undefined : bank.fullName,
+      imageUrl: bank.logoUrl,
+    }));
 
   return (
     <div className="space-y-6">
@@ -264,24 +281,27 @@ export function SellerFinancePage() {
           {banksQuery.isError ? <Alert tone="danger">Không thể tải danh sách ngân hàng. Vui lòng thử lại trước khi lưu tài khoản.</Alert> : null}
           {banksQuery.isError ? <Button id="seller-retry-payout-banks-button" type="button" variant="secondary" onClick={() => void banksQuery.refetch()}>Tải lại danh sách ngân hàng</Button> : null}
           {accountMutation.isError ? <Alert tone="danger">{getErrorMessage(accountMutation.error)}</Alert> : null}
-          <SelectInput
+          <Combobox
             id="seller-payout-bank"
             label="Ngân hàng"
             required
             disabled={banksQuery.isPending || banksQuery.isError}
+            disabledHint={banksQuery.isPending ? 'Đang tải danh sách ngân hàng...' : 'Không thể tải danh sách ngân hàng'}
+            placeholder="Tìm theo tên hoặc mã ngân hàng"
+            emptyMessage="Không tìm thấy ngân hàng phù hợp"
             value={accountForm.bankCode}
-            onChange={(event) => {
-              const bank = banksQuery.data?.find(({ code }) => code === event.target.value);
+            query={bankQuery}
+            options={bankOptions}
+            onQueryChange={setBankQuery}
+            onChange={(bankCode) => {
+              const bank = banksQuery.data?.find(({ code }) => code === bankCode);
               setAccountForm((current) => ({
                 ...current,
                 bankCode: bank?.code ?? '',
                 bankName: bank?.name ?? '',
               }));
             }}
-          >
-            <option value="">{banksQuery.isPending ? 'Đang tải danh sách ngân hàng...' : 'Chọn ngân hàng'}</option>
-            {banksQuery.data?.map((bank) => <option key={bank.code} value={bank.code}>{bank.name} ({bank.code})</option>)}
-          </SelectInput>
+          />
           <TextInput id="seller-bank-account-number" label="Số tài khoản" inputMode="numeric" autoComplete="off" required error={accountNumberError} value={accountForm.accountNumber} onChange={(event) => setAccountForm((current) => ({ ...current, accountNumber: event.target.value.replace(/\s/g, '') }))} />
           <TextInput id="seller-bank-account-holder" label="Tên chủ tài khoản" autoComplete="name" required value={accountForm.accountHolderName} onChange={(event) => setAccountForm((current) => ({ ...current, accountHolderName: event.target.value }))} />
           <p className="text-sm leading-6 text-muted">Vui lòng kiểm tra số tài khoản và tên người nhận trong ứng dụng ngân hàng trước khi gửi yêu cầu rút tiền.</p>

@@ -22,7 +22,7 @@ import {
   SellerPayoutQueryDto,
 } from './dto/payout.dto';
 import { SellerLedgerQueryDto } from './dto/seller-ledger-query.dto';
-import { SUPPORTED_PAYOUT_BANKS } from './finance.constants';
+import { PayoutBankDirectoryService } from './payout-bank-directory.service';
 import { PayoutService } from './payout.service';
 import { SellerLedgerService } from './seller-ledger.service';
 
@@ -33,6 +33,7 @@ export class SellerFinanceController {
   constructor(
     private readonly sellerLedgerService: SellerLedgerService,
     private readonly payoutService: PayoutService,
+    private readonly payoutBankDirectoryService: PayoutBankDirectoryService,
   ) {}
 
   @Get('summary')
@@ -50,7 +51,7 @@ export class SellerFinanceController {
 
   @Get('payout-banks')
   listPayoutBanks() {
-    return SUPPORTED_PAYOUT_BANKS;
+    return this.payoutBankDirectoryService.list();
   }
 
   @Get('payout-account')
