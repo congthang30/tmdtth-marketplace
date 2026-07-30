@@ -143,7 +143,14 @@ export class ProductsService {
       });
     }
 
-    return this.toListItem(product);
+    const response = this.toListItem(product);
+    return {
+      ...response,
+      shop: {
+        ...response.shop,
+        avatarUrl: product.shop.avatarAsset?.url ?? null,
+      },
+    };
   }
 
   async checkPublicProductVariant(slug: string, attributesJson: string) {
@@ -1829,6 +1836,7 @@ export class ProductsService {
             id: true,
             shopName: true,
             slug: true,
+            avatarAsset: { select: { url: true } },
           },
         },
         category: {

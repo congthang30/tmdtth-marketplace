@@ -14,6 +14,7 @@ import { getErrorMessage } from "@/services/errors";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastStore } from "@/stores/toast.store";
 import { formatMoney } from "@/utils/format";
+import { resolveMediaUrl } from "../utils";
 import { catalogApi } from "../api";
 import { ProductReviews } from "../components/ProductReviews";
 import { ProductVisual } from "../components/ProductVisual";
@@ -35,6 +36,7 @@ export function ProductDetailPage() {
   const [selectedOptionValues, setSelectedOptionValues] = useState<Record<string, string>>({});
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [shopAvatarLoadFailed, setShopAvatarLoadFailed] = useState(false);
 
   const productQuery = useQuery({
     queryKey: ["catalog", "product", slug],
@@ -89,6 +91,7 @@ export function ProductDetailPage() {
       product.thumbnailImage?.id ?? product.images[0]?.id ?? null,
     );
     setQuantity(1);
+    setShopAvatarLoadFailed(false);
   }, [hasAttributeOptions, product]);
 
   const addToCartMutation = useMutation({
@@ -112,6 +115,7 @@ export function ProductDetailPage() {
   };
 
   const canAddToCart = canAddVariantToCart(selectedVariant, quantity);
+  const shopAvatarUrl = resolveMediaUrl(product?.shop.avatarUrl);
 
   if (productQuery.isLoading) {
     return (
@@ -371,8 +375,17 @@ export function ProductDetailPage() {
       <section className="rounded-lg border border-border bg-white p-5 shadow-panel sm:p-6" aria-labelledby="product-shop-heading">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-primary-100 bg-primary-50 text-primary-700">
-              <Store size={28} aria-hidden="true" />
+            <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border border-primary-100 bg-primary-50 text-primary-700">
+              {shopAvatarUrl && !shopAvatarLoadFailed ? (
+                <img
+                  src={shopAvatarUrl}
+                  alt={`Ảnh đại diện ${product.shop.shopName}`}
+                  className="h-full w-full object-cover"
+                  onError={() => setShopAvatarLoadFailed(true)}
+                />
+              ) : (
+                <Store size={28} aria-hidden="true" />
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">Được bán bởi</p>

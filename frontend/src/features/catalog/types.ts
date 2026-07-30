@@ -55,6 +55,7 @@ export type ProductListItem = {
     idString: string;
     shopName: string;
     slug: string;
+    avatarUrl?: string | null;
   };
   category: {
     id: string;
