@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { createPaginatedResult } from '../../common/utils/pagination.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/types';
+import { SellerLedgerService } from '../finance/seller-ledger.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import {
   CarrierApiError,
@@ -280,6 +281,7 @@ export class ShippingService {
     private readonly prisma: PrismaService,
     private readonly carrierRegistry: CarrierRegistry,
     private readonly ghnClient: GhnClient,
+    private readonly sellerLedgerService: SellerLedgerService,
   ) {}
 
   /**
@@ -1491,6 +1493,12 @@ export class ShippingService {
         updatedAt: now,
       },
     });
+
+    await this.sellerLedgerService.accrueCompletedShopOrder(
+      client,
+      shopOrderId,
+      now,
+    );
 
     await client.orderStatusHistory.create({
       data: {

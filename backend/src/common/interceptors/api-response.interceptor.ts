@@ -4,8 +4,10 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable, map } from 'rxjs';
-import { ApiSuccessBody, PaginatedResult } from '../types/api-response.type';
+import { NO_API_ENVELOPE } from '../decorators/no-api-envelope.decorator';
+import { PaginatedResult } from '../types/api-response.type';
 import { serializeForJson } from '../utils/serialization.util';
 
 function isPaginatedResult(value: unknown): value is PaginatedResult<unknown> {
@@ -20,12 +22,20 @@ function isPaginatedResult(value: unknown): value is PaginatedResult<unknown> {
 @Injectable()
 export class ApiResponseInterceptor implements NestInterceptor<
   unknown,
-  ApiSuccessBody
+  unknown
 > {
+  constructor(private readonly reflector: Reflector) {}
+
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler<unknown>,
-  ): Observable<ApiSuccessBody> {
+  ): Observable<unknown> {
+    const bypass = this.reflector.getAllAndOverride<boolean>(NO_API_ENVELOPE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (bypass) return next.handle();
+
     return next.handle().pipe(
       map((value) => {
         if (isPaginatedResult(value)) {

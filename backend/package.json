@@ -17,6 +17,7 @@
     "test:mvp": "node scripts/mvp-acceptance.mjs",
     "test:verification": "node scripts/seller-verification-acceptance.mjs",
     "db:cleanup:seller-drafts": "node scripts/cleanup-seller-drafts.mjs",
+    "db:backfill:seller-ledger": "node scripts/backfill-seller-ledger.mjs",
     "db:check": "node scripts/check-database.mjs",
     "db:seed": "node prisma/seed.mjs",
     "db:seed:check": "node scripts/check-seed.mjs",

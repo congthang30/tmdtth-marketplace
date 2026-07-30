@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppRole } from '../auth/app-role.enum';
 import { AuthenticatedUser } from '../auth/types';
+import { SellerLedgerService } from '../finance/seller-ledger.service';
 import { CarrierRegistry } from './carriers/carrier.registry';
 import { CarrierClient, CarrierQuoteResult } from './carriers/carrier.types';
 import { GhnClient } from './carriers/ghn.client';
@@ -531,6 +532,9 @@ describe('ShippingService', () => {
   let ghnClient: jest.Mocked<
     Pick<GhnClient, 'isConfigured' | 'getStations' | 'getA5PrintUrl'>
   >;
+  let sellerLedgerService: jest.Mocked<
+    Pick<SellerLedgerService, 'accrueCompletedShopOrder'>
+  >;
   let service: ShippingService;
 
   beforeEach(() => {
@@ -652,10 +656,18 @@ describe('ShippingService', () => {
           'https://dev-online-gateway.ghn.vn/a5/public-api/printA5?token=test',
         ),
     };
+    sellerLedgerService = {
+      accrueCompletedShopOrder: jest.fn().mockResolvedValue({
+        createdEntryCount: 1,
+        expectedAmount: { toFixed: () => '100000.00' },
+        availableAt: new Date('2026-07-10T04:00:00.000Z'),
+      }),
+    };
     service = new ShippingService(
       prisma as unknown as PrismaService,
       carrierRegistry,
       ghnClient as unknown as GhnClient,
+      sellerLedgerService as unknown as SellerLedgerService,
     );
   });
 
@@ -1097,7 +1109,14 @@ describe('ShippingService', () => {
         toStatus: string;
       };
     };
+    const ledgerAccrualArgs =
+      sellerLedgerService.accrueCompletedShopOrder.mock.calls[0];
 
+    expect(ledgerAccrualArgs).toEqual([
+      prisma,
+      501n,
+      shopOrderCompletedArgs.data.completedAt,
+    ]);
     expect(shopOrderUpdateArgs).toMatchObject({
       where: { id: 501n },
       data: { orderStatus: 'Delivered' },

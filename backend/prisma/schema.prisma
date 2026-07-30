@@ -80,6 +80,44 @@ enum SellerDocumentType {
   BankAccountProof
 }
 
+enum SellerLedgerEntryType {
+  SaleCredit
+  PlatformVoucherCredit
+  PlatformFeeDebit
+  AdjustmentCredit
+  AdjustmentDebit
+  PayoutDebit
+}
+
+enum SellerLedgerSourceType {
+  ShopOrder
+  Payout
+  Adjustment
+}
+
+enum SellerPayoutAccountStatus {
+  Active
+  Disabled
+}
+
+enum SellerPayoutStatus {
+  PendingApproval
+  Approved
+  Processing
+  Paid
+  Rejected
+  Failed
+  Cancelled
+}
+
+enum BankTransactionMatchStatus {
+  Unmatched
+  Matched
+  AmountMismatch
+  InvalidDirection
+  IntegrityConflict
+}
+
 model User {
   id             BigInt    @id @default(autoincrement()) @map("UserID")
   code           String    @unique @default(uuid()) @map("UserCode") @db.Uuid
@@ -131,6 +169,11 @@ model User {
   shopOperationHistories          ShopOperationHistory[]       @relation("ShopOperationActor")
   shopsOperationUpdated           Shop[]                       @relation("ShopOperationUpdatedBy")
   uploadAssets                    UploadAsset[]                @relation("UploadAssetOwner")
+  payoutsRequested                SellerPayout[]               @relation("SellerPayoutRequester")
+  payoutsApproved                 SellerPayout[]               @relation("SellerPayoutApprover")
+  payoutsProcessed                SellerPayout[]               @relation("SellerPayoutProcessor")
+  payoutsRejected                 SellerPayout[]               @relation("SellerPayoutRejector")
+  financeAuditLogs                FinanceAuditLog[]            @relation("FinanceAuditActor")
 
   @@map("Users")
 }
@@ -213,10 +256,15 @@ model Shop {
   saleCampaigns  ShopSaleCampaign[]
   shopReviews    ShopReview[]
   returnRequests ReturnRequest[]
-  complaints     Complaint[]        @relation("ComplaintAgainstShop")
+  complaints     Complaint[]         @relation("ComplaintAgainstShop")
+  ledgerEntries  SellerLedgerEntry[]
 
   sellerVerification SellerVerificationProfile?
   operationHistories ShopOperationHistory[]
+  payoutAccount      SellerPayoutAccount?
+  payouts            SellerPayout[]
+  bankTransactions   BankTransaction[]
+  financeAuditLogs   FinanceAuditLog[]
 
   @@index([ownerUserId])
   @@index([shopStatus, operationMode])
@@ -388,8 +436,8 @@ model Category {
   createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
   updatedAt        DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
-  parentCategory    Category?          @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  childCategories   Category[]         @relation("CategoryTree")
+  parentCategory    Category?         @relation("CategoryTree", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childCategories   Category[]        @relation("CategoryTree")
   products          Product[]
   voucherCategories VoucherCategory[]
 
@@ -453,19 +501,19 @@ model Product {
 }
 
 model ProductVariant {
-  id                BigInt    @id @default(autoincrement()) @map("ProductVariantID")
-  productId         BigInt    @map("ProductID")
-  sku               String    @map("SKU") @db.VarChar(100)
-  variantName       String    @map("VariantName") @db.VarChar(255)
-  attributes        Json      @default("{}") @map("Attributes") @db.JsonB
-  price             Decimal   @map("Price") @db.Decimal(18, 2)
-  compareAtPrice    Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
-  weightGram        Int       @default(0) @map("WeightGram")
-  variantStatus     String    @default("Active") @map("VariantStatus") @db.VarChar(50)
-  createdAt         DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt         DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  id             BigInt    @id @default(autoincrement()) @map("ProductVariantID")
+  productId      BigInt    @map("ProductID")
+  sku            String    @map("SKU") @db.VarChar(100)
+  variantName    String    @map("VariantName") @db.VarChar(255)
+  attributes     Json      @default("{}") @map("Attributes") @db.JsonB
+  price          Decimal   @map("Price") @db.Decimal(18, 2)
+  compareAtPrice Decimal?  @map("CompareAtPrice") @db.Decimal(18, 2)
+  weightGram     Int       @default(0) @map("WeightGram")
+  variantStatus  String    @default("Active") @map("VariantStatus") @db.VarChar(50)
+  createdAt      DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt      DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
-  product           Product                 @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product           Product                @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   images            ProductImage[]
   inventoryRecords  ProductInventory[]
   cartItems         CartItem[]
@@ -761,6 +809,7 @@ model ShopOrder {
   returnRequests  ReturnRequest[]
   refundRequests  RefundRequest[]
   complaints      Complaint[]
+  ledgerEntries   SellerLedgerEntry[]
 
   @@index([orderId])
   @@index([shopId])
@@ -936,30 +985,30 @@ model ShippingQuote {
 }
 
 model Shipment {
-  id                 BigInt    @id @default(autoincrement()) @map("ShipmentID")
-  shopOrderId        BigInt    @map("ShopOrderID")
-  shippingCompanyId  BigInt    @map("ShippingCompanyID")
-  shippingServiceId  BigInt    @map("ShippingServiceID")
-  shipmentCode       String    @unique @map("ShipmentCode") @db.VarChar(80)
-  trackingNumber     String?   @map("TrackingNumber") @db.VarChar(100)
-  carrierOrderCode   String?   @map("CarrierOrderCode") @db.VarChar(100)
-  carrierStatus      String?   @map("CarrierStatus") @db.VarChar(50)
-  shipmentStatus     String    @default("Pending") @map("ShipmentStatus") @db.VarChar(50)
-  shippingFee        Decimal   @default(0) @map("ShippingFee") @db.Decimal(18, 2)
-  codAmount          Decimal   @default(0) @map("CODAmount") @db.Decimal(18, 2)
-  handoverMethod     String    @default("Pickup") @map("HandoverMethod") @db.VarChar(20)
-  pickupStationId    Int?      @map("PickupStationID")
-  pickupStationName  String?   @map("PickupStationName") @db.VarChar(255)
-  pickupStationAddress String? @map("PickupStationAddress") @db.VarChar(500)
-  pickupAddress      String?   @map("PickupAddress") @db.VarChar(500)
-  deliveryAddress    String    @map("DeliveryAddress") @db.VarChar(500)
-  recipientName      String    @map("RecipientName") @db.VarChar(150)
-  recipientPhone     String    @map("RecipientPhone") @db.VarChar(20)
-  expectedDeliveryAt DateTime? @map("ExpectedDeliveryAt") @db.Timestamp(3)
-  pickedUpAt         DateTime? @map("PickedUpAt") @db.Timestamp(3)
-  deliveredAt        DateTime? @map("DeliveredAt") @db.Timestamp(3)
-  createdAt          DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
-  updatedAt          DateTime? @map("UpdatedAt") @db.Timestamp(3)
+  id                   BigInt    @id @default(autoincrement()) @map("ShipmentID")
+  shopOrderId          BigInt    @map("ShopOrderID")
+  shippingCompanyId    BigInt    @map("ShippingCompanyID")
+  shippingServiceId    BigInt    @map("ShippingServiceID")
+  shipmentCode         String    @unique @map("ShipmentCode") @db.VarChar(80)
+  trackingNumber       String?   @map("TrackingNumber") @db.VarChar(100)
+  carrierOrderCode     String?   @map("CarrierOrderCode") @db.VarChar(100)
+  carrierStatus        String?   @map("CarrierStatus") @db.VarChar(50)
+  shipmentStatus       String    @default("Pending") @map("ShipmentStatus") @db.VarChar(50)
+  shippingFee          Decimal   @default(0) @map("ShippingFee") @db.Decimal(18, 2)
+  codAmount            Decimal   @default(0) @map("CODAmount") @db.Decimal(18, 2)
+  handoverMethod       String    @default("Pickup") @map("HandoverMethod") @db.VarChar(20)
+  pickupStationId      Int?      @map("PickupStationID")
+  pickupStationName    String?   @map("PickupStationName") @db.VarChar(255)
+  pickupStationAddress String?   @map("PickupStationAddress") @db.VarChar(500)
+  pickupAddress        String?   @map("PickupAddress") @db.VarChar(500)
+  deliveryAddress      String    @map("DeliveryAddress") @db.VarChar(500)
+  recipientName        String    @map("RecipientName") @db.VarChar(150)
+  recipientPhone       String    @map("RecipientPhone") @db.VarChar(20)
+  expectedDeliveryAt   DateTime? @map("ExpectedDeliveryAt") @db.Timestamp(3)
+  pickedUpAt           DateTime? @map("PickedUpAt") @db.Timestamp(3)
+  deliveredAt          DateTime? @map("DeliveredAt") @db.Timestamp(3)
+  createdAt            DateTime  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt            DateTime? @map("UpdatedAt") @db.Timestamp(3)
 
   shopOrder       ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   shippingCompany ShippingCompany @relation(fields: [shippingCompanyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -1430,4 +1479,152 @@ model ComplaintResolution {
 
   @@index([complaintId])
   @@map("ComplaintResolutions")
+}
+
+model SellerLedgerEntry {
+  id          BigInt                 @id @default(autoincrement()) @map("SellerLedgerEntryID")
+  shopId      BigInt                 @map("ShopID")
+  shopOrderId BigInt?                @map("ShopOrderID")
+  payoutId    BigInt?                @map("SellerPayoutID")
+  entryType   SellerLedgerEntryType  @map("EntryType")
+  sourceType  SellerLedgerSourceType @map("SourceType")
+  sourceId    String                 @map("SourceID") @db.VarChar(100)
+  amount      Decimal                @map("Amount") @db.Decimal(18, 2)
+  description String                 @map("Description") @db.VarChar(500)
+  metadata    Json?                  @map("Metadata")
+  availableAt DateTime               @map("AvailableAt") @db.Timestamp(3)
+  createdAt   DateTime               @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shop      Shop          @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shopOrder ShopOrder?    @relation(fields: [shopOrderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payout    SellerPayout? @relation(fields: [payoutId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([sourceType, sourceId, entryType])
+  @@index([shopId, availableAt, createdAt])
+  @@index([shopOrderId])
+  @@index([payoutId])
+  @@index([entryType, createdAt])
+  @@map("SellerLedgerEntries")
+}
+
+model SellerPayoutAccount {
+  id                     BigInt                    @id @default(autoincrement()) @map("SellerPayoutAccountID")
+  shopId                 BigInt                    @unique @map("ShopID")
+  bankCode               String                    @map("BankCode") @db.VarChar(30)
+  bankName               String                    @map("BankName") @db.VarChar(200)
+  accountNumberEncrypted String                    @map("AccountNumberEncrypted") @db.Text
+  accountNumberHash      String                    @map("AccountNumberHash") @db.VarChar(64)
+  accountNumberLast4     String                    @map("AccountNumberLast4") @db.VarChar(4)
+  accountHolderName      String                    @map("AccountHolderName") @db.VarChar(200)
+  status                 SellerPayoutAccountStatus @default(Active) @map("Status")
+  createdAt              DateTime                  @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt              DateTime?                 @map("UpdatedAt") @db.Timestamp(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([accountNumberHash])
+  @@index([status])
+  @@map("SellerPayoutAccounts")
+}
+
+model SellerPayout {
+  id                             BigInt             @id @default(autoincrement()) @map("SellerPayoutID")
+  shopId                         BigInt             @map("ShopID")
+  payoutCode                     String             @unique @map("PayoutCode") @db.VarChar(60)
+  amount                         Decimal            @map("Amount") @db.Decimal(18, 2)
+  status                         SellerPayoutStatus @default(PendingApproval) @map("Status")
+  bankCodeSnapshot               String             @map("BankCodeSnapshot") @db.VarChar(30)
+  bankNameSnapshot               String             @map("BankNameSnapshot") @db.VarChar(200)
+  accountNumberEncryptedSnapshot String             @map("AccountNumberEncryptedSnapshot") @db.Text
+  accountNumberHashSnapshot      String             @map("AccountNumberHashSnapshot") @db.VarChar(64)
+  accountNumberLast4Snapshot     String             @map("AccountNumberLast4Snapshot") @db.VarChar(4)
+  accountHolderNameSnapshot      String             @map("AccountHolderNameSnapshot") @db.VarChar(200)
+  requestedByUserId              BigInt             @map("RequestedByUserID")
+  approvedByUserId               BigInt?            @map("ApprovedByUserID")
+  processedByUserId              BigInt?            @map("ProcessedByUserID")
+  rejectedByUserId               BigInt?            @map("RejectedByUserID")
+  requestedAt                    DateTime           @default(now()) @map("RequestedAt") @db.Timestamp(3)
+  approvedAt                     DateTime?          @map("ApprovedAt") @db.Timestamp(3)
+  processingAt                   DateTime?          @map("ProcessingAt") @db.Timestamp(3)
+  paidAt                         DateTime?          @map("PaidAt") @db.Timestamp(3)
+  rejectedAt                     DateTime?          @map("RejectedAt") @db.Timestamp(3)
+  failedAt                       DateTime?          @map("FailedAt") @db.Timestamp(3)
+  cancelledAt                    DateTime?          @map("CancelledAt") @db.Timestamp(3)
+  bankReference                  String?            @map("BankReference") @db.VarChar(150)
+  note                           String?            @map("Note") @db.VarChar(1000)
+  rejectionReason                String?            @map("RejectionReason") @db.VarChar(1000)
+  failureReason                  String?            @map("FailureReason") @db.VarChar(1000)
+  createdAt                      DateTime           @default(now()) @map("CreatedAt") @db.Timestamp(3)
+  updatedAt                      DateTime?          @map("UpdatedAt") @db.Timestamp(3)
+
+  shop             Shop                @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestedByUser  User                @relation("SellerPayoutRequester", fields: [requestedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedByUser   User?               @relation("SellerPayoutApprover", fields: [approvedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  processedByUser  User?               @relation("SellerPayoutProcessor", fields: [processedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rejectedByUser   User?               @relation("SellerPayoutRejector", fields: [rejectedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bankTransaction  BankTransaction?
+  ledgerEntries    SellerLedgerEntry[]
+  financeAuditLogs FinanceAuditLog[]
+
+  @@index([shopId, status, createdAt])
+  @@index([status, requestedAt])
+  @@index([bankReference])
+  @@map("SellerPayouts")
+}
+
+model BankTransaction {
+  id                    BigInt                     @id @default(autoincrement()) @map("BankTransactionID")
+  provider              String                     @map("Provider") @db.VarChar(30)
+  providerTransactionId String                     @map("ProviderTransactionID") @db.VarChar(100)
+  payoutId              BigInt?                    @unique @map("SellerPayoutID")
+  shopId                BigInt?                    @map("ShopID")
+  gateway               String                     @map("Gateway") @db.VarChar(50)
+  accountNumberMasked   String                     @map("AccountNumberMasked") @db.VarChar(100)
+  transferType          String                     @map("TransferType") @db.VarChar(10)
+  transferAmount        Decimal                    @map("TransferAmount") @db.Decimal(18, 2)
+  transactionDate       DateTime                   @map("TransactionDate") @db.Timestamp(3)
+  code                  String?                    @map("Code") @db.VarChar(100)
+  content               String?                    @map("Content") @db.VarChar(1000)
+  referenceCode         String?                    @map("ReferenceCode") @db.VarChar(150)
+  matchStatus           BankTransactionMatchStatus @default(Unmatched) @map("MatchStatus")
+  payloadHash           String                     @map("PayloadHash") @db.VarChar(64)
+  payloadMasked         Json                       @map("PayloadMasked")
+  matchedAt             DateTime?                  @map("MatchedAt") @db.Timestamp(3)
+  createdAt             DateTime                   @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  payout           SellerPayout?     @relation(fields: [payoutId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop             Shop?             @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  financeAuditLogs FinanceAuditLog[]
+
+  @@unique([provider, providerTransactionId])
+  @@index([matchStatus, createdAt])
+  @@index([code, transferAmount])
+  @@index([shopId, createdAt])
+  @@map("BankTransactions")
+}
+
+model FinanceAuditLog {
+  id                BigInt   @id @default(autoincrement()) @map("FinanceAuditLogID")
+  shopId            BigInt?  @map("ShopID")
+  payoutId          BigInt?  @map("SellerPayoutID")
+  bankTransactionId BigInt?  @map("BankTransactionID")
+  actorUserId       BigInt?  @map("ActorUserID")
+  actorRole         String   @map("ActorRole") @db.VarChar(30)
+  action            String   @map("Action") @db.VarChar(80)
+  fromStatus        String?  @map("FromStatus") @db.VarChar(50)
+  toStatus          String?  @map("ToStatus") @db.VarChar(50)
+  reason            String?  @map("Reason") @db.VarChar(1000)
+  metadata          Json?    @map("Metadata")
+  createdAt         DateTime @default(now()) @map("CreatedAt") @db.Timestamp(3)
+
+  shop            Shop?            @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payout          SellerPayout?    @relation(fields: [payoutId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actorUser       User?            @relation("FinanceAuditActor", fields: [actorUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([shopId, createdAt])
+  @@index([payoutId, createdAt])
+  @@index([bankTransactionId, createdAt])
+  @@index([actorUserId])
+  @@map("FinanceAuditLogs")
 }

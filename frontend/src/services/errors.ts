@@ -3,6 +3,9 @@ import type { ApiErrorPayload } from "@/types/api";
 
 const apiErrorMessages: Record<string, string> = {
   ADDRESS_NOT_FOUND: "Không tìm thấy địa chỉ.",
+  BANK_TRANSACTION_ALREADY_MATCHED: "Giao dịch ngân hàng đã được đối soát. Vui lòng tải lại dữ liệu.",
+  BANK_TRANSACTION_AMOUNT_MISMATCH: "Số tiền giao dịch không khớp yêu cầu rút tiền.",
+  BANK_TRANSACTION_INVALID_DIRECTION: "Chỉ có thể đối soát giao dịch chuyển tiền ra.",
   CART_ITEM_NOT_FOUND: "Không tìm thấy sản phẩm trong giỏ hàng.",
   CATEGORY_NOT_FOUND: "Không tìm thấy danh mục.",
   CATEGORY_PARENT_CYCLE: "Không thể chọn danh mục con làm danh mục cha.",
@@ -63,6 +66,15 @@ const apiErrorMessages: Record<string, string> = {
   PAYMENT_METHOD_NOT_FOUND: "Không tìm thấy phương thức thanh toán.",
   PAYMENT_NOT_FOUND: "Không tìm thấy giao dịch thanh toán.",
   PAYMENT_NOT_PENDING: "Giao dịch này không còn ở trạng thái chờ thanh toán.",
+  PAYOUT_ACCOUNT_LOCKED: "Không thể đổi tài khoản khi đang có yêu cầu rút tiền được xử lý.",
+  PAYOUT_ACCOUNT_REQUIRED: "Vui lòng thiết lập tài khoản ngân hàng trước khi rút tiền.",
+  PAYOUT_BELOW_MINIMUM: "Số tiền rút tối thiểu là 100.000 ₫.",
+  PAYOUT_INSUFFICIENT_BALANCE: "Số dư khả dụng không đủ cho yêu cầu rút tiền này.",
+  PAYOUT_NOT_FOUND: "Không tìm thấy yêu cầu rút tiền.",
+  PAYOUT_NOT_PROCESSING: "Yêu cầu rút tiền chưa ở trạng thái chờ đối soát.",
+  PAYOUT_STATUS_CONFLICT: "Trạng thái yêu cầu rút tiền đã thay đổi. Vui lòng tải lại.",
+  BANK_TRANSACTION_NOT_FOUND: "Không tìm thấy giao dịch ngân hàng.",
+  INVALID_LEDGER_DATE_RANGE: "Thời gian bắt đầu phải trước thời gian kết thúc.",
   PRODUCT_IMAGE_NOT_FOUND: "Không tìm thấy hình ảnh sản phẩm.",
   PRODUCT_NOT_FOUND: "Không tìm thấy sản phẩm.",
   PRODUCT_REVIEW_ALREADY_EXISTS: "Bạn đã đánh giá sản phẩm này.",
@@ -138,6 +150,7 @@ const apiErrorMessages: Record<string, string> = {
   SHIPPING_SERVICE_NOT_FOUND: "Không tìm thấy dịch vụ vận chuyển.",
   SHIPPING_SERVICE_UNAVAILABLE: "Dịch vụ vận chuyển hiện không khả dụng.",
   SHOP_NOT_APPROVED: "Gian hàng chưa được phê duyệt.",
+  SELLER_SHOP_NOT_FOUND: "Không tìm thấy gian hàng đã được phê duyệt để sử dụng tài chính.",
   SHOP_NOT_FOUND: "Không tìm thấy gian hàng.",
   SHOP_NOT_PENDING_APPROVAL: "Gian hàng không ở trạng thái chờ phê duyệt.",
   SHOP_ORDER_HAS_NO_ITEMS: "Đơn hàng của gian hàng không có sản phẩm.",
@@ -172,6 +185,7 @@ const apiErrorMessages: Record<string, string> = {
   VOUCHER_NOT_SUPPORTED: "Mã giảm giá hiện chưa được hỗ trợ.",
   VOUCHER_NO_LONGER_AVAILABLE: "Mã giảm giá đã hết lượt sử dụng.",
   VOUCHER_SHOP_MISMATCH: "Mã giảm giá này không áp dụng cho gian hàng này.",
+  SEPAY_TRANSACTION_INTEGRITY_CONFLICT: "Mã giao dịch ngân hàng bị gửi lại với dữ liệu khác. Không thực hiện đối soát.",
 };
 
 const documentNames: Record<string, string> = {

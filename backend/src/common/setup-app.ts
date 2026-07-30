@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ApiResponseInterceptor } from './interceptors/api-response.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
@@ -33,6 +34,6 @@ export function setupApp(app: INestApplication): void {
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new ApiResponseInterceptor());
+  app.useGlobalInterceptors(new ApiResponseInterceptor(app.get(Reflector)));
   app.enableShutdownHooks();
 }

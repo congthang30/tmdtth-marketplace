@@ -71,6 +71,14 @@ export function apiPost<T, TBody = unknown>(
   return unwrap<T>(apiClient.post<ApiResponse<T>>(url, body, config));
 }
 
+export function apiPut<T, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig,
+) {
+  return unwrap<T>(apiClient.put<ApiResponse<T>>(url, body, config));
+}
+
 export function apiPatch<T, TBody = unknown>(
   url: string,
   body?: TBody,

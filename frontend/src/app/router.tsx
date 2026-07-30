@@ -37,6 +37,8 @@ import { AdminShippingProvidersPage } from "@/features/admin/pages/AdminShipping
 import { AdminVouchersPage } from "@/features/admin/pages/AdminVouchersPage";
 import { AdminSellerVerificationsPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationsPage";
 import { AdminSellerVerificationDetailPage } from "@/features/admin-seller-verification/pages/AdminSellerVerificationDetailPage";
+import { SellerFinancePage } from "@/features/finance/pages/SellerFinancePage";
+import { AdminFinancePage } from "@/features/finance/pages/AdminFinancePage";
 
 export const router = createBrowserRouter([
   {
@@ -227,6 +229,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "seller/finance",
+        element: (
+          <RoleRoute allowedRoles={["Seller"]}>
+            <SellerFinancePage />
+          </RoleRoute>
+        ),
+      },
+      {
         path: "seller/shop-operation",
         element: (
           <RoleRoute allowedRoles={["Seller"]}>
@@ -319,6 +329,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={["Admin"]}>
             <AdminSellerVerificationDetailPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/finance",
+        element: (
+          <RoleRoute allowedRoles={["Admin"]}>
+            <AdminFinancePage />
           </RoleRoute>
         ),
       },

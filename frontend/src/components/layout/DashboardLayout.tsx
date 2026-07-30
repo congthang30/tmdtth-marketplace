@@ -11,6 +11,8 @@ import {
   CalendarClock,
   PackageCheck,
   UsersRound,
+  WalletCards,
+  Landmark,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
@@ -63,6 +65,12 @@ const navItems = [
     roles: ["Seller"],
   },
   {
+    to: "/seller/finance",
+    label: "Tài chính",
+    icon: WalletCards,
+    roles: ["Seller"],
+  },
+  {
     to: "/seller/shop-operation",
     label: "Trạng thái nhận đơn",
     icon: Store,
@@ -108,6 +116,12 @@ const navItems = [
     to: "/admin/vouchers",
     label: "Mã giảm giá",
     icon: Ticket,
+    roles: ["Admin"],
+  },
+  {
+    to: "/admin/finance",
+    label: "Đối soát tài chính",
+    icon: Landmark,
     roles: ["Admin"],
   },
 ] satisfies Array<{

@@ -26,6 +26,6 @@ import { VerificationTransitionService } from './verification-transition.service
     SellerVerificationEmailService,
     VerificationTransitionService,
   ],
-  exports: [SellerVerificationService],
+  exports: [SellerVerificationService, SellerDataCryptoService],
 })
 export class SellerVerificationModule {}
