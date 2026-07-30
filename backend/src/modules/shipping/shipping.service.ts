@@ -190,7 +190,13 @@ const createShipmentShopOrderInclude = {
   },
   items: {
     orderBy: [{ createdAt: 'asc' }],
-    include: {
+    select: {
+      id: true,
+      productNameSnapshot: true,
+      variantNameSnapshot: true,
+      skuSnapshot: true,
+      unitPrice: true,
+      quantity: true,
       productVariant: {
         select: {
           weightGram: true,
@@ -647,6 +653,15 @@ export class ShippingService {
       recipientPhone: shopOrder.order.receiverPhone,
       weightGram: this.calculateShopOrderWeightGram(shopOrder),
       codAmount: Number(shipment.codAmount.toString()),
+      items: shopOrder.items.map((item) => ({
+        name: item.variantNameSnapshot
+          ? `${item.productNameSnapshot} - ${item.variantNameSnapshot}`
+          : item.productNameSnapshot,
+        code: item.skuSnapshot ?? undefined,
+        quantity: item.quantity,
+        price: Number(item.unitPrice.toString()),
+        weightGram: item.productVariant.weightGram,
+      })),
       note: null,
       pickupStationId: shipment.pickupStationId ?? undefined,
     });

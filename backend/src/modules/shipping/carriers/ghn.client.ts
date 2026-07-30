@@ -277,6 +277,13 @@ export class GhnClient implements CarrierClient {
         cod_amount: Math.round(input.codAmount),
         content: input.note ?? undefined,
         pick_station_id: input.pickupStationId,
+        items: input.items.map((item) => ({
+          name: item.name,
+          code: item.code,
+          quantity: Math.max(Math.round(item.quantity), 1),
+          price: Math.max(Math.round(item.price), 0),
+          weight: Math.max(Math.round(item.weightGram), 1),
+        })),
       },
     );
 

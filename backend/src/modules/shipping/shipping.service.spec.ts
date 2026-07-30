@@ -98,6 +98,10 @@ type CreateShipmentShopOrderEntity = {
   };
   items: Array<{
     id: bigint;
+    productNameSnapshot: string;
+    variantNameSnapshot: string | null;
+    skuSnapshot: string | null;
+    unitPrice: { toString(): string };
     quantity: number;
     productVariant: {
       weightGram: number;
@@ -416,6 +420,10 @@ function createShipmentShopOrderEntity(
     items: [
       {
         id: 700n,
+        productNameSnapshot: 'Nồi inox 24 cm',
+        variantNameSnapshot: 'Bạc',
+        skuSnapshot: 'NOI-INOX-24-BAC',
+        unitPrice: { toString: () => '215000' },
         quantity: 1,
         productVariant: {
           weightGram: 1500,
@@ -827,6 +835,15 @@ describe('ShippingService', () => {
       expect.objectContaining({
         clientOrderCode: registeringShipment.shipmentCode,
         codAmount: 250000,
+        items: [
+          {
+            name: 'Nồi inox 24 cm - Bạc',
+            code: 'NOI-INOX-24-BAC',
+            quantity: 1,
+            price: 215000,
+            weightGram: 1500,
+          },
+        ],
         pickupStationId: undefined,
       }),
     );

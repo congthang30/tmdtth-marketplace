@@ -37,6 +37,13 @@ export type CarrierOrderInput = {
   recipientPhone: string;
   weightGram: number;
   codAmount: number;
+  items: Array<{
+    name: string;
+    code?: string;
+    quantity: number;
+    price: number;
+    weightGram: number;
+  }>;
   note?: string | null;
   pickupStationId?: number;
 };
