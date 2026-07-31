@@ -4,6 +4,15 @@ import { useAuthStore } from '@/stores/auth.store';
 import type { ApiResponse } from '@/types/api';
 import { normalizeApiError } from './errors';
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipAuthRedirect?: boolean;
+  }
+  interface InternalAxiosRequestConfig {
+    skipAuthRedirect?: boolean;
+  }
+}
+
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3100/api';
 
@@ -28,16 +37,25 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     const apiError = normalizeApiError(error);
+    const skipAuthRedirect =
+      axios.isAxiosError(error) && error.config?.skipAuthRedirect === true;
 
     if (apiError.status === 401) {
       useAuthStore.getState().clearAuth();
 
-      if (!window.location.pathname.startsWith('/login')) {
+      if (
+        !skipAuthRedirect &&
+        !window.location.pathname.startsWith('/login')
+      ) {
         window.location.assign('/login');
       }
     }
 
-    if (apiError.status === 403 && window.location.pathname !== '/forbidden') {
+    if (
+      apiError.status === 403 &&
+      !skipAuthRedirect &&
+      window.location.pathname !== '/forbidden'
+    ) {
       window.location.assign('/forbidden');
     }
 

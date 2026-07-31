@@ -2,6 +2,7 @@ import { ShoppingCart, Store, UserRound } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { AccountMenu } from "@/features/auth/components/AccountMenu";
+import { ChatWidget } from "@/features/chat/ChatWidget";
 import { SuggestionSearch } from "@/features/search/SuggestionSearch";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -41,6 +42,7 @@ export function PublicLayout() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Outlet />
       </main>
+      <ChatWidget />
     </div>
   );
 }

@@ -8,5 +8,6 @@ import { AddressesService } from './addresses.service';
   imports: [PrismaModule, AuthModule],
   controllers: [AddressesController],
   providers: [AddressesService],
+  exports: [AddressesService],
 })
 export class AddressesModule {}

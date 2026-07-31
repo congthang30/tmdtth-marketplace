@@ -6,6 +6,7 @@ import { AppRolesService } from './app-roles.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 
 @Module({
@@ -19,7 +20,20 @@ import { RolesGuard } from './guards/roles.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AppRolesService, JwtAuthGuard, RolesGuard],
-  exports: [JwtModule, AuthService, AppRolesService, JwtAuthGuard, RolesGuard],
+  providers: [
+    AuthService,
+    AppRolesService,
+    JwtAuthGuard,
+    OptionalJwtAuthGuard,
+    RolesGuard,
+  ],
+  exports: [
+    JwtModule,
+    AuthService,
+    AppRolesService,
+    JwtAuthGuard,
+    OptionalJwtAuthGuard,
+    RolesGuard,
+  ],
 })
 export class AuthModule {}

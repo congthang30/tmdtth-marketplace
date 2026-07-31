@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CartModule } from './modules/cart/cart.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
@@ -17,12 +18,15 @@ import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     PrismaModule,
+    RedisModule,
     HealthModule,
     AuthModule,
+    ChatModule,
     UsersModule,
     AddressesModule,
     CategoriesModule,

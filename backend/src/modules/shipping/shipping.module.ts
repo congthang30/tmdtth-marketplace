@@ -18,5 +18,6 @@ import { ShippingService } from './shipping.service';
     AdminShippingProvidersController,
   ],
   providers: [ShippingService, CarrierRegistry, GhnClient, GhnAddressResolver],
+  exports: [ShippingService],
 })
 export class ShippingModule {}
