@@ -17,6 +17,7 @@ Trước khi code hoặc review UI, đọc đầy đủ skill phù hợp:
 | Phạm vi | Skill |
 | --- | --- |
 | Catalog, product, cart, checkout, order UI | `.ai/skills/ecommerce-ui/SKILL.md` |
+| Mọi UI storefront/ecommerce, API commerce, SEO | `.ai/skills/storefront-best-practices/SKILL.md` |
 | Discovery, multi-seller, trust, conversion | `.ai/skills/marketplace-ux/SKILL.md` |
 | Breakpoint, mobile, table/drawer/sticky | `.ai/skills/responsive-ui/SKILL.md` |
 | Keyboard, focus, form, dialog, contrast | `.ai/skills/accessibility/SKILL.md` |

@@ -4,6 +4,20 @@ export type SendChatMessage = {
   confirmationToken: string | null;
 };
 
+export type ChatProductPreview = {
+  id: string;
+  slug: string;
+  productName: string;
+  priceMin: string;
+  priceMax: string;
+  quantityAvailable: number;
+  shopName: string;
+  thumbnailImage: {
+    imageUrl: string;
+    altText: string | null;
+  } | null;
+};
+
 export type ChatMessageResponse = {
   conversationId: string;
   message: string;
@@ -16,4 +30,5 @@ export type ChatMessageResponse = {
     label: string;
     href: string;
   }>;
+  productPreviews: ChatProductPreview[];
 };

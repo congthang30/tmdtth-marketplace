@@ -81,6 +81,7 @@ describe('ChatService', () => {
       conversationId: 'conversation-id',
       message: 'Tôi có thể giúp bạn tìm sản phẩm.',
       pendingAction: null,
+      productPreviews: [],
     });
     expect(conversation.save).toHaveBeenCalledWith(
       'user:42',
@@ -90,6 +91,83 @@ describe('ChatService', () => {
         { role: 'assistant', content: 'Tôi có thể giúp bạn tìm sản phẩm.' },
       ],
     );
+  });
+
+  it('returns up to three product previews from server tool data', async () => {
+    llm.respond
+      .mockResolvedValueOnce({
+        outputText: '',
+        functionCalls: [
+          {
+            callId: 'call-search',
+            name: 'search_products',
+            arguments:
+              '{"q":"áo thun","categoryId":null,"minPrice":null,"maxPrice":"100000","sortBy":"basePrice","sortOrder":"asc","page":1,"limit":4}',
+          },
+        ],
+        assistantMessage: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-search',
+              type: 'function',
+              function: { name: 'search_products', arguments: '{}' },
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        outputText: 'Tôi tìm thấy một số lựa chọn phù hợp ngân sách của bạn.',
+        functionCalls: [],
+        assistantMessage: {
+          role: 'assistant',
+          content: 'Tôi tìm thấy một số lựa chọn phù hợp ngân sách của bạn.',
+        },
+      });
+    dispatcher.parseAndAuthorize.mockReturnValue({
+      name: 'search_products',
+      args: { q: 'áo thun', limit: 4 },
+    });
+    dispatcher.dispatch.mockResolvedValue({
+      items: Array.from({ length: 4 }, (_, index) => ({
+        id: `${index + 1}`,
+        slug: `ao-thun-${index + 1}`,
+        productName: `Áo thun ${index + 1}`,
+        priceMin: '79000',
+        priceMax: '99000',
+        quantityAvailable: 10 - index,
+        shop: { shopName: 'Nông sản xanh' },
+        thumbnailImage:
+          index === 0
+            ? {
+                imageUrl: 'https://images.example.com/ao-thun.jpg',
+                altText: 'Áo thun màu xanh',
+              }
+            : null,
+      })),
+    });
+
+    const result = await service.send(actor, '127.0.0.1', {
+      conversationId: null,
+      message: 'Tìm áo thun dưới 100.000 đồng',
+      confirmationToken: null,
+    });
+
+    expect(result.productPreviews).toHaveLength(3);
+    expect(result.productPreviews[0]).toEqual({
+      id: '1',
+      slug: 'ao-thun-1',
+      productName: 'Áo thun 1',
+      priceMin: '79000',
+      priceMax: '99000',
+      quantityAvailable: 10,
+      shopName: 'Nông sản xanh',
+      thumbnailImage: {
+        imageUrl: 'https://images.example.com/ao-thun.jpg',
+        altText: 'Áo thun màu xanh',
+      },
+    });
   });
 
   it('creates a pending action without executing a mutation', async () => {

@@ -4,7 +4,11 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AuthenticatedUser } from '../auth/types';
-import { ChatMessageResponse, SendChatMessage } from './chat.types';
+import {
+  ChatMessageResponse,
+  ChatProductPreview,
+  SendChatMessage,
+} from './chat.types';
 import {
   ConversationMessage,
   ConversationService,
@@ -120,6 +124,7 @@ export class ChatService {
         suggestedActions: href
           ? [{ label: this.actionLabel(actionTool), href }]
           : [],
+        productPreviews: result.productPreviews,
       };
     } finally {
       await this.conversationService.releaseLock(
@@ -153,12 +158,14 @@ export class ChatService {
     actionArgs: Record<string, unknown> | null;
     actionResult: unknown;
     pendingAction: ChatMessageResponse['pendingAction'];
+    productPreviews: ChatProductPreview[];
   }> {
     const maxCalls = this.envInteger('OPENAI_MAX_TOOL_CALLS', 4);
     let input = initialInput;
     let actionTool: ChatToolName | null = null;
     let actionArgs: Record<string, unknown> | null = null;
     let actionResult: unknown;
+    let productPreviews: ChatProductPreview[] = [];
 
     for (let callCount = 0; callCount <= maxCalls; callCount += 1) {
       const response = await this.llmService.respond({
@@ -180,6 +187,7 @@ export class ChatService {
           actionArgs,
           actionResult,
           pendingAction: null,
+          productPreviews,
         };
       }
       if (callCount === maxCalls) {
@@ -217,6 +225,7 @@ export class ChatService {
             summary,
             expiresAt: confirmation.expiresAt,
           },
+          productPreviews,
         };
       }
 
@@ -229,6 +238,11 @@ export class ChatService {
       } catch (error) {
         actionResult = this.safeToolError(error);
       }
+      productPreviews = this.mergeProductPreviews(
+        productPreviews,
+        parsed.name,
+        actionResult,
+      );
       actionTool = parsed.name;
       actionArgs = parsed.args;
       input = [
@@ -263,6 +277,7 @@ export class ChatService {
       message,
       pendingAction: null,
       suggestedActions: [],
+      productPreviews: [],
     };
   }
 
@@ -292,6 +307,69 @@ export class ChatService {
       return 'Tiếp tục thanh toán';
     }
     return 'Xem sản phẩm';
+  }
+
+  private mergeProductPreviews(
+    current: ChatProductPreview[],
+    tool: ChatToolName,
+    result: unknown,
+  ): ChatProductPreview[] {
+    const candidates =
+      tool === 'search_products'
+        ? this.record(result).items
+        : tool === 'get_product'
+          ? [result]
+          : [];
+    const previews = Array.isArray(candidates)
+      ? candidates
+          .map((item) => this.productPreview(item))
+          .filter((item): item is ChatProductPreview => item !== null)
+      : [];
+    return [
+      ...new Map(
+        [...current, ...previews].map((item) => [item.id, item]),
+      ).values(),
+    ].slice(0, 3);
+  }
+
+  private productPreview(value: unknown): ChatProductPreview | null {
+    const product = this.record(value);
+    const shop = this.record(product.shop);
+    const image = this.record(product.thumbnailImage);
+    if (
+      typeof product.id !== 'string' ||
+      typeof product.slug !== 'string' ||
+      typeof product.productName !== 'string' ||
+      typeof product.priceMin !== 'string' ||
+      typeof product.priceMax !== 'string' ||
+      typeof product.quantityAvailable !== 'number' ||
+      typeof shop.shopName !== 'string'
+    ) {
+      return null;
+    }
+    const thumbnailImage =
+      typeof image.imageUrl === 'string'
+        ? {
+            imageUrl: image.imageUrl,
+            altText: typeof image.altText === 'string' ? image.altText : null,
+          }
+        : null;
+    return {
+      id: product.id,
+      slug: product.slug,
+      productName: product.productName,
+      priceMin: product.priceMin,
+      priceMax: product.priceMax,
+      quantityAvailable: product.quantityAvailable,
+      shopName: shop.shopName,
+      thumbnailImage,
+    };
+  }
+
+  private record(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   }
 
   private envInteger(name: string, fallback: number): number {

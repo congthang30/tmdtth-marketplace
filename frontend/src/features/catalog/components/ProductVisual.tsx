@@ -6,12 +6,14 @@ type ProductVisualProps = {
   imageUrl: string | null | undefined;
   altText: string | null | undefined;
   className?: string;
+  loading?: 'eager' | 'lazy';
 };
 
 export function ProductVisual({
   imageUrl,
   altText,
   className = "",
+  loading = 'eager',
 }: ProductVisualProps) {
   const [failed, setFailed] = useState(false);
   const resolvedUrl = resolveMediaUrl(imageUrl);
@@ -40,6 +42,8 @@ export function ProductVisual({
     <img
       src={resolvedUrl}
       alt={altText ?? ""}
+      loading={loading}
+      decoding="async"
       className={["h-full w-full object-cover", className].join(" ")}
       onError={() => setFailed(true)}
     />

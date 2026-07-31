@@ -1,9 +1,24 @@
 import { apiDelete, apiPost } from '@/services/api';
 
+export type ChatProductPreview = {
+  id: string;
+  slug: string;
+  productName: string;
+  priceMin: string;
+  priceMax: string;
+  quantityAvailable: number;
+  shopName: string;
+  thumbnailImage: {
+    imageUrl: string;
+    altText: string | null;
+  } | null;
+};
+
 export type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  productPreviews?: ChatProductPreview[];
 };
 
 export type PendingChatAction = {
@@ -17,6 +32,7 @@ export type ChatResponse = {
   message: string;
   pendingAction: PendingChatAction | null;
   suggestedActions: Array<{ label: string; href: string }>;
+  productPreviews: ChatProductPreview[];
 };
 
 export type SendChatRequest = {

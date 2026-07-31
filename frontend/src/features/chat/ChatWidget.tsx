@@ -20,6 +20,8 @@ import type {
   PendingChatAction,
   SendChatRequest,
 } from './chat.api';
+import { ChatMessageContent } from './ChatMessageContent';
+import { ChatProductPreviews } from './ChatProductPreviews';
 
 const welcomeMessage: ChatMessage = {
   id: 'welcome',
@@ -57,6 +59,7 @@ export function ChatWidget() {
           id: crypto.randomUUID(),
           role: 'assistant',
           content: response.message,
+          productPreviews: response.productPreviews ?? [],
         },
       ]);
     },
@@ -102,7 +105,11 @@ export function ChatWidget() {
   }, [isOpen]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    endRef.current?.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'nearest',
+    });
   }, [messages, pendingAction, sendMutation.isPending]);
 
   const send = (message: string, confirmationToken: string | null) => {
@@ -224,21 +231,30 @@ export function ChatWidget() {
               aria-live="polite"
               aria-busy={sendMutation.isPending}
             >
-              {messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={
-                    message.role === 'user'
-                      ? 'ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-primary-600 px-4 py-3 text-sm leading-6 text-white'
-                      : 'mr-auto max-w-[90%] rounded-2xl rounded-bl-sm border border-border bg-white px-4 py-3 text-sm leading-6 text-ink shadow-panel'
-                  }
-                >
-                  <span className="sr-only">
-                    {message.role === 'user' ? 'Bạn: ' : 'Trợ lý: '}
-                  </span>
-                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                </article>
-              ))}
+              {messages.map((message) =>
+                message.role === 'user' ? (
+                  <article
+                    key={message.id}
+                    className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-primary-600 px-4 py-3 text-sm leading-6 text-white"
+                  >
+                    <span className="sr-only">Bạn: </span>
+                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  </article>
+                ) : (
+                  <div key={message.id} className="mr-auto w-full max-w-[94%]">
+                    <article className="rounded-2xl rounded-bl-sm border border-border bg-white px-4 py-3 text-sm leading-6 text-ink shadow-panel">
+                      <span className="sr-only">Trợ lý: </span>
+                      <ChatMessageContent content={message.content} />
+                    </article>
+                    {message.productPreviews?.length ? (
+                      <ChatProductPreviews
+                        products={message.productPreviews}
+                        onNavigate={() => setIsOpen(false)}
+                      />
+                    ) : null}
+                  </div>
+                ),
+              )}
 
               {sendMutation.isPending ? (
                 <div className="mr-auto flex items-center gap-2 rounded-2xl rounded-bl-sm border border-border bg-white px-4 py-3 text-sm text-muted">
